@@ -1,6 +1,9 @@
 import Link from 'next/link';
 import { prisma } from './lib/prisma';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function Home() {
   const count = await prisma.seller.count();
   const max = parseInt(process.env.MAX_SELLERS || '200');
