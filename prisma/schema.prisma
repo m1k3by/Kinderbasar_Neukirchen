@@ -1,0 +1,51 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./data.db"
+}
+
+model Seller {
+  id         String   @id @default(cuid())
+  email      String   @unique
+  firstName  String
+  lastName   String
+  sellerId   Int      @unique
+  isEmployee Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  password   String?
+  qrCode     String?
+  barcode    String?
+  taskSignups TaskSignup[]
+  cakes      Cake[]
+}
+
+model Task {
+  id        String   @id @default(cuid())
+  title     String
+  day       String
+  capacity  Int
+  createdAt DateTime @default(now())
+  signups   TaskSignup[]
+}
+
+model TaskSignup {
+  id        String   @id @default(cuid())
+  taskId    String
+  sellerId  String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  seller    Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  
+  @@unique([taskId, sellerId])
+}
+
+model Cake {
+  id        String   @id @default(cuid())
+  cakeName  String
+  sellerId  String
+  seller    Seller   @relation(fields: [sellerId], references: [id])
+  createdAt DateTime @default(now())
+}
