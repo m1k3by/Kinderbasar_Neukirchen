@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { env } from '@/lib/env';
+import { env } from './lib/env';
 
 export async function middleware(request: NextRequest) {
   // Protected routes
