@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import Header from '../../components/Header';
 
 interface Task {
   id: string;
@@ -96,31 +96,15 @@ export default function TasksManagementPage() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      {/* Header - Same as other admin pages */}
-      <header className="bg-yellow-500 text-gray-800 p-4 shadow-md">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <Link href="/" className="text-2xl font-bold hover:underline">
-            Kinderbasar Neukirchen
-          </Link>
-          <nav className="flex gap-4">
-            <Link href="/admin" className="hover:underline">
-              Basarliste
-            </Link>
-            <Link href="/admin/list" className="hover:underline">
-              Helferliste
-            </Link>
-            <Link href="/admin/tasks" className="hover:underline font-bold">
-              Aufgaben
-            </Link>
-            <Link href="/admin/settings" className="hover:underline">
-              Datum einstellen
-            </Link>
-            <Link href="/" className="hover:underline">
-              Logout
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <Header 
+        links={[
+          { href: '/admin', label: 'Basarliste' },
+          { href: '/admin/list', label: 'Helferliste' },
+          { href: '/admin/tasks', label: 'Aufgaben', active: true },
+          { href: '/admin/settings', label: 'Datum einstellen' },
+          { href: '/', label: 'Logout' },
+        ]}
+      />
 
       {/* Main Content */}
       <div className="max-w-6xl mx-auto p-8">

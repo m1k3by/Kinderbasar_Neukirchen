@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import Header from '../components/Header';
 
 interface Task {
   id: string;
@@ -223,18 +223,11 @@ export default function EmployeePage() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <header className="bg-yellow-500 text-gray-800 p-4 shadow-md">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <Link href="/" className="text-2xl font-bold hover:underline">
-            Kinderbasar Neukirchen
-          </Link>
-          <nav className="flex gap-4">
-            <Link href="/" className="hover:underline">
-              Logout
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <Header 
+        links={[
+          { href: '/', label: 'Logout' },
+        ]}
+      />
 
       <div className="max-w-6xl mx-auto p-8">
         {message && (
