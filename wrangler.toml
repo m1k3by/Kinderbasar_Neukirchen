@@ -6,7 +6,7 @@ pages_build_output_dir = ".vercel/output/static"
 [[d1_databases]]
 binding = "DB"
 database_name = "kinderbasar-db"
-database_id = "" # Will be filled after creating D1 database
+database_id = "111920e4-5fcb-4efc-8c64-92bbaea607ee"
 
 # Environment variables will be set in Cloudflare dashboard
 # Required: ADMIN_USER, ADMIN_PASS, JWT_SECRET, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM, MAX_SELLERS
