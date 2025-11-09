@@ -1,6 +1,8 @@
 name = "kinderbasar-neukirchen"
 compatibility_date = "2025-11-09"
-pages_build_output_dir = ".vercel/output/static"
+
+# For Next.js, use the _worker.js approach
+# Build output will be in .next folder
 
 # D1 Database binding
 [[d1_databases]]
@@ -10,3 +12,9 @@ database_id = "111920e4-5fcb-4efc-8c64-92bbaea607ee"
 
 # Environment variables will be set in Cloudflare dashboard
 # Required: ADMIN_USER, ADMIN_PASS, JWT_SECRET, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM, MAX_SELLERS
+
+[build]
+command = "npm run build"
+
+# Node.js compatibility for Next.js
+compatibility_flags = ["nodejs_compat"]

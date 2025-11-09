@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Enable standalone output for better Cloudflare Pages compatibility
-  output: 'standalone',
+  // Cloudflare Pages requires this for SSR/API routes
+  // Don't use 'export' as we need API routes
   
   // Optimize for Edge Runtime where possible
   experimental: {
