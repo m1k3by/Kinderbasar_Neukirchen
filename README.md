@@ -2,6 +2,8 @@
 
 Eine einfache Web-Anwendung für die Verwaltung von Verkäufern und Helfern beim Kinderbasar.
 
+**Live-App:** https://kinderbasar-neukirchen.vercel.app
+
 ## Was kann die Anwendung?
 
 - **Verkäufer-Registrierung**: Verkäufer können sich anmelden und erhalten eine Nummer (1, 2, 3, ...)
@@ -10,6 +12,7 @@ Eine einfache Web-Anwendung für die Verwaltung von Verkäufern und Helfern beim
 - **QR-Codes & Barcodes**: Jeder Verkäufer erhält automatisch QR-Code und Barcode mit Nummer und Namen
 - **Admin-Bereich**: Übersicht über alle Verkäufer, Helfer und Kuchen
 - **E-Mail-Versand**: Automatische Bestätigungsmail mit QR-Code nach Registrierung
+- **Datum-Einstellung**: Basar-Termine können über Admin-Oberfläche verwaltet werden
 
 ## Lokale Installation (zum Testen)
 
@@ -28,8 +31,7 @@ Eine einfache Web-Anwendung für die Verwaltung von Verkäufern und Helfern beim
 
 5. **Datenbank einrichten**
    ```bash
-   npx prisma migrate dev
-   npx tsx seed-tasks.ts
+   npx prisma db push
    ```
 
 6. **Entwicklungsserver starten**
@@ -53,13 +55,17 @@ SMTP_HOST=in-v3.mailjet.com
 SMTP_PORT=587
 SMTP_USER=deineMailjetAPIKey
 SMTP_PASS=deinMailjetSecretKey
-MAIL_FROM=deine@email.de
+MAIL_FROM=Kinderbasar Neukirchen <deine@email.de>
 
 # Sicherheitsschlüssel (beliebiger Text)
 JWT_SECRET=deinGeheimesPasswort123
 
 # Maximale Anzahl Verkäufer
 MAX_SELLERS=200
+
+# PostgreSQL Datenbank (Supabase via Vercel)
+POSTGRES_PRISMA_URL=postgres://...
+POSTGRES_URL_NON_POOLING=postgres://...
 ```
 
 **E-Mail-Versand einrichten:**
@@ -67,28 +73,38 @@ MAX_SELLERS=200
 2. API-Schlüssel kopieren und in `.env` eintragen
 3. Absender-E-Mail verifizieren
 
-## Cloudflare Pages Installation
+## Vercel Deployment
 
 ### Schritt 1: Projekt vorbereiten
 
 1. Projekt auf GitHub hochladen (privates Repository empfohlen)
 2. Stelle sicher, dass alle Dateien da sind
 
-### Schritt 2: Cloudflare Pages einrichten
+### Schritt 2: Vercel einrichten
 
-1. **Bei Cloudflare anmelden**: https://dash.cloudflare.com
-2. **Pages aufrufen**: Im Menü links auf "Workers & Pages" klicken
-3. **Create application** → **Pages** → **Connect to Git**
-4. **GitHub verbinden** und dein Repository auswählen
-5. **Build-Einstellungen**:
+1. **Bei Vercel anmelden**: https://vercel.com
+2. **New Project** klicken
+3. **Import Git Repository** und dein GitHub-Repository auswählen
+4. **Build-Einstellungen** (werden automatisch erkannt):
    - Framework preset: **Next.js**
    - Build command: `npm run build`
-   - Build output directory: `.next`
-   - Node version: **18** oder höher
+   - Output directory: `.next`
 
-### Schritt 3: Umgebungsvariablen eintragen
+### Schritt 3: Datenbank einrichten
 
-In den Cloudflare Pages Settings → Environment variables:
+1. **Postgres Datenbank erstellen**:
+   - Im Vercel Dashboard zu deinem Projekt
+   - **Storage** Tab → **Create Database**
+   - **Postgres** auswählen
+   - Datenbank wird automatisch mit deinem Projekt verbunden
+
+2. **Umgebungsvariablen werden automatisch gesetzt**:
+   - `POSTGRES_PRISMA_URL`
+   - `POSTGRES_URL_NON_POOLING`
+
+### Schritt 4: Weitere Umgebungsvariablen eintragen
+
+In den Vercel Project Settings → Environment Variables:
 
 ```
 ADMIN_USER = admin
@@ -97,74 +113,69 @@ SMTP_HOST = in-v3.mailjet.com
 SMTP_PORT = 587
 SMTP_USER = deineMailjetAPIKey
 SMTP_PASS = deinMailjetSecretKey
-MAIL_FROM = deine@email.de
+MAIL_FROM = Kinderbasar Neukirchen <deine@email.de>
 JWT_SECRET = deinGeheimesPasswort123
 MAX_SELLERS = 200
 ```
 
-### Schritt 4: Datenbank einrichten (Cloudflare D1)
+### Schritt 5: Datenbank-Schema hochladen
 
-**WICHTIG**: SQLite funktioniert nicht auf Cloudflare Pages. Du brauchst Cloudflare D1:
+Nach dem ersten Deploy:
 
-1. **D1 Datenbank erstellen**:
-   - Im Cloudflare Dashboard: **Workers & Pages** → **D1**
-   - **Create database** klicken
-   - Name: `basar-db`
+```bash
+# Mit Vercel verbinden
+npx vercel link
 
-2. **D1 mit Pages verbinden**:
-   - Zurück zu deinem Pages-Projekt
-   - **Settings** → **Functions** → **D1 database bindings**
-   - **Add binding**: Variable name: `DB`, Database: `basar-db`
+# Datenbank Schema hochladen
+npx prisma db push
+```
 
-3. **Prisma für D1 anpassen**:
-   
-   In `prisma/schema.prisma`:
-   ```prisma
-   datasource db {
-     provider = "sqlite"
-     url      = env("DATABASE_URL")
-   }
-   ```
-   
-   Umgebungsvariable hinzufügen:
-   ```
-   DATABASE_URL = file:./data.db
-   ```
+Alternativ über Vercel CLI mit Environment-Variablen:
+```bash
+vercel env pull .env.local
+npx prisma db push
+```
 
-4. **Datenbank-Schema hochladen**:
-   
-   Nach dem ersten Deploy:
-   ```bash
-   npx wrangler d1 execute basar-db --file=./prisma/migrations/*/migration.sql
-   ```
+### Schritt 6: Deploy starten
 
-### Schritt 5: Deploy starten
-
-1. **Save and Deploy** klicken
-2. Cloudflare baut die Anwendung (dauert 2-3 Minuten)
-3. Fertig! Du erhältst eine URL wie: `https://dein-projekt.pages.dev`
+1. **Deploy** klicken
+2. Vercel baut die Anwendung (dauert 2-3 Minuten)
+3. Fertig! Du erhältst eine URL wie: `https://dein-projekt.vercel.app`
 
 ## Nach dem Deploy
 
 ### Admin-Login
 
-- URL: `https://dein-projekt.pages.dev/login`
+- URL: `https://dein-projekt.vercel.app/login`
 - Benutzername: `admin` (oder was du in ADMIN_USER eingetragen hast)
 - Passwort: dein ADMIN_PASS
 
-### Aufgaben einrichten
+### Aufgaben und Termine einrichten
 
-Die Standard-Aufgaben (Tische holen, Annahme, etc.) werden automatisch erstellt.
-Falls nicht, kannst du das Script manuell ausführen.
+1. Als Admin einloggen
+2. **Datum einstellen** aufrufen und Basar-Termine eintragen
+3. **Aufgaben** aufrufen und Helferschichten anlegen
+
+### Datenbank verwalten
+
+**Prisma Studio (lokal):**
+```bash
+npx prisma studio
+```
+
+**Vercel Dashboard:**
+- Storage → Postgres → Data
+- Oder direkt über Supabase Dashboard
 
 ## Datenbank-Struktur
 
 - **Seller**: Verkäufer/Mitarbeiter mit Nummer, Namen, E-Mail
-- **Task**: Aufgaben (z.B. "Tische stellen FR 17-19 Uhr")
+- **Task**: Aufgaben (z.B. "Kuchenverkauf Samstag 14-16 Uhr")
 - **TaskSignup**: Zuordnung wer sich für welche Aufgabe eingetragen hat
 - **Cake**: Welcher Mitarbeiter bringt welchen Kuchen mit
+- **Settings**: Basar-Termine (Freitag, Samstag, Sonntag)
 
-Alle QR-Codes und Barcodes werden direkt in der Datenbank gespeichert (schneller!).
+Alle QR-Codes und Barcodes werden direkt in der Datenbank gespeichert.
 
 ## Probleme beheben
 
@@ -175,20 +186,42 @@ Alle QR-Codes und Barcodes werden direkt in der Datenbank gespeichert (schneller
 **E-Mails werden nicht versendet:**
 - Mailjet-Zugangsdaten prüfen
 - Absender-E-Mail muss bei Mailjet verifiziert sein
+- `SMTP_PORT` muss `587` sein (nicht der API Key)
+- `SMTP_USER` ist der API Key
 
 **Datenbank-Fehler:**
-- D1 muss mit dem Pages-Projekt verbunden sein
-- Migrations müssen hochgeladen werden
+- Postgres Datenbank muss in Vercel Storage erstellt sein
+- `npx prisma db push` nach Schema-Änderungen ausführen
+- Umgebungsvariablen `POSTGRES_PRISMA_URL` und `POSTGRES_URL_NON_POOLING` müssen gesetzt sein
 
-## Support
+## Nützliche Befehle
 
-Bei Fragen oder Problemen: Prüfe die Cloudflare Pages Logs unter **Deployments** → **View details**
+```bash
+# Prisma Studio starten
+npx prisma studio
+
+# Datenbank Schema aktualisieren
+npx prisma db push
+
+# Prisma Client neu generieren
+npx prisma generate
+
+# Production Build testen
+npm run build
+
+# Vercel Production Deploy
+vercel --prod
+```
 
 ## Technische Details
 
 - **Framework**: Next.js 16 mit App Router
-- **Datenbank**: SQLite (lokal) / Cloudflare D1 (Production)
+- **Datenbank**: PostgreSQL (Supabase via Vercel Storage)
 - **ORM**: Prisma 6
 - **Styling**: Tailwind CSS v4
 - **Authentication**: JWT mit bcrypt
 - **E-Mail**: Nodemailer mit Mailjet SMTP
+- **Hosting**: Vercel
+- **Barcode/QR**: bwip-js, qrcode
+
+

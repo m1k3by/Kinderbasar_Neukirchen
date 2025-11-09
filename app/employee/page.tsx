@@ -16,6 +16,9 @@ interface Task {
       lastName: string;
     };
   }[];
+  _count?: {
+    signups: number;
+  };
 }
 
 interface Cake {
@@ -23,17 +26,14 @@ interface Cake {
   cakeName: string;
 }
 
-const dayTitles: { [key: string]: string } = {
-  FR: 'Freitag',
-  SA: 'Samstag',
-  SO: 'Sonntag',
-};
+const dayOrder = ['Freitag', 'Samstag', 'Sonntag'];
 
 export default function EmployeePage() {
   const router = useRouter();
   const [sellerId, setSellerId] = useState('');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [cakes, setCakes] = useState<Cake[]>([]);
+  const [settings, setSettings] = useState<Record<string, string>>({});
   const [myCake, setMyCake] = useState<Cake | null>(null);
   const [cakeName, setCakeName] = useState('');
   const [message, setMessage] = useState('');
@@ -66,12 +66,14 @@ export default function EmployeePage() {
 
   async function loadData() {
     try {
-      const [tasksRes, cakesRes] = await Promise.all([
+      const [tasksRes, cakesRes, settingsRes] = await Promise.all([
         fetch('/api/tasks'),
         fetch('/api/cakes'),
+        fetch('/api/settings'),
       ]);
 
       if (tasksRes.ok) setTasks(await tasksRes.json());
+      if (settingsRes.ok) setSettings(await settingsRes.json());
       if (cakesRes.ok) {
         const allCakes = await cakesRes.json();
         setCakes(allCakes);
@@ -208,9 +210,9 @@ export default function EmployeePage() {
 
   // Group tasks by day
   const groupedTasks: { [key: string]: Task[] } = {
-    FR: [],
-    SA: [],
-    SO: [],
+    'Freitag': [],
+    'Samstag': [],
+    'Sonntag': [],
   };
 
   tasks.forEach((task) => {
@@ -244,44 +246,62 @@ export default function EmployeePage() {
         <h2 className="text-2xl font-bold text-gray-800 mb-4">Helferliste</h2>
 
         <div className="space-y-8 mb-12">
-          {Object.entries(groupedTasks).map(([dayCode, dayTasks]) => (
-            <div key={dayCode}>
-              <h3 className="text-3xl font-extrabold text-teal-600 mb-6">
-                {dayTitles[dayCode]}
-              </h3>
-              <div className="grid md:grid-cols-2 gap-6">
-                {dayTasks.map((task) => {
-                  const signupCount = task.signups?.length || 0;
-                  const isSignedUp = task.signups?.some(s => s.sellerId === sellerId) || false;
-                  const isFull = signupCount >= task.capacity;
+          {dayOrder.map((day) => {
+            const dayTasks = groupedTasks[day] || [];
+            const dateKey = `date_${day.toLowerCase()}`;
+            const dateValue = settings[dateKey];
+            const formattedDate = dateValue 
+              ? new Date(dateValue + 'T00:00:00').toLocaleDateString('de-DE', { 
+                  day: '2-digit', 
+                  month: '2-digit', 
+                  year: 'numeric' 
+                })
+              : '';
+            
+            return (
+              <div key={day}>
+                <h3 className="text-3xl font-extrabold text-teal-700 mb-6">
+                  {day}
+                  {formattedDate && <span className="text-2xl font-normal text-gray-600 ml-3">({formattedDate})</span>}
+                </h3>
+                <div className="grid md:grid-cols-2 gap-6">
+                  {dayTasks.length > 0 ? (
+                    dayTasks.map((task) => {
+                      const signupCount = task.signups?.length || 0;
+                      const isSignedUp = task.signups?.some(s => s.sellerId === sellerId) || false;
+                      const isFull = signupCount >= task.capacity;
 
-                  return (
-                    <div key={task.id} className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-5">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-lg font-semibold">{task.title}</h4>
-                        <span className="text-sm text-gray-600">
-                          {signupCount} / {task.capacity}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => handleTaskToggle(task.id)}
-                        disabled={!isSignedUp && isFull}
-                        className={`w-full py-2 px-4 rounded font-medium shadow ${
-                          isSignedUp
-                            ? 'bg-red-500 hover:bg-red-600 text-white'
-                            : isFull
-                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                            : 'bg-yellow-500 hover:bg-yellow-600 text-gray-800'
-                        }`}
-                      >
-                        {isSignedUp ? 'Austragen' : isFull ? 'Voll' : 'Jetzt eintragen'}
-                      </button>
-                    </div>
-                  );
-                })}
+                      return (
+                        <div key={task.id} className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-5">
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="text-lg font-semibold">{task.title}</h4>
+                            <span className="text-sm text-gray-600">
+                              {signupCount} / {task.capacity}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => handleTaskToggle(task.id)}
+                            disabled={!isSignedUp && isFull}
+                            className={`w-full py-2 px-4 rounded font-medium shadow ${
+                              isSignedUp
+                                ? 'bg-red-500 hover:bg-red-600 text-white'
+                                : isFull
+                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                : 'bg-yellow-500 hover:bg-yellow-600 text-gray-800'
+                            }`}
+                          >
+                            {isSignedUp ? 'Austragen' : isFull ? 'Voll' : 'Jetzt eintragen'}
+                          </button>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p className="text-gray-500">Keine Aufgaben für diesen Tag.</p>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <hr className="my-10 border-gray-300" />
