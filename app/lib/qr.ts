@@ -1,6 +1,5 @@
 import QRCode from 'qrcode';
-import JsBarcode from 'jsbarcode';
-import { createCanvas } from 'canvas';
+import bwipjs from 'bwip-js';
 
 export const generateQR = async (text: string) => {
   try {
@@ -11,9 +10,9 @@ export const generateQR = async (text: string) => {
   }
 };
 
-export const generateBarcode = (text: string): string => {
+export const generateBarcode = async (text: string): Promise<string> => {
   try {
-    // Remove special characters and convert umlauts for CODE128 compatibility
+    // Remove special characters and convert Umlaute for CODE128 compatibility
     const sanitized = text
       .replace(/ä/g, 'ae')
       .replace(/ö/g, 'oe')
@@ -24,16 +23,18 @@ export const generateBarcode = (text: string): string => {
       .replace(/ß/g, 'ss')
       .replace(/_/g, ' ');  // Replace underscores with spaces
     
-    const canvas = createCanvas(400, 100);
-    JsBarcode(canvas, sanitized, {
-      format: 'CODE128',
-      width: 2,
-      height: 50,
-      displayValue: true,
-      fontSize: 14,
-      margin: 10
+    // bwip-js works in Edge Runtime (no native dependencies)
+    const png = await bwipjs.toBuffer({
+      bcid: 'code128',       // Barcode type
+      text: sanitized,       // Text to encode
+      scale: 3,              // 3x scaling factor
+      height: 10,            // Bar height, in millimeters
+      includetext: true,     // Show human-readable text
+      textxalign: 'center',  // Center text
     });
-    return canvas.toDataURL();
+    
+    // Convert buffer to base64 data URL
+    return `data:image/png;base64,${png.toString('base64')}`;
   } catch (err) {
     console.error(err);
     throw new Error('Failed to generate barcode');

@@ -66,7 +66,7 @@ export async function POST(request: Request) {
     // Generate QR code and Barcode with format: sellerId_lastName_firstName
     const qrData = `${sellerId}_${lastName}_${firstName}`;
     const qrCode = await generateQR(qrData);
-    const barcode = generateBarcode(qrData);
+    const barcode = await generateBarcode(qrData);
 
     // Create seller with codes stored
     const seller = await prisma.seller.create({

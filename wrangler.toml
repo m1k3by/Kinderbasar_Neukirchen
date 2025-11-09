@@ -1,0 +1,12 @@
+name = "kinderbasar-neukirchen"
+compatibility_date = "2025-11-09"
+pages_build_output_dir = ".vercel/output/static"
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "kinderbasar-db"
+database_id = "" # Will be filled after creating D1 database
+
+# Environment variables will be set in Cloudflare dashboard
+# Required: ADMIN_USER, ADMIN_PASS, JWT_SECRET, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM, MAX_SELLERS

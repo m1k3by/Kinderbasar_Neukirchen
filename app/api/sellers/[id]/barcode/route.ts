@@ -18,7 +18,7 @@ export async function GET(
 
     // Format: sellerId_lastName_firstName (z.B. 1_Müller_Anna)
     const barcodeData = `${seller.sellerId}_${seller.lastName}_${seller.firstName}`;
-    const barcode = generateBarcode(barcodeData);
+    const barcode = await generateBarcode(barcodeData);
     
     return NextResponse.json({ barcode });
   } catch (error) {
