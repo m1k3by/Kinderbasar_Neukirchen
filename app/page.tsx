@@ -40,7 +40,7 @@ export default async function Home() {
               </Link>
               <Link
                 href="/register/employee"
-                className="inline-flex items-center justify-center rounded-md bg-teal-500 hover:bg-teal-600 text-white px-4 py-3 text-sm font-medium transition-colors shadow"
+                className="inline-flex items-center justify-center rounded-md bg-teal-700 hover:bg-teal-800 text-white px-4 py-3 text-sm font-medium transition-colors shadow"
               >
                 Mitarbeiter registrieren (B)
               </Link>

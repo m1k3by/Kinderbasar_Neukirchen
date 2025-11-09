@@ -5,6 +5,9 @@ export async function GET(request: Request) {
   try {
     const tasks = await prisma.task.findMany({
       include: {
+        _count: {
+          select: { signups: true },
+        },
         signups: {
           include: {
             seller: {
@@ -44,14 +47,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate day format
-    if (!['FR', 'SA', 'SO'].includes(body.day)) {
-      return NextResponse.json(
-        { error: 'Tag muss FR, SA oder SO sein' },
-        { status: 400 }
-      );
-    }
-
     // Validate capacity is a positive number
     if (typeof body.capacity !== 'number' || body.capacity <= 0) {
       return NextResponse.json(
@@ -74,6 +69,33 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       { error: 'Fehler beim Erstellen der Aufgabe' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'Task-ID fehlt' },
+        { status: 400 }
+      );
+    }
+
+    // Delete task (cascade will delete signups automatically)
+    await prisma.task.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error('Error deleting task:', error);
+    return NextResponse.json(
+      { error: 'Fehler beim Löschen der Aufgabe' },
       { status: 500 }
     );
   }

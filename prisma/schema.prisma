@@ -50,3 +50,10 @@ model Cake {
   seller    Seller   @relation(fields: [sellerId], references: [id])
   createdAt DateTime @default(now())
 }
+
+model Settings {
+  id            String   @id @default(cuid())
+  key           String   @unique
+  value         String
+  updatedAt     DateTime @updatedAt
+}

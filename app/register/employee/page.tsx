@@ -49,7 +49,7 @@ export default function RegisterEmployeePage() {
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
-      <header className="bg-teal-500 text-white p-4 shadow-md">
+      <header className="bg-teal-700 text-white p-4 shadow-md">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <Link href="/" className="text-2xl font-bold hover:underline">
             Kinderbasar Neukirchen - Registration
@@ -135,7 +135,7 @@ export default function RegisterEmployeePage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-teal-500 text-white font-bold py-3 px-4 rounded hover:bg-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50 shadow"
+                className="w-full bg-teal-700 text-white font-bold py-3 px-4 rounded hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-700 disabled:opacity-50 shadow"
               >
                 {loading ? 'Wird registriert...' : 'Registrieren'}
               </button>

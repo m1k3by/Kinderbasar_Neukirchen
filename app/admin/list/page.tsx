@@ -96,6 +96,12 @@ export default function AdminListPage() {
             <Link href="/admin/list" className="hover:underline font-bold">
               Helferliste
             </Link>
+            <Link href="/admin/tasks" className="hover:underline">
+              Aufgaben
+            </Link>
+            <Link href="/admin/settings" className="hover:underline">
+              Datum einstellen
+            </Link>
             <Link href="/" className="hover:underline">
               Logout
             </Link>

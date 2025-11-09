@@ -1,0 +1,211 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+
+interface Settings {
+  date_freitag?: string;
+  date_samstag?: string;
+  date_sonntag?: string;
+}
+
+export default function SettingsPage() {
+  const [settings, setSettings] = useState<Settings>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const fetchSettings = async () => {
+    try {
+      const response = await fetch('/api/settings');
+      if (!response.ok) throw new Error('Failed to fetch settings');
+      const data = await response.json();
+      setSettings(data);
+    } catch (err) {
+      setError('Fehler beim Laden der Einstellungen');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setMessage('');
+    setError('');
+
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      });
+
+      if (!response.ok) throw new Error('Failed to save settings');
+
+      setMessage('✓ Einstellungen erfolgreich gespeichert!');
+      setTimeout(() => setMessage(''), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Fehler beim Speichern');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      {/* Header */}
+      <header className="bg-yellow-500 text-gray-800 p-4 shadow-md">
+        <div className="max-w-6xl mx-auto flex justify-between items-center">
+          <Link href="/" className="text-2xl font-bold hover:underline">
+            Kinderbasar Neukirchen
+          </Link>
+          <nav className="flex gap-4">
+            <Link href="/admin" className="hover:underline">
+              Basarliste
+            </Link>
+            <Link href="/admin/list" className="hover:underline">
+              Helferliste
+            </Link>
+            <Link href="/admin/tasks" className="hover:underline">
+              Aufgaben
+            </Link>
+            <Link href="/admin/settings" className="hover:underline font-bold">
+              Datum einstellen
+            </Link>
+            <Link href="/" className="hover:underline">
+              Logout
+            </Link>
+          </nav>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <div className="max-w-4xl mx-auto p-8">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Basar-Einstellungen</h1>
+          <p className="text-gray-600">Lege die Termine für den Basar fest</p>
+        </div>
+
+        {/* Messages */}
+        {message && (
+          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6">
+            {message}
+          </div>
+        )}
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+            ⚠️ {error}
+          </div>
+        )}
+
+        {/* Settings Form */}
+        {loading ? (
+          <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-8 text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <p className="mt-2 text-gray-600">Lade Einstellungen...</p>
+          </div>
+        ) : (
+          <form onSubmit={handleSave} className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6">
+            <h2 className="text-xl font-bold text-gray-800 mb-6">Basar-Termine</h2>
+
+            <div className="space-y-6">
+              {/* Freitag */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Freitag
+                </label>
+                <input
+                  type="date"
+                  value={settings.date_freitag || ''}
+                  onChange={(e) => setSettings({ ...settings, date_freitag: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="YYYY-MM-DD"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  {settings.date_freitag 
+                    ? `Anzeige: ${new Date(settings.date_freitag + 'T00:00:00').toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`
+                    : 'Kein Datum festgelegt'
+                  }
+                </p>
+              </div>
+
+              {/* Samstag */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Samstag
+                </label>
+                <input
+                  type="date"
+                  value={settings.date_samstag || ''}
+                  onChange={(e) => setSettings({ ...settings, date_samstag: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="YYYY-MM-DD"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  {settings.date_samstag 
+                    ? `Anzeige: ${new Date(settings.date_samstag + 'T00:00:00').toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`
+                    : 'Kein Datum festgelegt'
+                  }
+                </p>
+              </div>
+
+              {/* Sonntag */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Sonntag
+                </label>
+                <input
+                  type="date"
+                  value={settings.date_sonntag || ''}
+                  onChange={(e) => setSettings({ ...settings, date_sonntag: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="YYYY-MM-DD"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  {settings.date_sonntag 
+                    ? `Anzeige: ${new Date(settings.date_sonntag + 'T00:00:00').toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`
+                    : 'Kein Datum festgelegt'
+                  }
+                </p>
+              </div>
+            </div>
+
+            {/* Save Button */}
+            <div className="mt-8 flex gap-3">
+              <button
+                type="submit"
+                disabled={saving}
+                className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow"
+              >
+                {saving ? 'Speichere...' : '✓ Speichern'}
+              </button>
+              <Link
+                href="/admin"
+                className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-6 py-3 rounded-lg font-medium transition-colors inline-block"
+              >
+                Abbrechen
+              </Link>
+            </div>
+          </form>
+        )}
+
+        {/* Info Box */}
+        <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h3 className="font-semibold text-blue-900 mb-2">ℹ️ Hinweis</h3>
+          <p className="text-sm text-blue-800">
+            Die hier festgelegten Termine werden in der Helferliste, auf den öffentlichen Seiten und in allen E-Mails angezeigt.
+            Damit alle Teilnehmer die korrekten Daten sehen, solltest du die Termine vor dem Start der Anmeldung eintragen.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
