@@ -68,19 +68,19 @@ export default function RegisterEmployeePage() {
           <h2 className="text-2xl font-bold text-gray-800 mb-6">Mitarbeiter Registrierung</h2>
           
           <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-6">
-            <p className="text-sm">
+            <p className="text-base">
               Als Mitarbeiter erhalten Sie Login-Daten per E-Mail und können Aufgaben übernehmen sowie Kuchen registrieren.
             </p>
           </div>
 
           {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 text-lg">
               {error}
             </div>
           )}
           
           {success && (
-            <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+            <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4 text-lg">
               {success}
             </div>
           )}
@@ -88,12 +88,12 @@ export default function RegisterEmployeePage() {
           <form onSubmit={handleSubmit}>
             <div className="space-y-4">
               <div>
-                <label className="block text-gray-700 text-sm font-bold mb-2">
+                <label className="block text-gray-700 text-lg font-bold mb-2">
                   E-Mail *
                 </label>
                 <input
                   type="email"
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-3 text-lg border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   value={formData.email}
                   onChange={(e) =>
                     setFormData({ ...formData, email: e.target.value })
@@ -103,12 +103,12 @@ export default function RegisterEmployeePage() {
               </div>
 
               <div>
-                <label className="block text-gray-700 text-sm font-bold mb-2">
+                <label className="block text-gray-700 text-lg font-bold mb-2">
                   Vorname *
                 </label>
                 <input
                   type="text"
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-3 text-lg border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   value={formData.firstName}
                   onChange={(e) =>
                     setFormData({ ...formData, firstName: e.target.value })
@@ -118,12 +118,12 @@ export default function RegisterEmployeePage() {
               </div>
 
               <div>
-                <label className="block text-gray-700 text-sm font-bold mb-2">
+                <label className="block text-gray-700 text-lg font-bold mb-2">
                   Nachname *
                 </label>
                 <input
                   type="text"
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-3 text-lg border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   value={formData.lastName}
                   onChange={(e) =>
                     setFormData({ ...formData, lastName: e.target.value })
@@ -135,7 +135,7 @@ export default function RegisterEmployeePage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-teal-700 text-white font-bold py-3 px-4 rounded hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-700 disabled:opacity-50 shadow"
+                className="w-full bg-teal-700 text-white font-bold py-3 px-4 text-lg rounded hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-700 disabled:opacity-50 shadow"
               >
                 {loading ? 'Wird registriert...' : 'Registrieren'}
               </button>
