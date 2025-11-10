@@ -84,6 +84,14 @@ export default function LoginPage() {
                 required
               />
             </div>
+            <div className="text-right">
+              <a
+                href="/password-reset"
+                className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+              >
+                Passwort vergessen?
+              </a>
+            </div>
             <button
               type="submit"
               className="w-full bg-yellow-500 text-gray-800 font-bold py-3 px-4 text-lg rounded hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-500 shadow"

@@ -13,6 +13,8 @@ Eine einfache Web-Anwendung für die Verwaltung von Verkäufern und Helfern beim
 - **Admin-Bereich**: Übersicht über alle Verkäufer, Helfer und Kuchen
 - **E-Mail-Versand**: Automatische Bestätigungsmail mit QR-Code nach Registrierung
 - **Datum-Einstellung**: Basar-Termine können über Admin-Oberfläche verwaltet werden
+- **Passwort-Reset**: Verkäufer können vergessene Passwörter per E-Mail zurücksetzen
+- **AGB**: Allgemeine Geschäftsbedingungen müssen bei Registrierung akzeptiert werden
 
 ## Lokale Installation (zum Testen)
 
@@ -242,6 +244,12 @@ Die Anwendung ist **DSGVO-konform** und enthält:
   - Pflichtangaben für Betreiber
   - **WICHTIG**: Muss mit echten Daten ausgefüllt werden!
 
+- **AGB** (`/agb`)
+  - Allgemeine Geschäftsbedingungen für Verkäufer
+  - Regelt Warenannahme, Kommission (20%), Haftung
+  - Muss bei Registrierung akzeptiert werden (Checkbox)
+  - **WICHTIG**: Provisionssatz und Kontaktdaten anpassen!
+
 - **Keine Tracking-Cookies**
   - Keine Google Analytics, Facebook Pixel o.ä.
   - Nur technisch notwendige Session-Daten (JWT im LocalStorage)
@@ -330,6 +338,7 @@ Bevor du live gehst:
 
 - [ ] **Impressum ausfüllen** mit echten Daten (Name, Adresse, Kontakt)
 - [ ] **Datenschutz aktualisieren** mit deinen Kontaktdaten
+- [ ] **AGB anpassen** (Provisionssatz, Kontaktdaten am Ende)
 - [ ] **ADMIN_PASS ändern** - sicheres Passwort verwenden
 - [ ] **JWT_SECRET ändern** - zufälligen String generieren
 - [ ] **Mailjet verifizieren** - Absender-E-Mail bestätigen

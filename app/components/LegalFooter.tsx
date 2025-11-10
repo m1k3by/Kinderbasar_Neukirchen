@@ -21,6 +21,12 @@ export default function LegalFooter() {
             >
               Datenschutz
             </Link>
+            <Link 
+              href="/agb" 
+              className="hover:text-gray-900 hover:underline transition-colors"
+            >
+              AGB
+            </Link>
           </nav>
         </div>
       </div>

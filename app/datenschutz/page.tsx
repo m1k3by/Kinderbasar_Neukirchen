@@ -2,8 +2,8 @@ import Link from 'next/link';
 
 export default function DatenschutzPage() {
   return (
-    <div className="min-h-screen bg-gray-100">
-      <header className="bg-yellow-500 text-gray-800 p-4 shadow-md">
+    <div className="min-h-screen bg-gray-50">
+      <header className="sticky top-0 z-50 bg-yellow-500 text-gray-800 p-4 shadow-md">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <Link href="/" className="text-2xl font-bold hover:underline">
             Kinderbasar Neukirchen

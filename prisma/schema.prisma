@@ -9,18 +9,20 @@ datasource db {
 }
 
 model Seller {
-  id         String   @id @default(cuid())
-  email      String   @unique
-  firstName  String
-  lastName   String
-  sellerId   Int      @unique
-  isEmployee Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  password   String?
-  qrCode     String?
-  barcode    String?
-  taskSignups TaskSignup[]
-  cakes      Cake[]
+  id                String   @id @default(cuid())
+  email             String   @unique
+  firstName         String
+  lastName          String
+  sellerId          Int      @unique
+  isEmployee        Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  password          String?
+  qrCode            String?
+  barcode           String?
+  resetToken        String?  @unique
+  resetTokenExpiry  DateTime?
+  taskSignups       TaskSignup[]
+  cakes             Cake[]
 }
 
 model Task {

@@ -11,7 +11,8 @@ export default function RegisterSellerPage() {
     firstName: '',
     lastName: '',
   });
-  const [error, setError] = useState('');
+  const [agbAccepted, setAgbAccepted] = useState(false);
+  const [error, setError] = useState<string | React.ReactNode>('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -19,6 +20,12 @@ export default function RegisterSellerPage() {
     e.preventDefault();
     setError('');
     setSuccess('');
+
+    if (!agbAccepted) {
+      setError('Bitte akzeptieren Sie die AGB');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -39,8 +46,26 @@ export default function RegisterSellerPage() {
 
       setSuccess(`Registrierung erfolgreich! Ihre Verkäufer-ID: ${data.sellerId}. Bitte prüfen Sie Ihre E-Mails.`);
       setFormData({ email: '', firstName: '', lastName: '' });
+      setAgbAccepted(false);
     } catch (err: any) {
-      setError(err.message);
+      const errorMessage = err.message;
+      
+      // Zeige Link zum Passwort-Reset bei bereits registrierter E-Mail
+      if (errorMessage.includes('bereits registriert') || errorMessage.includes('already registered')) {
+        setError(
+          <span>
+            {errorMessage}{' '}
+            <Link 
+              href="/password-reset" 
+              className="text-blue-600 hover:underline font-medium"
+            >
+              Passwort vergessen?
+            </Link>
+          </span>
+        );
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -49,7 +74,7 @@ export default function RegisterSellerPage() {
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
-      <header className="bg-yellow-500 text-gray-800 p-4 shadow-md">
+      <header className="sticky top-0 z-50 bg-yellow-500 text-gray-800 p-4 shadow-md">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <Link href="/" className="text-2xl font-bold hover:underline">
             Kinderbasar Neukirchen - Registration
@@ -124,6 +149,28 @@ export default function RegisterSellerPage() {
                   }
                   required
                 />
+              </div>
+
+              <div className="flex items-start gap-3 pt-2">
+                <input
+                  type="checkbox"
+                  id="agb"
+                  checked={agbAccepted}
+                  onChange={(e) => setAgbAccepted(e.target.checked)}
+                  className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+                <label htmlFor="agb" className="text-gray-700 text-base">
+                  Ich akzeptiere die{' '}
+                  <Link 
+                    href="/agb" 
+                    target="_blank"
+                    className="text-blue-600 hover:underline font-medium"
+                  >
+                    Allgemeinen Geschäftsbedingungen (AGB)
+                  </Link>
+                  {' '}*
+                </label>
               </div>
 
               <button
