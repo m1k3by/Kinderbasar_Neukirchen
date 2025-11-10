@@ -223,5 +223,138 @@ vercel --prod
 - **E-Mail**: Nodemailer mit Mailjet SMTP
 - **Hosting**: Vercel
 - **Barcode/QR**: bwip-js, qrcode
+- **Schriftart**: Inter (self-hosted via next/font/google - keine externe Google-Verbindung)
+
+## 🇩🇪 Rechtliche Konformität für Deutschland
+
+### ✅ DSGVO (GDPR) Compliance
+
+Die Anwendung ist **DSGVO-konform** und enthält:
+
+- **Datenschutzerklärung** (`/datenschutz`)
+  - Informiert über alle erhobenen Daten (Name, E-Mail, Verkäufer-ID)
+  - Nennt alle Drittanbieter (Vercel, Supabase, Mailjet)
+  - Erklärt Rechtsgrundlagen und Zwecke der Datenverarbeitung
+  - Beschreibt Nutzerrechte (Auskunft, Löschung, Widerruf, etc.)
+  - Speicherdauer: 3 Monate nach Basar-Ende
+  
+- **Impressum** (`/impressum`)
+  - Pflichtangaben für Betreiber
+  - **WICHTIG**: Muss mit echten Daten ausgefüllt werden!
+
+- **Keine Tracking-Cookies**
+  - Keine Google Analytics, Facebook Pixel o.ä.
+  - Nur technisch notwendige Session-Daten (JWT im LocalStorage)
+  - Kein Cookie-Banner erforderlich
+
+- **Datenverarbeitung**
+  - Minimale Datenerhebung (nur Name + E-Mail)
+  - SSL/TLS-Verschlüsselung (HTTPS)
+  - Sichere Passwort-Speicherung (bcrypt)
+  - EU-Server via Supabase möglich
+
+### ♿ WCAG 2.1 Accessibility (Barrierefreiheit)
+
+Die Anwendung erfüllt **WCAG 2.1 Level A**:
+
+- **Semantisches HTML**
+  - Korrekte Verwendung von `<main>`, `<header>`, `<nav>`
+  - Nur ein `<main>` Landmark pro Seite
+  - Logische Überschriften-Hierarchie (h1, h2, h3)
+
+- **ARIA-Attribute**
+  - Burger-Menu mit `aria-expanded`, `aria-controls`, `aria-label`
+  - SVG-Icons mit `aria-hidden="true"` und `focusable="false"`
+  - Beschreibende Labels für alle interaktiven Elemente
+
+- **Mobile Optimierung**
+  - Mindestens 16px Schriftgröße auf Mobile
+  - Touch-Targets mindestens 44px (Apple/WCAG-Empfehlung)
+  - Responsive Design (mobile-first)
+  - Burger-Menu für kleine Bildschirme
+
+- **Tastatur-Navigation**
+  - Alle Funktionen ohne Maus bedienbar
+  - Logische Tab-Reihenfolge
+  - Fokus-Indikatoren sichtbar
+
+### 🔒 Security Features
+
+**Implementierte Sicherheitsmaßnahmen:**
+
+1. **Security Headers** (next.config.ts):
+   - `Strict-Transport-Security` (HSTS) - erzwingt HTTPS
+   - `X-Frame-Options: DENY` - verhindert Clickjacking
+   - `X-Content-Type-Options: nosniff` - verhindert MIME-Sniffing
+   - `Content-Security-Policy` - strenge CSP-Regeln
+   - `Permissions-Policy` - blockiert Kamera, Mikrofon, Geolocation
+   - `Referrer-Policy` - schützt Privatsphäre
+
+2. **Authentifizierung**:
+   - Passwort-Hashing mit bcrypt (10 Rounds)
+   - JWT-Tokens mit Ablaufzeit
+   - Admin-Bereich geschützt
+
+3. **Rate Limiting**:
+   - Login: Max 10 Versuche in 15 Minuten
+   - Registrierung: Max 5 Versuche in 15 Minuten
+   - **HINWEIS**: In-Memory Lösung - für hohe Last Redis/Upstash empfohlen
+
+4. **Input-Validierung**:
+   - SQL-Injection-Schutz durch Prisma (Prepared Statements)
+   - XSS-Schutz durch React
+   - E-Mail-Validierung
+   - CSRF-Schutz durch Same-Origin Policy
+
+5. **Datenbank**:
+   - Verbindung nur via SSL/TLS
+   - Keine sensiblen Daten im Code
+   - Environment Variables für Credentials
+
+### 🌐 Google Fonts & Privacy
+
+**Kein Datenschutz-Problem:**
+
+Die App nutzt **Next.js Font Optimization** (`next/font/google`):
+- Fonts werden beim **Build** von Google heruntergeladen
+- Fonts werden **self-hosted** auf Vercel
+- **Keine Verbindung** zu Google-Servern im Browser
+- **Keine IP-Adressen** werden an Google übertragen
+- **100% DSGVO-konform**
+
+Alternative: Lokale Schriftarten in `/public/fonts/` ablegen.
+
+### 📋 Checkliste für Production-Start
+
+Bevor du live gehst:
+
+- [ ] **Impressum ausfüllen** mit echten Daten (Name, Adresse, Kontakt)
+- [ ] **Datenschutz aktualisieren** mit deinen Kontaktdaten
+- [ ] **ADMIN_PASS ändern** - sicheres Passwort verwenden
+- [ ] **JWT_SECRET ändern** - zufälligen String generieren
+- [ ] **Mailjet verifizieren** - Absender-E-Mail bestätigen
+- [ ] **SMTP-Daten prüfen** (SMTP_PORT=587, nicht API Key)
+- [ ] **MAX_SELLERS** auf gewünschte Anzahl setzen
+- [ ] **Testregistrierung** durchführen und E-Mail prüfen
+- [ ] **Mobile Ansicht testen** auf echtem Smartphone
+- [ ] **Accessibility prüfen** mit Browser-DevTools
+
+### 🔍 Compliance-Tools zum Testen
+
+**DSGVO:**
+- https://www.dsgvo-portal.de/
+
+**Accessibility:**
+- Chrome DevTools Lighthouse (Accessibility Score)
+- WAVE Browser Extension: https://wave.webaim.org/
+- axe DevTools: https://www.deque.com/axe/
+
+**Security:**
+- https://securityheaders.com/
+- https://observatory.mozilla.org/
+
+### ⚖️ Haftungsausschluss
+
+Die Anwendung enthält technische Umsetzungen für DSGVO und WCAG. Für rechtliche Beratung konsultiere einen Anwalt. Die Platzhalter in Impressum und Datenschutzerklärung müssen mit echten Daten ausgefüllt werden.
 
 

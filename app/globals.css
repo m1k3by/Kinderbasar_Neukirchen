@@ -54,10 +54,21 @@ body {
   input, textarea, select, button {
     font-size: 16px !important;
     min-height: 44px;
+    color: #000000 !important; /* Force black text */
+  }
+  
+  /* Override browser autofill styles */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    -webkit-text-fill-color: #000000 !important;
+    -webkit-box-shadow: 0 0 0px 1000px white inset !important;
   }
   
   label {
     font-size: 16px;
+    color: #000000 !important; /* Force black text */
   }
   
   h1 {
@@ -71,4 +82,18 @@ body {
   h3 {
     font-size: 1.25rem;
   }
+}
+
+/* Desktop: Also ensure black text in inputs */
+input, textarea, select {
+  color: #000000 !important;
+}
+
+/* Override browser autofill styles on desktop too */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: #000000 !important;
+  -webkit-box-shadow: 0 0 0px 1000px white inset !important;
 }
