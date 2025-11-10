@@ -99,21 +99,44 @@ export default function EmployeePage() {
       const task = tasks.find(t => t.id === taskId);
       const isSignedUp = task?.signups?.some(s => s.sellerId === sellerId);
 
+      // Optimistic UI update - sofort aktualisieren
       if (isSignedUp) {
-        // Austragen
+        // Sofort aus Liste entfernen (optimistisch)
+        setTasks(prevTasks => prevTasks.map(t => 
+          t.id === taskId 
+            ? { ...t, signups: t.signups?.filter(s => s.sellerId !== sellerId) }
+            : t
+        ));
+      } else {
+        // Sofort hinzufügen (optimistisch)
+        setTasks(prevTasks => prevTasks.map(t => 
+          t.id === taskId 
+            ? { 
+                ...t, 
+                signups: [...(t.signups || []), { 
+                  sellerId, 
+                  seller: { firstName: '', lastName: '' } 
+                }] 
+              }
+            : t
+        ));
+      }
+
+      // Dann tatsächliche API-Anfrage im Hintergrund
+      if (isSignedUp) {
         const res = await fetch(`/api/task-signups?taskId=${taskId}&sellerId=${sellerId}`, {
           method: 'DELETE',
         });
 
         if (res.ok) {
-          setMessage('Erfolgreich ausgetragen');
-          loadData();
+          setMessage('✓ Erfolgreich ausgetragen');
         } else {
+          // Bei Fehler: zurücksetzen
+          loadData();
           const data = await res.json();
           setMessage(data.error || 'Fehler beim Austragen');
         }
       } else {
-        // Eintragen
         const res = await fetch('/api/task-signups', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -121,19 +144,21 @@ export default function EmployeePage() {
         });
 
         if (res.ok) {
-          setMessage('Erfolgreich eingetragen');
-          loadData();
+          setMessage('✓ Erfolgreich eingetragen');
         } else {
+          // Bei Fehler: zurücksetzen
+          loadData();
           const data = await res.json();
           setMessage(data.error || 'Fehler beim Eintragen');
         }
       }
 
-      setTimeout(() => setMessage(''), 3000);
+      setTimeout(() => setMessage(''), 2000);
     } catch (error) {
       console.error('Error toggling task:', error);
+      loadData(); // Bei Fehler neu laden
       setMessage('Fehler beim Aktualisieren');
-      setTimeout(() => setMessage(''), 3000);
+      setTimeout(() => setMessage(''), 2000);
     }
   }
 
@@ -267,7 +292,7 @@ export default function EmployeePage() {
                       return (
                         <div key={task.id} className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-5">
                           <div className="flex items-center justify-between mb-3">
-                            <h4 className="text-lg font-semibold">{task.title}</h4>
+                            <h4 className="text-lg font-semibold text-gray-800">{task.title}</h4>
                             <span className="text-sm text-gray-600">
                               {signupCount} / {task.capacity}
                             </span>
@@ -275,12 +300,12 @@ export default function EmployeePage() {
                           <button
                             onClick={() => handleTaskToggle(task.id)}
                             disabled={!isSignedUp && isFull}
-                            className={`w-full py-2 px-4 rounded font-medium shadow text-lg ${
+                            className={`w-full py-2 px-4 rounded font-medium shadow text-lg transition-colors ${
                               isSignedUp
-                                ? 'bg-red-500 hover:bg-red-600 text-white'
+                                ? 'bg-red-500 hover:bg-red-600 text-white active:bg-red-700'
                                 : isFull
                                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                : 'bg-yellow-500 hover:bg-yellow-600 text-gray-800'
+                                : 'bg-yellow-500 hover:bg-yellow-600 text-gray-800 active:bg-yellow-700'
                             }`}
                           >
                             {isSignedUp ? 'Austragen' : isFull ? 'Voll' : 'Jetzt eintragen'}
