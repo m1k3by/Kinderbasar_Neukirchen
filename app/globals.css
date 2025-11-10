@@ -38,4 +38,37 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  font-size: 16px;
+}
+
+/* Ensure minimum readable font size on mobile */
+@media (max-width: 768px) {
+  html {
+    font-size: 16px;
+  }
+  
+  body {
+    font-size: 16px;
+  }
+  
+  input, textarea, select, button {
+    font-size: 16px !important;
+    min-height: 44px;
+  }
+  
+  label {
+    font-size: 16px;
+  }
+  
+  h1 {
+    font-size: 1.75rem;
+  }
+  
+  h2 {
+    font-size: 1.5rem;
+  }
+  
+  h3 {
+    font-size: 1.25rem;
+  }
 }

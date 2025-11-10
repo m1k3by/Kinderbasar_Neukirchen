@@ -313,18 +313,18 @@ export default function EmployeePage() {
         )}
 
         <form onSubmit={handleCakeSubmit} className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6 mb-6">
-          <div className="flex gap-3">
+          <div className="flex flex-col md:flex-row gap-3">
             <input
               type="text"
               value={cakeName}
               onChange={(e) => setCakeName(e.target.value)}
               placeholder="z.B. Marmorkuchen"
-              className="flex-1 p-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500"
+              className="flex-1 p-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 text-base"
               required
             />
             <button
               type="submit"
-              className="bg-yellow-500 hover:bg-yellow-600 text-gray-800 px-6 py-3 rounded font-medium shadow"
+              className="bg-yellow-500 hover:bg-yellow-600 text-gray-800 px-6 py-3 rounded font-medium shadow text-base"
             >
               {myCake ? 'Ändern' : 'Eintragen'}
             </button>
@@ -332,7 +332,7 @@ export default function EmployeePage() {
               <button
                 type="button"
                 onClick={handleDeleteCake}
-                className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded font-medium shadow"
+                className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded font-medium shadow text-base"
               >
                 Löschen
               </button>
@@ -353,7 +353,7 @@ export default function EmployeePage() {
         </div>
 
         <footer className="mt-12 text-center text-sm text-gray-500">
-          <p>© — einfache Demo-App (FastAPI + SQLite)</p>
+          <p>© — Queen Judith (Basar FTW '99')</p>
         </footer>
       </div>
     </div>

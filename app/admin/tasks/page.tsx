@@ -222,13 +222,13 @@ export default function TasksManagementPage() {
           ) : (
             <div className="divide-y divide-gray-200">
               {tasks.map((task) => (
-                <div key={task.id} className="p-6 hover:bg-gray-50 transition-colors">
-                  <div className="flex justify-between items-start">
+                <div key={task.id} className="p-4 md:p-6 hover:bg-gray-50 transition-colors">
+                  <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
                     <div className="flex-1">
                       <h3 className="text-lg font-semibold text-gray-900 mb-2">
                         {task.title}
                       </h3>
-                      <div className="flex gap-4 text-sm text-gray-600 mb-3">
+                      <div className="flex flex-col md:flex-row md:gap-4 gap-2 text-sm text-gray-600 mb-3">
                         <span className="inline-flex items-center">
                           📅 <span className="ml-1 font-medium">{task.day}</span>
                         </span>
@@ -241,7 +241,7 @@ export default function TasksManagementPage() {
                       </div>
                       
                       {/* Progress Bar */}
-                      <div className="w-64">
+                      <div className="w-full md:w-64">
                         <div className="flex justify-between text-xs text-gray-600 mb-1">
                           <span>Auslastung</span>
                           <span>{Math.round(((task._count?.signups || 0) / task.capacity) * 100)}%</span>
@@ -265,7 +265,7 @@ export default function TasksManagementPage() {
 
                     <button
                       onClick={() => handleDelete(task.id)}
-                      className="ml-4 bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-lg font-medium transition-colors"
+                      className="w-full md:w-auto md:ml-4 bg-red-50 hover:bg-red-100 text-red-600 px-4 py-3 md:py-2 rounded-lg font-medium transition-colors text-base"
                     >
                       🗑️ Löschen
                     </button>
