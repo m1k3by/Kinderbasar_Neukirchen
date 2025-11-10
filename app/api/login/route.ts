@@ -1,12 +1,24 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../lib/prisma';
 import { createToken } from '../../lib/auth';
+import { rateLimit } from '../../lib/rateLimit';
 import bcrypt from 'bcrypt';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { email, password } = body;
+
+    // Rate limiting: 10 login attempts per 15 minutes per IP
+    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
+    const rateLimitKey = `login:${ip}`;
+    
+    if (!rateLimit(rateLimitKey, { maxRequests: 10, windowMs: 15 * 60 * 1000 })) {
+      return NextResponse.json(
+        { error: 'Zu viele Login-Versuche. Bitte versuchen Sie es später erneut.' },
+        { status: 429 }
+      );
+    }
 
     // Check for admin login
     if (email === process.env.ADMIN_USER && password === process.env.ADMIN_PASS) {

@@ -1,5 +1,6 @@
 import './globals.css';
 import { Inter } from 'next/font/google';
+import LegalFooter from './components/LegalFooter';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -15,7 +16,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="de">
-      <body className={inter.className}>{children}</body>
+      <body className={inter.className}>
+        <div className="min-h-screen flex flex-col">
+          <main className="flex-grow">{children}</main>
+          <LegalFooter />
+        </div>
+      </body>
     </html>
   );
 }

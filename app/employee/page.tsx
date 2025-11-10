@@ -351,10 +351,6 @@ export default function EmployeePage() {
             )}
           </ul>
         </div>
-
-        <footer className="mt-12 text-center text-sm text-gray-500">
-          <p>© — Queen Judith (Basar FTW '99')</p>
-        </footer>
       </div>
     </div>
   );

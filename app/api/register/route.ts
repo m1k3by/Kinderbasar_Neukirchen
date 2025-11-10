@@ -2,12 +2,24 @@ import { NextResponse } from 'next/server';
 import { prisma } from '../../lib/prisma';
 import { generateQR, generateBarcode } from '../../lib/qr';
 import { sendMail } from '../../lib/mail';
+import { rateLimit } from '../../lib/rateLimit';
 import bcrypt from 'bcrypt';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { email, firstName, lastName, isEmployee } = body;
+
+    // Rate limiting: 5 registration attempts per 15 minutes per IP
+    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
+    const rateLimitKey = `register:${ip}`;
+    
+    if (!rateLimit(rateLimitKey, { maxRequests: 5, windowMs: 15 * 60 * 1000 })) {
+      return NextResponse.json(
+        { error: 'Zu viele Registrierungsversuche. Bitte versuchen Sie es später erneut.' },
+        { status: 429 }
+      );
+    }
 
     // Validate required fields
     if (!email || !firstName || !lastName) {
