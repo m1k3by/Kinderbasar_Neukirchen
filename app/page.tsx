@@ -9,7 +9,7 @@ export default async function Home() {
   const max = parseInt(process.env.MAX_SELLERS || '200');
 
   return (
-    <main className="basar-background">
+    <div className="basar-background">
       <div className="basar-content">
         {/* Header */}
         <header className="bg-yellow-500 text-gray-800 p-4 shadow-md">
@@ -68,6 +68,6 @@ export default async function Home() {
         </div>
       </div>
       </div>
-    </main>
+    </div>
   );
 }
