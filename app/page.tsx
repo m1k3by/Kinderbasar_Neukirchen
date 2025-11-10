@@ -8,6 +8,34 @@ export default async function Home() {
   const count = await prisma.seller.count();
   const max = parseInt(process.env.MAX_SELLERS || '200');
 
+  // Fetch basar dates from settings
+  const settings = await prisma.settings.findMany();
+  const settingsObj: Record<string, string> = {};
+  settings.forEach(s => {
+    settingsObj[s.key] = s.value;
+  });
+
+  const formatDate = (dateString: string | undefined) => {
+    if (!dateString) return null;
+    try {
+      const date = new Date(dateString + 'T00:00:00');
+      return date.toLocaleDateString('de-DE', {
+        weekday: 'long',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+    } catch {
+      return null;
+    }
+  };
+
+  const freitagDate = formatDate(settingsObj.date_freitag);
+  const samstagDate = formatDate(settingsObj.date_samstag);
+  const sonntagDate = formatDate(settingsObj.date_sonntag);
+
+  const hasAnyDate = freitagDate || samstagDate || sonntagDate;
+
   return (
     <div className="basar-background">
       <div className="basar-content">
@@ -29,12 +57,12 @@ export default async function Home() {
       <div className="max-w-6xl mx-auto p-8">
         <div className="grid md:grid-cols-2 gap-6">
           {/* Registration Options */}
-          <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6">
+          <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6 flex flex-col">
             <h2 className="text-xl font-semibold text-gray-800 mb-4">Registrierungen</h2>
             <p className="text-sm text-gray-600 mb-4">
               Aktuell belegte Plätze: <strong>{count}</strong> von <strong>{max}</strong>
             </p>
-            <div className="mt-4 flex flex-col gap-3">
+            <div className="mt-auto flex flex-col gap-3">
               <Link
                 href="/register/seller"
                 className="inline-flex items-center justify-center rounded-md bg-yellow-500 hover:bg-yellow-600 text-gray-800 px-4 py-3 text-sm font-medium transition-colors shadow"
@@ -63,6 +91,11 @@ export default async function Home() {
                 (Vorsortieren, Kuchenverkauf etc.). Es wird auch direkt eine Verkäufer-ID erstellt. 
                 Alle Info wie Login werden ebenfalls per E-Mail an die angegebene E-Mail Adresse versendet.
               </div>
+              {hasAnyDate && sonntagDate && (
+                <div className="pt-3 mt-3 border-t border-gray-300">
+                  <div><strong>Basartag Sonntag:</strong> {sonntagDate.split(',')[1]?.trim()}</div>
+                </div>
+              )}
             </div>
           </div>
         </div>
