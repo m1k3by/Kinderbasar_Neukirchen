@@ -162,14 +162,14 @@ export default function AdminPage() {
                         <div key={task.id} className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-5">
                           <div className="flex items-center justify-between">
                             <h4 className="text-lg font-semibold">{task.title}</h4>
-                            <span className="text-sm text-gray-600">
+                            <span className="text-base text-gray-600">
                               {signups.length} / {task.capacity}
                             </span>
                           </div>
-                          <div className="mt-3 text-sm">
-                            <ul className="list-disc ml-5">
+                          <div className="mt-3 text-base">
+                            <ul className="list-disc ml-5 text-gray-900">
                               {signups.map((signup, idx) => (
-                                <li key={idx}>
+                                <li key={idx} className="mb-1">
                                   {signup.seller.firstName} {signup.seller.lastName}
                                 </li>
                               ))}
@@ -193,12 +193,12 @@ export default function AdminPage() {
         <h2 className="text-2xl font-bold text-gray-800 mb-4">Kuchenliste (Admin)</h2>
         <p className="text-sm text-gray-600 mb-3">Admins sehen Kuchen inkl. Person.</p>
         <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6">
-          <ul className="list-disc ml-6">
+          <ul className="list-disc ml-6 text-lg text-gray-900">
             {cakes.length > 0 ? (
               cakes.map((cake) => {
                 const seller = cake.seller || sellersByEmail[cake.sellerId];
                 return (
-                  <li key={cake.id}>
+                  <li key={cake.id} className="mb-1">
                     <span className="font-medium">{cake.cakeName}</span> –{' '}
                     {seller
                       ? `${seller.firstName} ${seller.lastName}`

@@ -275,7 +275,7 @@ export default function EmployeePage() {
                           <button
                             onClick={() => handleTaskToggle(task.id)}
                             disabled={!isSignedUp && isFull}
-                            className={`w-full py-2 px-4 rounded font-medium shadow ${
+                            className={`w-full py-2 px-4 rounded font-medium shadow text-lg ${
                               isSignedUp
                                 ? 'bg-red-500 hover:bg-red-600 text-white'
                                 : isFull
@@ -341,10 +341,10 @@ export default function EmployeePage() {
         </form>
 
         <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6">
-          <ul className="list-disc ml-6">
+          <ul className="list-disc ml-6 text-lg text-gray-900">
             {cakes.length > 0 ? (
               cakes.map((cake) => (
-                <li key={cake.id}>{cake.cakeName}</li>
+                <li key={cake.id} className="mb-1">{cake.cakeName}</li>
               ))
             ) : (
               <li className="text-gray-500">Noch keine Kuchen eingetragen</li>
