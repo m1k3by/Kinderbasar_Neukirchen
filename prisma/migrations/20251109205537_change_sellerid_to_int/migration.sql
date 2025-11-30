@@ -14,7 +14,7 @@ CREATE TABLE "new_Seller" (
     "lastName" TEXT NOT NULL,
     "sellerId" INTEGER NOT NULL,
     "isEmployee" BOOLEAN NOT NULL DEFAULT false,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "password" TEXT
 );
 INSERT INTO "new_Seller" ("createdAt", "email", "firstName", "id", "isEmployee", "lastName", "password", "sellerId") SELECT "createdAt", "email", "firstName", "id", "isEmployee", "lastName", "password", "sellerId" FROM "Seller";

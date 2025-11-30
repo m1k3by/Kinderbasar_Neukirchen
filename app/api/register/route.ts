@@ -214,7 +214,7 @@ export async function POST(request: Request) {
         <div style="font-family:system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; color:#111827;">
           <h1 style="color:#0f172a;">Willkommen beim Basar</h1>
           <p>Vielen Dank für Ihre Registrierung!</p>
-          <p>Ihre Verkäufer-ID: <strong>${sellerId}</strong></p>
+          <p>Ihre Verkäufer-Nummer: <strong>${sellerId}</strong></p>
           ${passwordSection}
           ${datesBox}
           ${attachmentNotice}
@@ -224,7 +224,7 @@ export async function POST(request: Request) {
       `;
 
       // Send email with attachments if any
-      await sendMail(email, 'Ihre Registrierung beim Basar', emailHtml, attachments);
+      await sendMail(email, 'Ihre Registrierung beim Kinderbasar Neukirchen', emailHtml, attachments);
     } catch (emailError) {
       console.error('Email sending failed:', emailError);
       // Don't return error to client, registration was successful

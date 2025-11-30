@@ -44,7 +44,7 @@ export default function RegisterEmployeePage() {
         throw new Error(data.error || 'Ein Fehler ist aufgetreten');
       }
 
-      setSuccess(`Registrierung erfolgreich! Ihre Verkäufer-ID: ${data.sellerId}. Login-Daten wurden per E-Mail versendet.`);
+      setSuccess(`Registrierung erfolgreich! Ihre Verkäufer-Nummer: ${data.sellerId}. Login-Daten wurden per E-Mail versendet.`);
       setFormData({ email: '', firstName: '', lastName: '' });
       setAgbAccepted(false);
     } catch (err: any) {

@@ -122,7 +122,7 @@ ALTER TABLE "Seller" ADD COLUMN "sellerStatusActive" BOOLEAN NOT NULL DEFAULT fa
 **Email-Struktur:**
 ```
 Willkommen beim Basar
-Ihre Verkäufer-ID: XXXX
+Ihre Verkäufer-Nummer: XXXX
 
 ┌─────────────────────────────┐
 │ Anlieferung der Ware       │
