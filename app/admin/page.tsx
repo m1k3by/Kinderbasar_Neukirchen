@@ -5,7 +5,7 @@ import Header from '../components/Header';
 
 interface Seller {
   id: string;
-  sellerId: string;
+  sellerId: number;
   firstName: string;
   lastName: string;
   email: string;
@@ -133,7 +133,7 @@ export default function AdminPage() {
       {/* Main Content */}
       <div className="max-w-6xl mx-auto p-8">
         {/* Warning for seller IDs */}
-        {sellers.filter(s => s.sellerId >= 1000 && s.sellerId <= 9999).length >= 9000 && (
+        {sellers.filter(s =>s.sellerId >= 1000 && s.sellerId <= 9999).length >= 9000 && (
           <div className="mb-6 bg-red-100 border-2 border-red-600 text-red-900 px-6 py-4 rounded-lg">
             <p className="text-xl font-bold">⚠️ WARNUNG: Alle Verkäufer-IDs sind vergeben!</p>
             <p className="mt-2">Der Bereich 1000-9999 ist vollständig belegt. Keine weiteren Registrierungen möglich.</p>
