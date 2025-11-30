@@ -132,6 +132,14 @@ export default function AdminPage() {
 
       {/* Main Content */}
       <div className="max-w-6xl mx-auto p-8">
+        {/* Warning for seller IDs */}
+        {sellers.filter(s => s.sellerId >= 1000 && s.sellerId <= 9999).length >= 9000 && (
+          <div className="mb-6 bg-red-100 border-2 border-red-600 text-red-900 px-6 py-4 rounded-lg">
+            <p className="text-xl font-bold">⚠️ WARNUNG: Alle Verkäufer-IDs sind vergeben!</p>
+            <p className="mt-2">Der Bereich 1000-9999 ist vollständig belegt. Keine weiteren Registrierungen möglich.</p>
+          </div>
+        )}
+
         {/* Helferliste */}
         <h2 className="text-2xl font-bold text-gray-800 mb-4">Helferliste (Admin)</h2>
 

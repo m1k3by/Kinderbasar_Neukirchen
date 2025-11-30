@@ -6,11 +6,13 @@ import Link from 'next/link';
 interface HeaderProps {
   title?: string;
   links?: { href: string; label: string; active?: boolean }[];
+  sellerInfo?: { name: string; sellerId: number } | null;
 }
 
 export default function Header({ 
   title = 'Kinderbasar Neukirchen', 
-  links = [{ href: '/', label: 'Zurück' }] 
+  links = [{ href: '/', label: 'Zurück' }],
+  sellerInfo = null
 }: HeaderProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -19,9 +21,17 @@ export default function Header({
       <div className="max-w-6xl mx-auto px-4 py-4">
         <div className="flex justify-between items-center">
           {/* Logo/Title */}
-          <Link href="/" className="text-xl md:text-2xl font-bold hover:underline">
-            {title}
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link href="/" className="text-xl md:text-2xl font-bold hover:underline">
+              {title}
+            </Link>
+            {sellerInfo && (
+              <div className="hidden md:block bg-white/90 px-3 py-1 rounded-md text-sm">
+                <span className="font-semibold">{sellerInfo.name}</span>
+                <span className="text-gray-600 ml-2">ID: {sellerInfo.sellerId}</span>
+              </div>
+            )}
+          </div>
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex gap-4">

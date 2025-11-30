@@ -8,6 +8,14 @@ interface Settings {
   date_freitag?: string;
   date_samstag?: string;
   date_sonntag?: string;
+  registration_seller_start?: string;
+  registration_seller_end?: string;
+  registration_employee_start?: string;
+  registration_employee_end?: string;
+  delivery_start?: string;
+  delivery_end?: string;
+  pickup_start?: string;
+  pickup_end?: string;
 }
 
 export default function SettingsPage() {
@@ -159,6 +167,144 @@ export default function SettingsPage() {
                     ? `Anzeige: ${new Date(settings.date_sonntag + 'T00:00:00').toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`
                     : 'Kein Datum festgelegt'
                   }
+                </p>
+              </div>
+            </div>
+
+            {/* Registration Periods */}
+            <div className="mt-8 pt-8 border-t border-gray-300">
+              <h2 className="text-xl font-bold text-gray-800 mb-6">Registrierungszeiträume</h2>
+              
+              {/* Seller Registration Period */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-700 mb-3">Verkäufer-Registrierung (A)</h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Start-Datum
+                    </label>
+                    <input
+                      type="date"
+                      value={settings.registration_seller_start || ''}
+                      onChange={(e) => setSettings({ ...settings, registration_seller_start: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      End-Datum
+                    </label>
+                    <input
+                      type="date"
+                      value={settings.registration_seller_end || ''}
+                      onChange={(e) => setSettings({ ...settings, registration_seller_end: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  Die Verkäufer-Registrierung wird nur in diesem Zeitraum auf der Startseite angezeigt.
+                </p>
+              </div>
+
+              {/* Employee Registration Period */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-700 mb-3">Mitarbeiter-Registrierung (B)</h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Start-Datum
+                    </label>
+                    <input
+                      type="date"
+                      value={settings.registration_employee_start || ''}
+                      onChange={(e) => setSettings({ ...settings, registration_employee_start: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      End-Datum
+                    </label>
+                    <input
+                      type="date"
+                      value={settings.registration_employee_end || ''}
+                      onChange={(e) => setSettings({ ...settings, registration_employee_end: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  Die Mitarbeiter-Registrierung wird nur in diesem Zeitraum auf der Startseite angezeigt.
+                </p>
+              </div>
+            </div>
+
+            {/* Delivery and Pickup Periods */}
+            <div className="mt-8 pt-8 border-t border-gray-300">
+              <h2 className="text-xl font-bold text-gray-800 mb-6">Anlieferung und Abholung</h2>
+              
+              {/* Delivery Period */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-700 mb-3">Anlieferung der Ware</h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Von (Datum + Uhrzeit)
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={settings.delivery_start || ''}
+                      onChange={(e) => setSettings({ ...settings, delivery_start: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Bis (Datum + Uhrzeit)
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={settings.delivery_end || ''}
+                      onChange={(e) => setSettings({ ...settings, delivery_end: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  Diese Zeiten werden in der Bestätigungs-E-Mail an die Verkäufer gesendet.
+                </p>
+              </div>
+
+              {/* Pickup Period */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-700 mb-3">Abholung der Ware</h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Von (Datum + Uhrzeit)
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={settings.pickup_start || ''}
+                      onChange={(e) => setSettings({ ...settings, pickup_start: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Bis (Datum + Uhrzeit)
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={settings.pickup_end || ''}
+                      onChange={(e) => setSettings({ ...settings, pickup_end: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  Diese Zeiten werden in der Bestätigungs-E-Mail an die Verkäufer gesendet.
                 </p>
               </div>
             </div>

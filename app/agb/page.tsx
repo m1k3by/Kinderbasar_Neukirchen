@@ -135,7 +135,7 @@ export default function AGBPage() {
             <div className="space-y-3 text-gray-700 leading-relaxed">
               <p>
                 7.1. Der Veranstalter übernimmt die Ware mit größter Sorgfalt, haftet jedoch nicht für 
-                Verlust oder Beschädigung, soweit nicht Vorsatz oder grobe Fahrlässigkeit vorliegt.
+                Verlust, Beschädigung oder Diebstahl, soweit nicht Vorsatz oder grobe Fahrlässigkeit vorliegt.
               </p>
               <p>
                 7.2. Der Verkäufer versichert, dass die angebotene Ware frei von Rechten Dritter ist und 

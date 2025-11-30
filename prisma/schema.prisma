@@ -15,6 +15,7 @@ model Seller {
   lastName          String
   sellerId          Int      @unique
   isEmployee        Boolean  @default(false)
+  sellerStatusActive Boolean @default(false)
   createdAt         DateTime @default(now())
   password          String?
   qrCode            String?

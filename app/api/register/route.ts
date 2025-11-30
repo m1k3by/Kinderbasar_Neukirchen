@@ -60,12 +60,38 @@ export async function POST(request: Request) {
       );
     }
 
-    // Generate sequential seller ID (next number)
-    const lastSeller = await prisma.seller.findMany({
-      orderBy: { sellerId: 'desc' },
-      take: 1
+    // Generate seller ID in range 1000-9999
+    // Get all existing seller IDs in this range
+    const existingSellers = await prisma.seller.findMany({
+      where: {
+        sellerId: {
+          gte: 1000,
+          lte: 9999
+        }
+      },
+      select: { sellerId: true },
+      orderBy: { sellerId: 'asc' }
     });
-    const sellerId = lastSeller.length > 0 ? lastSeller[0].sellerId + 1 : 1;
+
+    const existingIds = new Set(existingSellers.map(s => s.sellerId));
+    
+    let sellerId = null;
+    
+    // First, try to find the next available ID starting from 1000
+    for (let id = 1000; id <= 9999; id++) {
+      if (!existingIds.has(id)) {
+        sellerId = id;
+        break;
+      }
+    }
+    
+    // If no ID available (all 9000 IDs are used)
+    if (sellerId === null) {
+      return NextResponse.json(
+        { error: 'Alle Verkäufer-IDs sind vergeben (1000-9999). Keine weiteren Registrierungen möglich.' },
+        { status: 400 }
+      );
+    }
     
     // Generate password if employee
     let password = null;
@@ -94,6 +120,57 @@ export async function POST(request: Request) {
       },
     });
 
+    // Fetch settings for email
+    const settings = await prisma.settings.findMany();
+    const settingsObj: Record<string, string> = {};
+    settings.forEach(s => {
+      settingsObj[s.key] = s.value;
+    });
+
+    const formatDateTime = (dateTimeString: string | undefined) => {
+      if (!dateTimeString) return null;
+      try {
+        const date = new Date(dateTimeString);
+        return date.toLocaleString('de-DE', {
+          weekday: 'long',
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      } catch {
+        return null;
+      }
+    };
+
+    const deliveryStart = formatDateTime(settingsObj.delivery_start);
+    const deliveryEnd = formatDateTime(settingsObj.delivery_end);
+    const pickupStart = formatDateTime(settingsObj.pickup_start);
+    const pickupEnd = formatDateTime(settingsObj.pickup_end);
+
+    let deliveryInfo = '';
+    if (deliveryStart && deliveryEnd) {
+      deliveryInfo = `
+        <div style="margin-top: 20px; padding: 15px; background-color: #f0f9ff; border-left: 4px solid #3b82f6; border-radius: 4px;">
+          <h3 style="margin: 0 0 10px 0; color: #1e40af;">Anlieferung der Ware</h3>
+          <p style="margin: 0;"><strong>Von:</strong> ${deliveryStart}</p>
+          <p style="margin: 5px 0 0 0;"><strong>Bis:</strong> ${deliveryEnd}</p>
+        </div>
+      `;
+    }
+
+    let pickupInfo = '';
+    if (pickupStart && pickupEnd) {
+      pickupInfo = `
+        <div style="margin-top: 15px; padding: 15px; background-color: #f0fdf4; border-left: 4px solid #10b981; border-radius: 4px;">
+          <h3 style="margin: 0 0 10px 0; color: #065f46;">Abholung der Ware</h3>
+          <p style="margin: 0;"><strong>Von:</strong> ${pickupStart}</p>
+          <p style="margin: 5px 0 0 0;"><strong>Bis:</strong> ${pickupEnd}</p>
+        </div>
+      `;
+    }
+
     try {
       // Send email
       await sendMail(
@@ -101,14 +178,15 @@ export async function POST(request: Request) {
         'Ihre Registrierung beim Basar',
         `
           <h1>Willkommen beim Basar</h1>
+          <p>Vielen Dank für Ihre Registrierung!</p>
           <p>Ihre Verkäufer-ID: <strong>${sellerId}</strong></p>
           ${isEmployee && tempPassword ? 
             `<p>Ihr temporäres Passwort: <strong>${tempPassword}</strong></p>
              <p>Bitte ändern Sie Ihr Passwort bei der ersten Anmeldung.</p>` 
             : ''}
-          <p>QR-Code für Ihre Verkäufer-ID:</p>
-          <img src="${qrCode}" alt="QR Code" style="max-width: 200px;" />
-          <p>Bewahren Sie diese Informationen gut auf!</p>
+          ${deliveryInfo}
+          ${pickupInfo}
+          <p style="margin-top: 20px;">Bewahren Sie diese Informationen gut auf!</p>
         `
       );
     } catch (emailError) {

@@ -31,6 +31,9 @@ const dayOrder = ['Freitag', 'Samstag', 'Sonntag'];
 export default function EmployeePage() {
   const router = useRouter();
   const [sellerId, setSellerId] = useState('');
+  const [sellerStatusActive, setSellerStatusActive] = useState(false);
+  const [sellerName, setSellerName] = useState('');
+  const [sellerNumber, setSellerNumber] = useState(0);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [cakes, setCakes] = useState<Cake[]>([]);
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -52,7 +55,27 @@ export default function EmployeePage() {
 
   useEffect(() => {
     loadData();
+    loadSellerInfo();
   }, []);
+
+  async function loadSellerInfo() {
+    if (!sellerId) return;
+    
+    try {
+      const res = await fetch(`/api/sellers`);
+      if (res.ok) {
+        const sellers = await res.json();
+        const currentSeller = sellers.find((s: any) => s.id === sellerId);
+        if (currentSeller) {
+          setSellerStatusActive(currentSeller.sellerStatusActive || false);
+          setSellerName(`${currentSeller.firstName} ${currentSeller.lastName}`);
+          setSellerNumber(currentSeller.sellerId);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading seller info:', error);
+    }
+  }
 
   useEffect(() => {
     if (sellerId && cakes.length > 0) {
@@ -61,6 +84,11 @@ export default function EmployeePage() {
         setMyCake(myExistingCake);
         setCakeName(myExistingCake.cakeName);
       }
+    }
+    
+    // Load seller info when sellerId changes
+    if (sellerId) {
+      loadSellerInfo();
     }
   }, [sellerId, cakes]);
 
@@ -89,6 +117,35 @@ export default function EmployeePage() {
       }
     } catch (error) {
       console.error('Error loading data:', error);
+    }
+  }
+
+  async function handleToggleSellerStatus() {
+    if (!sellerId) return;
+
+    try {
+      const newStatus = !sellerStatusActive;
+      const res = await fetch('/api/sellers/seller-status', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sellerId, sellerStatusActive: newStatus }),
+      });
+
+      if (res.ok) {
+        setSellerStatusActive(newStatus);
+        setMessage(newStatus 
+          ? '✓ Verkäuferstatus wurde aktiviert! Du kannst jetzt als Verkäufer aktiv sein.' 
+          : '✓ Verkäuferstatus wurde deaktiviert.');
+        setTimeout(() => setMessage(''), 5000);
+      } else {
+        const data = await res.json();
+        setMessage(data.error || 'Fehler beim Aktualisieren des Verkäuferstatus');
+        setTimeout(() => setMessage(''), 3000);
+      }
+    } catch (error) {
+      console.error('Error toggling seller status:', error);
+      setMessage('Fehler beim Aktualisieren des Verkäuferstatus');
+      setTimeout(() => setMessage(''), 3000);
     }
   }
 
@@ -252,6 +309,7 @@ export default function EmployeePage() {
         links={[
           { href: '/', label: 'Logout' },
         ]}
+        sellerInfo={sellerName && sellerNumber ? { name: sellerName, sellerId: sellerNumber } : null}
       />
 
       <div className="max-w-6xl mx-auto p-8">
@@ -260,6 +318,33 @@ export default function EmployeePage() {
             {message}
           </div>
         )}
+
+        {/* Seller Status Toggle */}
+        <div className="mb-8 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-3">Verkäuferstatus</h2>
+          <p className="text-sm text-gray-600 mb-4">
+            {sellerStatusActive 
+              ? 'Dein Verkäuferstatus ist aktuell aktiviert. Du kannst Waren verkaufen.' 
+              : 'Dein Verkäuferstatus ist aktuell deaktiviert. Aktiviere ihn, um als Verkäufer teilnehmen zu können.'}
+          </p>
+          <button
+            onClick={handleToggleSellerStatus}
+            className={`px-6 py-3 rounded-lg font-medium shadow text-base transition-colors ${
+              sellerStatusActive
+                ? 'bg-gray-500 hover:bg-gray-600 text-white'
+                : 'bg-green-600 hover:bg-green-700 text-white'
+            }`}
+          >
+            {sellerStatusActive ? 'Verkäuferstatus deaktivieren' : 'Aktiv verkaufen'}
+          </button>
+          {sellerStatusActive && (
+            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded">
+              <p className="text-sm text-green-800 font-medium">
+                ✓ Dein Verkäuferstatus ist jetzt aktiviert!
+              </p>
+            </div>
+          )}
+        </div>
 
         <h2 className="text-2xl font-bold text-gray-800 mb-4">Helferliste</h2>
 
