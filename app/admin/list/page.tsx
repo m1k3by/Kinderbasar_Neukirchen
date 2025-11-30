@@ -5,7 +5,8 @@ import Header from '../../components/Header';
 
 interface Seller {
   id: string;
-  sellerId: string;
+  sellerId: number;
+  sellerStatusActive?: boolean;
   firstName: string;
   lastName: string;
   email: string;
@@ -152,6 +153,9 @@ export default function AdminListPage() {
                     Rolle
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Verkauf aktiv
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Aktiv
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -208,6 +212,15 @@ export default function AdminListPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm">
+                        {typeof seller.sellerStatusActive === 'boolean' ? (
+                          <span className={`px-2 py-1 rounded ${seller.sellerStatusActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                            {seller.sellerStatusActive ? 'Ja' : 'Nein'}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">–</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm">
                         <span className={`px-2 py-1 rounded ${getActiveClass(seller)}`}>
                           {getActiveStatus(seller)}
                         </span>
@@ -225,7 +238,7 @@ export default function AdminListPage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
                       Keine Einträge gefunden
                     </td>
                   </tr>

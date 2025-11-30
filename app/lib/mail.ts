@@ -11,11 +11,28 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-export const sendMail = async (to: string, subject: string, html: string) => {
-  await transporter.sendMail({
+// attachments: optional array compatible with nodemailer attachments
+export const sendMail = async (
+  to: string,
+  subject: string,
+  html: string,
+  attachments?: Array<{
+    filename?: string;
+    path?: string;
+    content?: Buffer | string;
+    cid?: string;
+  }>
+) => {
+  const mailOptions: any = {
     from: env.MAIL_FROM,
     to,
     subject,
     html,
-  });
+  };
+
+  if (attachments && attachments.length > 0) {
+    mailOptions.attachments = attachments;
+  }
+
+  await transporter.sendMail(mailOptions);
 };

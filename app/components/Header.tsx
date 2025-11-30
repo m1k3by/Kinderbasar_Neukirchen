@@ -28,7 +28,7 @@ export default function Header({
             {sellerInfo && (
               <div className="hidden md:block bg-white/90 px-3 py-1 rounded-md text-sm">
                 <span className="font-semibold">{sellerInfo.name}</span>
-                <span className="text-gray-600 ml-2">ID: {sellerInfo.sellerId}</span>
+                <span className="text-gray-600 ml-2">(Verkäufer) Nummer: {sellerInfo.sellerId}</span>
               </div>
             )}
           </div>

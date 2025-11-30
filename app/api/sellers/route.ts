@@ -7,6 +7,7 @@ export async function GET(request: Request) {
       select: {
         id: true,
         sellerId: true,
+        sellerStatusActive: true,
         firstName: true,
         lastName: true,
         email: true,

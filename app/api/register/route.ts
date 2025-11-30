@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { prisma } from '../../lib/prisma';
 import { generateQR, generateBarcode } from '../../lib/qr';
 import { sendMail } from '../../lib/mail';
+import path from 'path';
+import fs from 'fs';
 import { rateLimit } from '../../lib/rateLimit';
 import bcrypt from 'bcrypt';
 
@@ -172,23 +174,57 @@ export async function POST(request: Request) {
     }
 
     try {
-      // Send email
-      await sendMail(
-        email,
-        'Ihre Registrierung beim Basar',
-        `
-          <h1>Willkommen beim Basar</h1>
+      // Prepare unified styling for delivery and pickup
+      const deliverySection = deliveryStart && deliveryEnd
+        ? `<div style="margin-top:20px;padding:14px;border-radius:8px;background:#f3f4f6;border:1px solid #e5e7eb;">
+             <strong>Anlieferung</strong><br/><span>${deliveryStart}</span><br/><span>${deliveryEnd}</span>
+           </div>`
+        : '';
+
+      const pickupSection = pickupStart && pickupEnd
+        ? `<div style="margin-top:12px;padding:14px;border-radius:8px;background:#f3f4f6;border:1px solid #e5e7eb;">
+             <strong>Abholung</strong><br/><span>${pickupStart}</span><br/><span>${pickupEnd}</span>
+           </div>`
+        : '';
+
+      // Combine sections into a consistent info box
+      const datesBox = (deliverySection || pickupSection)
+        ? `<div style="margin-top:20px;display:flex;flex-direction:column;gap:10px;">
+             ${deliverySection}
+             ${pickupSection}
+           </div>`
+        : '';
+
+      // Attachments: add general info JPEG from project root if present
+      const attachments: any[] = [];
+      const generalInfoPath = path.join(process.cwd(), 'Generelle_Verkäuferinformationen.jpeg');
+      if (fs.existsSync(generalInfoPath)) {
+        attachments.push({ filename: 'Generelle_Verkäuferinformationen.jpeg', path: generalInfoPath });
+      }
+
+      const attachmentNotice = attachments.length > 0
+        ? `<p style="margin-top:12px;">Im Anhang finden Sie weitere Informationen: <strong>Generelle_Verkäuferinformationen.jpeg</strong></p>`
+        : '';
+
+      const passwordSection = isEmployee && tempPassword
+        ? `<p style="margin-top:10px;">Ihr temporäres Passwort: <strong>${tempPassword}</strong><br/>Bitte ändern Sie Ihr Passwort bei der ersten Anmeldung.</p>`
+        : '';
+
+      const emailHtml = `
+        <div style="font-family:system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; color:#111827;">
+          <h1 style="color:#0f172a;">Willkommen beim Basar</h1>
           <p>Vielen Dank für Ihre Registrierung!</p>
           <p>Ihre Verkäufer-ID: <strong>${sellerId}</strong></p>
-          ${isEmployee && tempPassword ? 
-            `<p>Ihr temporäres Passwort: <strong>${tempPassword}</strong></p>
-             <p>Bitte ändern Sie Ihr Passwort bei der ersten Anmeldung.</p>` 
-            : ''}
-          ${deliveryInfo}
-          ${pickupInfo}
-          <p style="margin-top: 20px;">Bewahren Sie diese Informationen gut auf!</p>
-        `
-      );
+          ${passwordSection}
+          ${datesBox}
+          ${attachmentNotice}
+          <p style="margin-top:18px;">Bewahren Sie diese Informationen gut auf!</p>
+          <p style="margin-top:18px;">Mit freundlichen Grüßen,<br/><strong>Dein Basar-Team</strong></p>
+        </div>
+      `;
+
+      // Send email with attachments if any
+      await sendMail(email, 'Ihre Registrierung beim Basar', emailHtml, attachments);
     } catch (emailError) {
       console.error('Email sending failed:', emailError);
       // Don't return error to client, registration was successful
