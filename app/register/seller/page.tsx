@@ -44,7 +44,7 @@ export default function RegisterSellerPage() {
         throw new Error(data.error || 'Ein Fehler ist aufgetreten');
       }
 
-      setSuccess(`Registrierung erfolgreich! Ihre Verkäufer-ID: ${data.sellerId}. Bitte prüfen Sie Ihre E-Mails.`);
+      setSuccess(`Registrierung erfolgreich! Ihre Verkäufer-Nummer: ${data.sellerId}. Bitte prüfen Sie Ihre E-Mails.`);
       setFormData({ email: '', firstName: '', lastName: '' });
       setAgbAccepted(false);
     } catch (err: any) {
