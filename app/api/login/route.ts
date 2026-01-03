@@ -51,13 +51,14 @@ export async function POST(request: Request) {
     }
 
     // Create token
+    const role = seller.isEmployee ? 'employee' : 'seller';
     const token = createToken({ 
       id: seller.id,
-      role: 'employee',
+      role: role,
       isEmployee: seller.isEmployee 
     });
 
-    const response = NextResponse.json({ success: true, role: 'employee', sellerId: seller.id });
+    const response = NextResponse.json({ success: true, role: role, sellerId: seller.id });
     response.cookies.set('token', token, { httpOnly: true });
     response.cookies.set('sellerId', seller.id, { httpOnly: false }); // Make sellerId available to client
     return response;

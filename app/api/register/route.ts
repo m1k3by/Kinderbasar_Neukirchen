@@ -95,13 +95,9 @@ export async function POST(request: Request) {
       );
     }
     
-    // Generate password if employee
-    let password = null;
-    let tempPassword = null;  // Declare here so it's available in the email scope
-    if (isEmployee) {
-      tempPassword = Math.random().toString(36).substring(2, 10);
-      password = await bcrypt.hash(tempPassword, 10);
-    }
+    // Generate password for everyone
+    const tempPassword = Math.random().toString(36).substring(2, 10);
+    const password = await bcrypt.hash(tempPassword, 10);
 
     // Generate QR code and Barcode with format: sellerId_lastName_firstName
     const qrData = `${sellerId}_${lastName}_${firstName}`;
@@ -206,8 +202,13 @@ export async function POST(request: Request) {
         ? `<p style="margin-top:12px;">Im Anhang finden Sie weitere Informationen: <strong>Generelle_Verkäuferinformationen.jpeg</strong></p>`
         : '';
 
-      const passwordSection = isEmployee && tempPassword
-        ? `<p style="margin-top:10px;">Ihr temporäres Passwort: <strong>${tempPassword}</strong><br/>Bitte ändern Sie Ihr Passwort bei der ersten Anmeldung.</p>`
+      const passwordSection = tempPassword
+        ? `<div style="margin-top: 20px; padding: 15px; background-color: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 4px;">
+             <h3 style="margin: 0 0 10px 0; color: #92400e;">Ihr Login</h3>
+             <p style="margin: 0;">Benutzername: <strong>${email}</strong></p>
+             <p style="margin: 5px 0 0 0;">Passwort: <strong>${tempPassword}</strong></p>
+             <p style="margin: 10px 0 0 0; font-size: 0.9em; color: #78350f;">Bitte ändern Sie Ihr Passwort nach dem ersten Login.</p>
+           </div>`
         : '';
 
       const emailHtml = `
