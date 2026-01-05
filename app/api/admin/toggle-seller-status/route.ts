@@ -36,21 +36,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Verkäufer nicht gefunden' }, { status: 404 });
     }
 
-    // Check if trying to activate and limit is reached
-    if (!seller.sellerStatusActive) {
-      const MAX_SELLERS = parseInt(process.env.MAX_SELLERS || '80', 10);
-      const activeSellerCount = await prisma.seller.count({
-        where: { sellerStatusActive: true },
-      });
-
-      if (activeSellerCount >= MAX_SELLERS) {
-        return NextResponse.json(
-          { error: 'Maximale Anzahl aktiver Verkäufer erreicht' },
-          { status: 400 }
-        );
-      }
-    }
-
+    // Admins can always toggle seller status, no limit check needed
     // Toggle the seller status
     const updatedSeller = await prisma.seller.update({
       where: { sellerId: typeof sellerId === 'string' ? parseInt(sellerId, 10) : sellerId },
