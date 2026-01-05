@@ -52,19 +52,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check total number of active sellers against configured maximum
-    const activeSellers = await prisma.seller.count({
-      where: {
-        sellerStatusActive: true
-      }
-    });
-    const maxSellers = parseInt(process.env.MAX_SELLERS || '200');
-    if (activeSellers >= maxSellers) {
-      return NextResponse.json(
-        { error: `Die maximale Anzahl von ${maxSellers} aktiven Verkäufern ist erreicht` },
-        { status: 400 }
-      );
-    }
+    // Note: We don't block registration based on active sellers anymore
+    // Users can register, but won't be able to activate their seller status if limit is reached
 
     // Generate seller ID in range 1000-9999
     // Get all existing seller IDs in this range

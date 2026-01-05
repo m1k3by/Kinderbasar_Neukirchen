@@ -35,6 +35,23 @@ export async function PUT(request: Request) {
       );
     }
 
+    // If trying to activate status, check if limit is reached
+    if (sellerStatusActive && !seller.sellerStatusActive) {
+      const activeSellers = await prisma.seller.count({
+        where: {
+          sellerStatusActive: true
+        }
+      });
+      const maxSellers = parseInt(process.env.MAX_SELLERS || '200');
+      
+      if (activeSellers >= maxSellers) {
+        return NextResponse.json(
+          { error: `Die maximale Anzahl von ${maxSellers} aktiven Verkäufern ist bereits erreicht. Sie können Ihren Status derzeit nicht aktivieren.` },
+          { status: 400 }
+        );
+      }
+    }
+
     // Update seller status
     const updatedSeller = await prisma.seller.update({
       where: { sellerId: sellerIdInt },
