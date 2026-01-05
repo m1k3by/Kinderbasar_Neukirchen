@@ -10,7 +10,7 @@ interface Task {
   day: string;
   capacity: number;
   signups?: {
-    sellerId: string;
+    sellerId: number;
     seller: {
       firstName: string;
       lastName: string;
