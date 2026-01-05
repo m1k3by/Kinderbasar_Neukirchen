@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import Header from '../components/Header';
 
 interface Seller {
-  id: string;
   sellerId: number;
   firstName: string;
   lastName: string;
@@ -29,7 +28,7 @@ interface Task {
 interface Cake {
   id: string;
   cakeName: string;
-  sellerId: string;
+  sellerId: number;
   seller?: {
     firstName: string;
     lastName: string;

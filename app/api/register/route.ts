@@ -107,10 +107,10 @@ export async function POST(request: Request) {
     // Create seller with codes stored
     const seller = await prisma.seller.create({
       data: {
+        sellerId,
         email,
         firstName,
         lastName,
-        sellerId,
         isEmployee,
         password,
         qrCode,

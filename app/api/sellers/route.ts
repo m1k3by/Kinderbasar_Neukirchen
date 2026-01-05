@@ -5,7 +5,6 @@ export async function GET(request: Request) {
   try {
     const sellers = await prisma.seller.findMany({
       select: {
-        id: true,
         sellerId: true,
         sellerStatusActive: true,
         firstName: true,

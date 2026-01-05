@@ -33,7 +33,7 @@ export async function POST(req: Request) {
 
     // Speichere Token in Datenbank
     await prisma.seller.update({
-      where: { id: seller.id },
+      where: { sellerId: seller.sellerId },
       data: {
         resetToken,
         resetTokenExpiry,

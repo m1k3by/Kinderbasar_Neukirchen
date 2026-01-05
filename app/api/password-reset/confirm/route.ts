@@ -46,7 +46,7 @@ export async function POST(req: Request) {
 
     // Update Passwort und lösche Token
     await prisma.seller.update({
-      where: { id: seller.id },
+      where: { sellerId: seller.sellerId },
       data: {
         password: hashedPassword,
         resetToken: null,

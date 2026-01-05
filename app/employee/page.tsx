@@ -65,7 +65,7 @@ export default function EmployeePage() {
       const res = await fetch(`/api/sellers`);
       if (res.ok) {
         const sellers = await res.json();
-        const currentSeller = sellers.find((s: any) => s.id === sellerId);
+        const currentSeller = sellers.find((s: any) => s.sellerId === parseInt(sellerId, 10));
         if (currentSeller) {
           setSellerStatusActive(currentSeller.sellerStatusActive || false);
           setSellerName(`${currentSeller.firstName} ${currentSeller.lastName}`);
@@ -79,7 +79,7 @@ export default function EmployeePage() {
 
   useEffect(() => {
     if (sellerId && cakes.length > 0) {
-      const myExistingCake = cakes.find((c: any) => c.sellerId === sellerId);
+      const myExistingCake = cakes.find((c: any) => c.sellerId === parseInt(sellerId, 10));
       if (myExistingCake) {
         setMyCake(myExistingCake);
         setCakeName(myExistingCake.cakeName);
@@ -154,14 +154,15 @@ export default function EmployeePage() {
 
     try {
       const task = tasks.find(t => t.id === taskId);
-      const isSignedUp = task?.signups?.some(s => s.sellerId === sellerId);
+      const sellerIdInt = parseInt(sellerId, 10);
+      const isSignedUp = task?.signups?.some(s => s.sellerId === sellerIdInt);
 
       // Optimistic UI update - sofort aktualisieren
       if (isSignedUp) {
         // Sofort aus Liste entfernen (optimistisch)
         setTasks(prevTasks => prevTasks.map(t => 
           t.id === taskId 
-            ? { ...t, signups: t.signups?.filter(s => s.sellerId !== sellerId) }
+            ? { ...t, signups: t.signups?.filter(s => s.sellerId !== sellerIdInt) }
             : t
         ));
       } else {
@@ -171,7 +172,7 @@ export default function EmployeePage() {
             ? { 
                 ...t, 
                 signups: [...(t.signups || []), { 
-                  sellerId, 
+                  sellerId: sellerIdInt, 
                   seller: { firstName: '', lastName: '' } 
                 }] 
               }
@@ -371,7 +372,8 @@ export default function EmployeePage() {
                   {dayTasks.length > 0 ? (
                     dayTasks.map((task) => {
                       const signupCount = task.signups?.length || 0;
-                      const isSignedUp = task.signups?.some(s => s.sellerId === sellerId) || false;
+                      const sellerIdInt = parseInt(sellerId, 10);
+                      const isSignedUp = task.signups?.some(s => s.sellerId === sellerIdInt) || false;
                       const isFull = signupCount >= task.capacity;
 
                       return (

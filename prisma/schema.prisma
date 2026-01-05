@@ -9,11 +9,10 @@ datasource db {
 }
 
 model Seller {
-  id                String   @id @default(cuid())
+  sellerId          Int      @id
   email             String   @unique
   firstName         String
   lastName          String
-  sellerId          Int      @unique
   isEmployee        Boolean  @default(false)
   sellerStatusActive Boolean @default(false)
   createdAt         DateTime @default(now())
@@ -38,9 +37,9 @@ model Task {
 model TaskSignup {
   id        String   @id @default(cuid())
   taskId    String
-  sellerId  String
+  sellerId  Int
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  seller    Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  seller    Seller   @relation(fields: [sellerId], references: [sellerId], onDelete: Cascade)
   createdAt DateTime @default(now())
   
   @@unique([taskId, sellerId])
@@ -49,8 +48,8 @@ model TaskSignup {
 model Cake {
   id        String   @id @default(cuid())
   cakeName  String
-  sellerId  String
-  seller    Seller   @relation(fields: [sellerId], references: [id])
+  sellerId  Int
+  seller    Seller   @relation(fields: [sellerId], references: [sellerId])
   createdAt DateTime @default(now())
 }
 

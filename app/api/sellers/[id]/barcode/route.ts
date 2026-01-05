@@ -8,8 +8,14 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    const sellerId = parseInt(id, 10);
+    
+    if (isNaN(sellerId)) {
+      return NextResponse.json({ error: 'Invalid seller ID' }, { status: 400 });
+    }
+    
     const seller = await prisma.seller.findUnique({
-      where: { id }
+      where: { sellerId }
     });
 
     if (!seller) {

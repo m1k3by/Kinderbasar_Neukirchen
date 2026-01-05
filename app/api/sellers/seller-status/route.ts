@@ -13,9 +13,9 @@ export async function PUT(request: Request) {
       );
     }
 
-    // Find seller by their sellerId string
+    // Find seller by their sellerId
     const seller = await prisma.seller.findFirst({
-      where: { id: sellerId }
+      where: { sellerId: sellerId }
     });
 
     if (!seller) {
@@ -27,7 +27,7 @@ export async function PUT(request: Request) {
 
     // Update seller status
     const updatedSeller = await prisma.seller.update({
-      where: { id: sellerId },
+      where: { sellerId: sellerId },
       data: { sellerStatusActive },
     });
 

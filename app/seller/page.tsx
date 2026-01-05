@@ -36,7 +36,7 @@ export default function SellerPage() {
       const res = await fetch(`/api/sellers`);
       if (res.ok) {
         const sellers = await res.json();
-        const currentSeller = sellers.find((s: any) => s.id === sellerId);
+        const currentSeller = sellers.find((s: any) => s.sellerId === parseInt(sellerId, 10));
         if (currentSeller) {
           setSellerStatusActive(currentSeller.sellerStatusActive || false);
           setSellerName(`${currentSeller.firstName} ${currentSeller.lastName}`);
