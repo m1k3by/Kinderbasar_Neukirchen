@@ -316,37 +316,34 @@ export default function EmployeePage() {
       />
 
       <div className="max-w-6xl mx-auto p-8">
-        {message && (
-          <div className="mb-4 p-4 bg-blue-100 border border-blue-400 text-blue-700 rounded">
-            {message}
-          </div>
-        )}
-
         {/* Seller Status Toggle */}
-        <div className="mb-8 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6">
-          <h2 className="text-xl font-bold text-gray-800 mb-3">Verkäuferstatus</h2>
-          <p className="text-sm text-gray-600 mb-4">
-            {sellerStatusActive 
-              ? 'Dein Verkäuferstatus ist aktuell aktiviert. Du kannst Waren verkaufen.' 
-              : 'Dein Verkäuferstatus ist aktuell deaktiviert. Aktiviere ihn, um als Verkäufer teilnehmen zu können.'}
-          </p>
-          <button
-            onClick={handleToggleSellerStatus}
-            className={`px-6 py-3 rounded-lg font-medium shadow text-base transition-colors ${
-              sellerStatusActive
-                ? 'bg-gray-500 hover:bg-gray-600 text-white'
-                : 'bg-green-600 hover:bg-green-700 text-white'
-            }`}
-          >
-            {sellerStatusActive ? 'Verkäuferstatus deaktivieren' : 'Aktiv verkaufen'}
-          </button>
-          {sellerStatusActive && (
-            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded">
-              <p className="text-sm text-green-800 font-medium">
-                ✓ Dein Verkäuferstatus ist jetzt aktiviert!
-              </p>
-            </div>
-          )}
+        <div className="mb-8 bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-2xl font-bold mb-6 text-center">Verkäuferstatus</h2>
+          
+          <div className="flex flex-col items-center justify-center space-y-6">
+            <p className="text-lg text-center text-gray-700">
+              Hier können Sie Ihren Verkäuferstatus aktivieren oder deaktivieren.
+            </p>
+            
+            <button
+              onClick={handleToggleSellerStatus}
+              className={`w-full md:w-auto px-12 py-6 rounded-xl text-2xl font-bold transition-all transform hover:scale-105 shadow-lg ${
+                sellerStatusActive
+                  ? 'bg-green-500 hover:bg-green-600 text-white ring-4 ring-green-200'
+                  : 'bg-red-500 hover:bg-red-600 text-white ring-4 ring-red-200'
+              }`}
+            >
+              {sellerStatusActive ? 'Status: AKTIV' : 'Status: INAKTIV'}
+            </button>
+
+            {message && (
+              <div className={`mt-4 px-6 py-3 rounded-lg font-medium animate-fade-in ${
+                message.includes('aktiviert') ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-red-100 text-red-800 border border-red-200'
+              }`}>
+                {message}
+              </div>
+            )}
+          </div>
         </div>
 
         <h2 className="text-2xl font-bold text-gray-800 mb-4">Helferliste</h2>
