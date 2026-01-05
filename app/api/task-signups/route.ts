@@ -12,12 +12,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Parse sellerId to integer
+    const sellerIdInt = typeof sellerId === 'string' ? parseInt(sellerId, 10) : sellerId;
+
     // Prüfen ob bereits angemeldet
     const existing = await prisma.taskSignup.findUnique({
       where: {
         taskId_sellerId: {
           taskId,
-          sellerId,
+          sellerId: sellerIdInt,
         },
       },
     });
@@ -49,7 +52,7 @@ export async function POST(req: NextRequest) {
     const signup = await prisma.taskSignup.create({
       data: {
         taskId,
-        sellerId,
+        sellerId: sellerIdInt,
       },
     });
 
@@ -76,11 +79,14 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
+    // Parse sellerId to integer
+    const sellerIdInt = parseInt(sellerId, 10);
+
     await prisma.taskSignup.delete({
       where: {
         taskId_sellerId: {
           taskId,
-          sellerId,
+          sellerId: sellerIdInt,
         },
       },
     });
