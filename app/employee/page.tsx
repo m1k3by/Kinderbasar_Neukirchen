@@ -24,6 +24,7 @@ interface Task {
 interface Cake {
   id: string;
   cakeName: string;
+  sellerId?: number;
 }
 
 const dayOrder = ['Freitag', 'Samstag', 'Sonntag'];
@@ -108,7 +109,8 @@ export default function EmployeePage() {
         
         // Find my cake
         if (sellerId) {
-          const myExistingCake = allCakes.find((c: Cake & { sellerId: string }) => c.sellerId === sellerId);
+          const sellerIdInt = parseInt(sellerId, 10);
+          const myExistingCake = allCakes.find((c: Cake & { sellerId: number }) => c.sellerId === sellerIdInt);
           if (myExistingCake) {
             setMyCake(myExistingCake);
             setCakeName(myExistingCake.cakeName);
@@ -245,7 +247,7 @@ export default function EmployeePage() {
         const res = await fetch('/api/cakes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cakeName: cakeName.trim(), sellerId }),
+          body: JSON.stringify({ cakeName: cakeName.trim(), sellerId: parseInt(sellerId, 10) }),
         });
 
         if (res.ok) {

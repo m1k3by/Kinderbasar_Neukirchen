@@ -36,10 +36,20 @@ export async function POST(request: Request) {
       );
     }
     
+    // Parse sellerId to integer
+    const sellerIdInt = typeof body.sellerId === 'string' ? parseInt(body.sellerId, 10) : body.sellerId;
+    
+    if (isNaN(sellerIdInt)) {
+      return NextResponse.json(
+        { error: 'Ungültige Verkäufer-ID' },
+        { status: 400 }
+      );
+    }
+    
     const cake = await prisma.cake.create({
       data: {
         cakeName: body.cakeName,
-        sellerId: body.sellerId,
+        sellerId: sellerIdInt,
       },
       include: {
         seller: {
