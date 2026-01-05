@@ -93,35 +93,29 @@ export default async function Home() {
             <p className="text-sm text-gray-600 mb-4">
               Aktuell aktive Verkäufer: <strong>{activeSellerCount}</strong> von <strong>{max}</strong>
             </p>
-            {!isCapacityFull ? (
-              <div className="mt-auto flex flex-col gap-3">
-                {isSellerRegistrationOpen && (
-                  <Link
-                    href="/register/seller"
-                    className="inline-flex items-center justify-center rounded-md bg-yellow-500 hover:bg-yellow-600 text-gray-800 px-4 py-3 text-sm font-medium transition-colors shadow"
-                  >
-                    Verkäufer Registrierung (A)
-                  </Link>
-                )}
-                {isEmployeeRegistrationOpen && (
-                  <Link
-                    href="/register/employee"
-                    className="inline-flex items-center justify-center rounded-md bg-teal-700 hover:bg-teal-800 text-white px-4 py-3 text-sm font-medium transition-colors shadow"
-                  >
-                    Mitarbeiter registrieren (B)
-                  </Link>
-                )}
-                {!isSellerRegistrationOpen && !isEmployeeRegistrationOpen && (
-                  <div className="bg-gray-100 border border-gray-300 text-gray-600 px-4 py-3 rounded-md text-sm text-center">
-                    Registrierungen sind aktuell geschlossen
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="mt-auto bg-red-50 border border-red-300 text-red-700 px-4 py-3 rounded-md text-sm text-center">
-                Maximale Kapazität erreicht - keine Registrierungen möglich
-              </div>
-            )}
+            <div className="mt-auto flex flex-col gap-3">
+              {isSellerRegistrationOpen && (
+                <Link
+                  href="/register/seller"
+                  className="inline-flex items-center justify-center rounded-md bg-yellow-500 hover:bg-yellow-600 text-gray-800 px-4 py-3 text-sm font-medium transition-colors shadow"
+                >
+                  Verkäufer Registrierung (A)
+                </Link>
+              )}
+              {isEmployeeRegistrationOpen && (
+                <Link
+                  href="/register/employee"
+                  className="inline-flex items-center justify-center rounded-md bg-teal-700 hover:bg-teal-800 text-white px-4 py-3 text-sm font-medium transition-colors shadow"
+                >
+                  Mitarbeiter registrieren (B)
+                </Link>
+              )}
+              {!isSellerRegistrationOpen && !isEmployeeRegistrationOpen && (
+                <div className="bg-gray-100 border border-gray-300 text-gray-600 px-4 py-3 rounded-md text-sm text-center">
+                  Registrierungen sind aktuell geschlossen
+                </div>
+              )}
+            </div>
           </div>
           
           {/* Information */}
