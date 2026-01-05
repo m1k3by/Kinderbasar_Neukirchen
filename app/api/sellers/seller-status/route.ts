@@ -13,9 +13,19 @@ export async function PUT(request: Request) {
       );
     }
 
+    // Parse sellerId to integer
+    const sellerIdInt = typeof sellerId === 'string' ? parseInt(sellerId, 10) : sellerId;
+
+    if (isNaN(sellerIdInt)) {
+      return NextResponse.json(
+        { error: 'Ungültige Verkäufer-ID' },
+        { status: 400 }
+      );
+    }
+
     // Find seller by their sellerId
     const seller = await prisma.seller.findFirst({
-      where: { sellerId: sellerId }
+      where: { sellerId: sellerIdInt }
     });
 
     if (!seller) {
@@ -27,7 +37,7 @@ export async function PUT(request: Request) {
 
     // Update seller status
     const updatedSeller = await prisma.seller.update({
-      where: { sellerId: sellerId },
+      where: { sellerId: sellerIdInt },
       data: { sellerStatusActive },
     });
 
