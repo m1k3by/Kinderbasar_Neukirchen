@@ -66,9 +66,15 @@ export default function SellerPage() {
         setSellerStatusActive(data.sellerStatusActive);
         setMessage(data.sellerStatusActive ? 'Status aktiviert!' : 'Status deaktiviert!');
         setTimeout(() => setMessage(''), 3000);
+      } else {
+        const data = await res.json();
+        setMessage('Fehler: ' + (data.error || 'Unbekannter Fehler'));
+        setTimeout(() => setMessage(''), 5000);
       }
     } catch (error) {
       console.error('Error updating status:', error);
+      setMessage('Fehler beim Aktualisieren des Verkäuferstatus');
+      setTimeout(() => setMessage(''), 5000);
     }
   }
 
