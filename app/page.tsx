@@ -5,9 +5,13 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export default async function Home() {
-  const count = await prisma.seller.count();
+  const activeSellerCount = await prisma.seller.count({
+    where: {
+      sellerStatusActive: true
+    }
+  });
   const max = parseInt(process.env.MAX_SELLERS || '200');
-  const isCapacityFull = count >= max;
+  const isCapacityFull = activeSellerCount >= max;
 
   // Fetch basar dates from settings
   const settings = await prisma.settings.findMany();
@@ -77,7 +81,7 @@ export default async function Home() {
         {/* Full Capacity Warning */}
         {isCapacityFull && (
           <div className="mb-6 bg-red-100 border-2 border-red-600 text-red-900 px-6 py-4 rounded-lg text-center">
-            <p className="text-xl font-bold">⚠️ Die maximale Anzahl von Verkäufern ist erreicht</p>
+            <p className="text-xl font-bold">⚠️ Die maximale Anzahl von aktiven Verkäufern ist erreicht</p>
             <p className="mt-2">Keine weiteren Anmeldungen mehr möglich.</p>
           </div>
         )}
@@ -87,7 +91,7 @@ export default async function Home() {
           <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6 flex flex-col">
             <h2 className="text-xl font-semibold text-gray-800 mb-4">Registrierungen</h2>
             <p className="text-sm text-gray-600 mb-4">
-              Aktuell belegte Plätze: <strong>{count}</strong> von <strong>{max}</strong>
+              Aktuell aktive Verkäufer: <strong>{activeSellerCount}</strong> von <strong>{max}</strong>
             </p>
             {!isCapacityFull ? (
               <div className="mt-auto flex flex-col gap-3">

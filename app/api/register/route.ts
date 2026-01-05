@@ -52,12 +52,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check total number of sellers against configured maximum
-    const totalSellers = await prisma.seller.count();
+    // Check total number of active sellers against configured maximum
+    const activeSellers = await prisma.seller.count({
+      where: {
+        sellerStatusActive: true
+      }
+    });
     const maxSellers = parseInt(process.env.MAX_SELLERS || '200');
-    if (totalSellers >= maxSellers) {
+    if (activeSellers >= maxSellers) {
       return NextResponse.json(
-        { error: `Die maximale Anzahl von ${maxSellers} Verkäufern ist erreicht` },
+        { error: `Die maximale Anzahl von ${maxSellers} aktiven Verkäufern ist erreicht` },
         { status: 400 }
       );
     }
