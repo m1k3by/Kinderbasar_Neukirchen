@@ -109,6 +109,31 @@ export default function AdminListPage() {
     }
   }
 
+  async function toggleSellerStatus(sellerId: number) {
+    try {
+      const res = await fetch('/api/admin/toggle-seller-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sellerId }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setMessage(data.message);
+        setTimeout(() => setMessage(''), 3000);
+        loadSellers(); // Reload list
+      } else {
+        const data = await res.json();
+        setMessage('Fehler: ' + (data.error || 'Unbekannter Fehler'));
+        setTimeout(() => setMessage(''), 5000);
+      }
+    } catch (error) {
+      console.error('Error toggling seller status:', error);
+      setMessage('Fehler beim Ändern des Verkäufer Status');
+      setTimeout(() => setMessage(''), 5000);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-100">
       <Header 
@@ -169,37 +194,31 @@ export default function AdminListPage() {
           <div className="text-center py-8">Lädt...</div>
         ) : (
           <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg overflow-x-auto">
-            <table className="min-w-full">
+            <table className="min-w-full table-fixed">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Nummer
+                  <th className="w-16 px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Nr
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    QR Code
+                  <th className="w-12 px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    QR
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Barcode
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="w-16 px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Rolle
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Verkäufer Status aktiv?
+                  <th className="w-20 px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    V-Status
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Aktiv (in eine Liste eingetragen?)
+                  <th className="w-20 px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Aktiv
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Name
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     E-Mail
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Registriert
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="w-32 px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Aktionen
                   </th>
                 </tr>
@@ -208,36 +227,24 @@ export default function AdminListPage() {
                 {filteredSellers.length > 0 ? (
                   filteredSellers.map((seller, idx) => (
                     <tr key={seller.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-mono text-gray-900">
+                      <td className="px-2 py-2 whitespace-nowrap text-sm font-mono text-gray-900">
                         {seller.sellerId}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                      <td className="px-2 py-2 whitespace-nowrap text-sm">
                         {seller.qrCode ? (
                           <img 
                             src={seller.qrCode} 
-                            alt="QR Code" 
-                            className="w-16 h-16 cursor-pointer hover:scale-150 transition-transform"
+                            alt="QR" 
+                            className="w-10 h-10 cursor-pointer hover:scale-150 transition-transform"
                             onClick={() => window.open(seller.qrCode, '_blank')}
                           />
                         ) : (
                           <span className="text-gray-400">–</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
-                        {seller.barcode ? (
-                          <img 
-                            src={seller.barcode} 
-                            alt="Barcode" 
-                            className="h-10 cursor-pointer hover:scale-150 transition-transform"
-                            onClick={() => window.open(seller.barcode, '_blank')}
-                          />
-                        ) : (
-                          <span className="text-gray-400">–</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                      <td className="px-2 py-2 whitespace-nowrap text-sm">
                         <span
-                          className={`px-2 py-1 rounded ${
+                          className={`px-2 py-1 text-xs rounded font-medium ${
                             seller.isEmployee
                               ? 'bg-green-100 text-green-800'
                               : 'bg-blue-100 text-blue-800'
@@ -246,43 +253,55 @@ export default function AdminListPage() {
                           {seller.isEmployee ? 'M' : 'V'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                      <td className="px-2 py-2 whitespace-nowrap text-sm">
                         {typeof seller.sellerStatusActive === 'boolean' ? (
-                          <span className={`px-2 py-1 rounded ${seller.sellerStatusActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-                            {seller.sellerStatusActive ? 'Ja' : 'Nein'}
+                          <span className={`px-2 py-1 text-xs rounded font-medium ${seller.sellerStatusActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                            {seller.sellerStatusActive ? '✓' : '✗'}
                           </span>
                         ) : (
                           <span className="text-gray-400">–</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
-                        <span className={`px-2 py-1 rounded ${getActiveClass(seller)}`}>
+                      <td className="px-2 py-2 whitespace-nowrap text-sm">
+                        <span className={`px-2 py-1 text-xs rounded font-medium ${getActiveClass(seller)}`}>
                           {getActiveStatus(seller)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                      <td className="px-3 py-2 text-sm text-gray-900 truncate">
                         {seller.firstName} {seller.lastName}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                      <td className="px-3 py-2 text-sm text-gray-600 truncate">
                         {seller.email}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(seller.createdAt).toLocaleDateString('de-DE')}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
-                        <button
-                          onClick={() => toggleEmployeeStatus(seller.sellerId)}
-                          className="px-3 py-1 bg-yellow-500 hover:bg-yellow-600 text-gray-800 rounded font-medium transition-colors"
-                          title={seller.isEmployee ? 'Zu Verkäufer machen' : 'Zu Mitarbeiter machen'}
-                        >
-                          {seller.isEmployee ? '→ V' : '→ M'}
-                        </button>
+                      <td className="px-2 py-2 whitespace-nowrap text-sm">
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => toggleEmployeeStatus(seller.sellerId)}
+                            className="px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-gray-800 rounded text-xs font-medium transition-colors"
+                            title={seller.isEmployee ? 'Zu Verkäufer machen' : 'Zu Mitarbeiter machen'}
+                          >
+                            {seller.isEmployee ? '→V' : '→M'}
+                          </button>
+                          {!seller.isEmployee && (
+                            <button
+                              onClick={() => toggleSellerStatus(seller.sellerId)}
+                              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                                seller.sellerStatusActive
+                                  ? 'bg-red-500 hover:bg-red-600 text-white'
+                                  : 'bg-green-500 hover:bg-green-600 text-white'
+                              }`}
+                              title={seller.sellerStatusActive ? 'Status deaktivieren' : 'Status aktivieren'}
+                            >
+                              {seller.sellerStatusActive ? 'Deakt' : 'Akt'}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={10} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
                       Keine Einträge gefunden
                     </td>
                   </tr>
