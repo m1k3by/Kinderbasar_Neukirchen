@@ -23,6 +23,7 @@ export default function AdminListPage() {
   const [filter, setFilter] = useState<'all' | 'seller' | 'employee'>('all');
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
     loadSellers();
@@ -83,6 +84,31 @@ export default function AdminListPage() {
     return 'bg-gray-100 text-gray-500';
   }
 
+  async function toggleEmployeeStatus(sellerId: number) {
+    try {
+      const res = await fetch('/api/admin/toggle-employee-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sellerId }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setMessage(data.message);
+        setTimeout(() => setMessage(''), 3000);
+        loadSellers(); // Reload list
+      } else {
+        const data = await res.json();
+        setMessage('Fehler: ' + (data.error || 'Unbekannter Fehler'));
+        setTimeout(() => setMessage(''), 5000);
+      }
+    } catch (error) {
+      console.error('Error toggling employee status:', error);
+      setMessage('Fehler beim Ändern der Rolle');
+      setTimeout(() => setMessage(''), 5000);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-100">
       <Header 
@@ -96,6 +122,12 @@ export default function AdminListPage() {
       />
 
       <div className="max-w-7xl mx-auto p-8">
+        {message && (
+          <div className="mb-4 p-4 bg-blue-100 text-blue-800 rounded-lg font-medium">
+            {message}
+          </div>
+        )}
+        
         <div className="mb-6 flex items-center gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Rolle</label>
@@ -153,10 +185,10 @@ export default function AdminListPage() {
                     Rolle
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Verkauf aktiv
+                    Verkäufer Status aktiv?
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Aktiv
+                    Aktiv (in eine Liste eingetragen?)
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Name
@@ -166,6 +198,9 @@ export default function AdminListPage() {
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Registriert
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Aktionen
                   </th>
                 </tr>
               </thead>
@@ -234,11 +269,20 @@ export default function AdminListPage() {
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                         {new Date(seller.createdAt).toLocaleDateString('de-DE')}
                       </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                        <button
+                          onClick={() => toggleEmployeeStatus(seller.sellerId)}
+                          className="px-3 py-1 bg-yellow-500 hover:bg-yellow-600 text-gray-800 rounded font-medium transition-colors"
+                          title={seller.isEmployee ? 'Zu Verkäufer machen' : 'Zu Mitarbeiter machen'}
+                        >
+                          {seller.isEmployee ? '→ V' : '→ M'}
+                        </button>
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={10} className="px-4 py-8 text-center text-gray-500">
                       Keine Einträge gefunden
                     </td>
                   </tr>
