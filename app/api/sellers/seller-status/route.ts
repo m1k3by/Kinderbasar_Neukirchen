@@ -35,14 +35,6 @@ export async function PUT(request: Request) {
       );
     }
 
-    // Check if user is an employee - employees cannot change their seller status
-    if (seller.isEmployee) {
-      return NextResponse.json(
-        { error: 'Mitarbeiter können ihren Verkäuferstatus nicht ändern' },
-        { status: 403 }
-      );
-    }
-
     // If trying to activate status, check if limit is reached
     if (sellerStatusActive && !seller.sellerStatusActive) {
       const activeSellers = await prisma.seller.count({
