@@ -56,7 +56,7 @@ export default function SellerPage() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sellerId,
+          sellerId: parseInt(sellerId, 10),
           sellerStatusActive: !sellerStatusActive,
         }),
       });
@@ -82,6 +82,7 @@ export default function SellerPage() {
         title="Verkäufer Dashboard"
         links={[{ href: '/', label: 'Logout' }]} 
         sellerInfo={{ name: sellerName, sellerId: sellerNumber }}
+        noTitleLink={true}
       />
 
       <main className="max-w-4xl mx-auto p-4 md:p-8">

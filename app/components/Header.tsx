@@ -7,12 +7,14 @@ interface HeaderProps {
   title?: string;
   links?: { href: string; label: string; active?: boolean }[];
   sellerInfo?: { name: string; sellerId: number } | null;
+  noTitleLink?: boolean;
 }
 
 export default function Header({ 
   title = 'Kinderbasar Neukirchen', 
   links = [{ href: '/', label: 'Zurück' }],
-  sellerInfo = null
+  sellerInfo = null,
+  noTitleLink = false
 }: HeaderProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -22,9 +24,13 @@ export default function Header({
         <div className="flex justify-between items-center">
           {/* Logo/Title */}
           <div className="flex items-center gap-4">
-            <Link href="/" className="text-xl md:text-2xl font-bold hover:underline">
-              {title}
-            </Link>
+            {noTitleLink ? (
+              <h1 className="text-xl md:text-2xl font-bold">{title}</h1>
+            ) : (
+              <Link href="/" className="text-xl md:text-2xl font-bold hover:underline">
+                {title}
+              </Link>
+            )}
             {sellerInfo && (
               <div className="hidden md:block bg-white/90 px-3 py-1 rounded-md text-sm">
                 <span className="font-semibold">{sellerInfo.name}</span>

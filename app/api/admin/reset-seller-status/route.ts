@@ -25,11 +25,11 @@ export async function POST(request: NextRequest) {
       data: { sellerStatusActive: false },
     });
 
-    return NextResponse.json({ success: true, message: 'Alle Verkäuferstati wurden zurückgesetzt.' });
+    return NextResponse.json({ success: true, message: 'Alle Verkäufer Status wurden zurückgesetzt.' });
   } catch (error: any) {
     console.error('Error resetting seller status:', error);
     return NextResponse.json(
-      { error: 'Fehler beim Zurücksetzen der Verkäuferstati' },
+      { error: 'Fehler beim Zurücksetzen der Verkäufer Status' },
       { status: 500 }
     );
   }

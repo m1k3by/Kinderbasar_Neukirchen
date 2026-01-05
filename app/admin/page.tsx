@@ -174,7 +174,7 @@ export default function AdminPage() {
               onClick={() => setShowResetConfirm1(true)}
               className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
             >
-              Alle Verkäuferstati zurücksetzen
+              Alle Verkäufer Status zurücksetzen
             </button>
 
             {resetMessage && (
@@ -190,7 +190,7 @@ export default function AdminPage() {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full">
               <h3 className="text-xl font-bold mb-4">Wirklich?</h3>
-              <p className="mb-6">Möchten Sie wirklich alle Verkäuferstati auf inaktiv setzen?</p>
+              <p className="mb-6">Möchten Sie wirklich alle Verkäufer Status auf inaktiv setzen?</p>
               <div className="flex justify-end gap-4">
                 <button
                   onClick={() => setShowResetConfirm1(false)}
