@@ -39,10 +39,11 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline'", // unsafe-inline needed for Tailwind
               "img-src 'self' data: https:",
               "font-src 'self' data:",
-              "connect-src 'self' https://*.supabase.co https://in-v3.mailjet.com",
+              "connect-src 'self' https:",
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",
+              "upgrade-insecure-requests",
             ].join('; '),
           },
         ],
