@@ -466,19 +466,17 @@ export default function AdminListPage() {
                           >
                             {seller.isEmployee ? '→V' : '→M'}
                           </button>
-                          {!seller.isEmployee && (
-                            <button
-                              onClick={() => toggleSellerStatus(seller.sellerId)}
-                              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                                seller.sellerStatusActive
-                                  ? 'bg-red-500 hover:bg-red-600 text-white'
-                                  : 'bg-green-500 hover:bg-green-600 text-white'
-                              }`}
-                              title={seller.sellerStatusActive ? 'Status deaktivieren' : 'Status aktivieren'}
-                            >
-                              {seller.sellerStatusActive ? 'Deakt' : 'Akt'}
-                            </button>
-                          )}
+                          <button
+                            onClick={() => toggleSellerStatus(seller.sellerId)}
+                            className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                              seller.sellerStatusActive
+                                ? 'bg-red-500 hover:bg-red-600 text-white'
+                                : 'bg-green-500 hover:bg-green-600 text-white'
+                            }`}
+                            title={seller.sellerStatusActive ? 'Status deaktivieren' : 'Status aktivieren'}
+                          >
+                            {seller.sellerStatusActive ? 'Deakt' : 'Akt'}
+                          </button>
                         </div>
                       </td>
                     </tr>
