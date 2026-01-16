@@ -439,8 +439,8 @@ export default function AdminListPage() {
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap text-sm">
                         {typeof seller.sellerStatusActive === 'boolean' ? (
-                          <span className={`px-2 py-1 text-xs rounded font-medium ${seller.sellerStatusActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-                            {seller.sellerStatusActive ? '✓' : '✗'}
+                          <span className={`px-2 py-1 text-xs rounded font-medium ${seller.sellerStatusActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                            {seller.sellerStatusActive ? 'Aktiv' : 'Inaktiv'}
                           </span>
                         ) : (
                           <span className="text-gray-400">–</span>
