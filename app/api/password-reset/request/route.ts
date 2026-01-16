@@ -41,7 +41,7 @@ export async function POST(req: Request) {
     });
 
     // Sende E-Mail mit Reset-Link
-    const resetUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/password-reset/${resetToken}`;
+    const resetUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://localhost:3000'}/password-reset/${resetToken}`;
     
     await sendMail(
       seller.email,
