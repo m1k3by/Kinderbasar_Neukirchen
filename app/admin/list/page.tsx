@@ -22,6 +22,9 @@ export default function AdminListPage() {
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [filter, setFilter] = useState<'all' | 'seller' | 'employee'>('all');
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [sellerStatusFilter, setSellerStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [sortField, setSortField] = useState<keyof Seller | 'active' | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [showResetConfirm1, setShowResetConfirm1] = useState(false);
@@ -46,7 +49,7 @@ export default function AdminListPage() {
   }
 
   function copyEmails() {
-    const emails = filteredSellers.map(s => s.email).join(', ');
+    const emails = sortedSellers.map(s => s.email).join(', ');
     navigator.clipboard.writeText(emails);
     alert('E-Mails kopiert!');
   }
@@ -63,8 +66,65 @@ export default function AdminListPage() {
       if (activeFilter === 'inactive' && hasActivity) return false;
     }
     
+    // Filter by seller status
+    if (sellerStatusFilter !== 'all') {
+      if (sellerStatusFilter === 'active' && !s.sellerStatusActive) return false;
+      if (sellerStatusFilter === 'inactive' && s.sellerStatusActive) return false;
+    }
+    
     return true;
   });
+
+  // Sort filtered sellers
+  const sortedSellers = [...filteredSellers].sort((a, b) => {
+    if (!sortField) return 0;
+
+    let aValue: any;
+    let bValue: any;
+
+    if (sortField === 'active') {
+      // Sort by activity status
+      const aHasActivity = (a.taskSignups?.length || 0) > 0 || (a.cakes?.length || 0) > 0;
+      const bHasActivity = (b.taskSignups?.length || 0) > 0 || (b.cakes?.length || 0) > 0;
+      aValue = aHasActivity ? 1 : 0;
+      bValue = bHasActivity ? 1 : 0;
+    } else if (sortField === 'sellerId') {
+      aValue = a.sellerId;
+      bValue = b.sellerId;
+    } else if (sortField === 'isEmployee') {
+      aValue = a.isEmployee ? 1 : 0;
+      bValue = b.isEmployee ? 1 : 0;
+    } else if (sortField === 'sellerStatusActive') {
+      aValue = a.sellerStatusActive ? 1 : 0;
+      bValue = b.sellerStatusActive ? 1 : 0;
+    } else if (sortField === 'firstName' || sortField === 'lastName' || sortField === 'email') {
+      aValue = a[sortField]?.toLowerCase() || '';
+      bValue = b[sortField]?.toLowerCase() || '';
+    } else {
+      aValue = a[sortField];
+      bValue = b[sortField];
+    }
+
+    if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+    if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  function handleSort(field: keyof Seller | 'active') {
+    if (sortField === field) {
+      // Toggle direction if clicking the same field
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New field, default to ascending
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  }
+
+  function getSortIcon(field: keyof Seller | 'active') {
+    if (sortField !== field) return ' ↕';
+    return sortDirection === 'asc' ? ' ↑' : ' ↓';
+  }
 
   function getActiveStatus(seller: Seller) {
     // Mitarbeiter sind nur aktiv wenn sie Tasks oder Kuchen haben
@@ -261,7 +321,20 @@ export default function AdminListPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Aktiv</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Verkäufer Status</label>
+            <select
+              value={sellerStatusFilter}
+              onChange={(e) => setSellerStatusFilter(e.target.value as any)}
+              className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">Alle</option>
+              <option value="active">Aktiv</option>
+              <option value="inactive">Inaktiv</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Aktiv (MA in eine Liste eingetragen?)</label>
             <select
               value={activeFilter}
               onChange={(e) => setActiveFilter(e.target.value as any)}
@@ -290,26 +363,44 @@ export default function AdminListPage() {
             <table className="min-w-full table-fixed">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  <th className="w-16 px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Nr
+                  <th 
+                    className="w-16 px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('sellerId')}
+                  >
+                    Nr{getSortIcon('sellerId')}
                   </th>
                   <th className="w-12 px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     QR
                   </th>
-                  <th className="w-16 px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Rolle
+                  <th 
+                    className="w-16 px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('isEmployee')}
+                  >
+                    Rolle{getSortIcon('isEmployee')}
                   </th>
-                  <th className="w-20 px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Verkäufer Status
+                  <th 
+                    className="w-20 px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('sellerStatusActive')}
+                  >
+                    Verkäufer Status{getSortIcon('sellerStatusActive')}
                   </th>
-                  <th className="w-20 px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Aktiv (in eine Liste eingetragen?)
+                  <th 
+                    className="w-20 px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('active')}
+                  >
+                    Aktiv (in eine Liste eingetragen?){getSortIcon('active')}
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Name
+                  <th 
+                    className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('firstName')}
+                  >
+                    Name{getSortIcon('firstName')}
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    E-Mail
+                  <th 
+                    className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('email')}
+                  >
+                    E-Mail{getSortIcon('email')}
                   </th>
                   <th className="w-32 px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Aktionen
@@ -317,8 +408,8 @@ export default function AdminListPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredSellers.length > 0 ? (
-                  filteredSellers.map((seller, idx) => (
+                {sortedSellers.length > 0 ? (
+                  sortedSellers.map((seller, idx) => (
                     <tr key={seller.id} className="hover:bg-gray-50">
                       <td className="px-2 py-2 whitespace-nowrap text-sm font-mono text-gray-900">
                         {seller.sellerId}
@@ -405,7 +496,7 @@ export default function AdminListPage() {
         )}
 
         <div className="mt-4 text-sm text-gray-600">
-          Gesamt: {filteredSellers.length} {filter === 'seller' ? 'Verkäufer' : filter === 'employee' ? 'Mitarbeiter' : 'Einträge'}
+          Gesamt: {sortedSellers.length} {filter === 'seller' ? 'Verkäufer' : filter === 'employee' ? 'Mitarbeiter' : 'Einträge'}
         </div>
       </div>
     </div>
