@@ -43,7 +43,7 @@ export default function ImpressumPage() {
               </p>
               <p className="mt-2">
                 Matthias Loos<br />
-                Rosengasse 4
+                Rosengasse 4<br />
                 92259 Neukirchen
               </p>
             </section>
