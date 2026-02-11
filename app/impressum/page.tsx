@@ -26,9 +26,7 @@ export default function ImpressumPage() {
                 Rosengasse 4<br />
                 92259 Neukirchen
               </p>
-              <p className="mt-4 text-sm text-gray-600">
-                <strong>Hinweis:</strong> Bitte ersetzen Sie die Platzhalter in eckigen Klammern durch Ihre tatsächlichen Daten.
-              </p>
+             
             </section>
 
             <section>
@@ -47,25 +45,6 @@ export default function ImpressumPage() {
                 Matthias Loos<br />
                 Rosengasse 4
                 92259 Neukirchen
-              </p>
-            </section>
-
-            {/* Optional - nur wenn zutreffend */}
-            <section className="opacity-60">
-              <h2 className="text-2xl font-semibold mb-3">Umsatzsteuer-ID (optional)</h2>
-              <p>
-                Umsatzsteuer-Identifikationsnummer gemäß § 27 a Umsatzsteuergesetz:<br />
-                [DE XXXXXXXXX] <em>(nur falls vorhanden und gewerblich)</em>
-              </p>
-            </section>
-
-            <section className="opacity-60">
-              <h2 className="text-2xl font-semibold mb-3">Handelsregister (optional)</h2>
-              <p>
-                Registereintrag:<br />
-                Eintragung im Handelsregister<br />
-                Registergericht: [Gericht]<br />
-                Registernummer: [HRB XXXXX] <em>(nur falls vorhanden und gewerblich)</em>
               </p>
             </section>
 
@@ -147,13 +126,6 @@ export default function ImpressumPage() {
               <strong>Stand:</strong> {new Date().toLocaleDateString('de-DE', { year: 'numeric', month: 'long', day: 'numeric' })}
             </p>
 
-            <div className="mt-8 p-4 bg-blue-50 border-l-4 border-blue-500 text-blue-900">
-              <p className="font-semibold mb-2">📝 Wichtiger Hinweis:</p>
-              <p className="text-sm">
-                Bitte ersetzen Sie alle Platzhalter in eckigen Klammern [wie diesen] durch Ihre tatsächlichen Daten. 
-                Entfernen Sie die optionalen Abschnitte (Umsatzsteuer-ID, Handelsregister), falls diese bei Ihnen 
-                nicht zutreffen. Lassen Sie das Impressum ggf. von einem Rechtsanwalt prüfen.
-              </p>
             </div>
           </div>
         </div>
