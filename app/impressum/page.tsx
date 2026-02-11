@@ -22,9 +22,9 @@ export default function ImpressumPage() {
             <section>
               <h2 className="text-2xl font-semibold mb-3">Angaben gemäß § 5 TMG</h2>
               <p>
-                [Ihr vollständiger Name oder Name der Organisation]<br />
-                [Straße und Hausnummer]<br />
-                [PLZ und Ort]
+                Kinderbasar Neukirchen b. Su.-Ro.<br />
+                Rosengasse 4<br />
+                92259 Neukirchen
               </p>
               <p className="mt-4 text-sm text-gray-600">
                 <strong>Hinweis:</strong> Bitte ersetzen Sie die Platzhalter in eckigen Klammern durch Ihre tatsächlichen Daten.
@@ -34,8 +34,7 @@ export default function ImpressumPage() {
             <section>
               <h2 className="text-2xl font-semibold mb-3">Kontakt</h2>
               <p>
-                <strong>Telefon:</strong> [Ihre Telefonnummer]<br />
-                <strong>E-Mail:</strong> [ihre@email.de]
+                <strong>E-Mail:</strong> basar.neukirchen@gmail.com
               </p>
             </section>
 
@@ -45,8 +44,9 @@ export default function ImpressumPage() {
                 Verantwortlich für den Inhalt nach § 55 Abs. 2 RStV:
               </p>
               <p className="mt-2">
-                [Ihr Name]<br />
-                [Adresse]
+                Matthias Loos<br />
+                Rosengasse 4
+                92259 Neukirchen
               </p>
             </section>
 
