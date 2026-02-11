@@ -6,7 +6,7 @@ export default function ImpressumPage() {
       <header className="sticky top-0 z-50 bg-yellow-500 text-gray-800 p-4 shadow-md">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <Link href="/" className="text-2xl font-bold hover:underline">
-            Kinderbasar Neukirchen
+            Kinderbasar Neukirchen b. Su.-Ro.
           </Link>
           <Link href="/" className="hover:underline text-lg">
             Zurück zur Startseite
