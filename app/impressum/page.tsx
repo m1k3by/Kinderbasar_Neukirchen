@@ -126,7 +126,6 @@ export default function ImpressumPage() {
               <strong>Stand:</strong> {new Date().toLocaleDateString('de-DE', { year: 'numeric', month: 'long', day: 'numeric' })}
             </p>
 
-            </div>
           </div>
         </div>
       </div>
