@@ -25,16 +25,13 @@ export default function DatenschutzPage() {
                 Verantwortlich für die Datenverarbeitung auf dieser Website ist:
               </p>
               <p className="mt-2">
-                [Ihr Name / Organisation]<br />
-                [Straße und Hausnummer]<br />
-                [PLZ und Ort]<br />
-                E-Mail: [ihre@email.de]<br />
-                Telefon: [Ihre Telefonnummer]
+                Kinderbasar Neukirchen b. Su.-Ro.<br />
+                Rosengasse 4<br />
+                92259 Neukirchen<br />
+                E-Mail: basar.neukirchen@gmail.com<br />
+                Telefon: 0170/4478153
               </p>
-              <p className="mt-3 text-sm text-gray-600">
-                <strong>Hinweis:</strong> Bitte ersetzen Sie die Platzhalter in eckigen Klammern durch Ihre tatsächlichen Daten.
-              </p>
-            </section>
+              </section>
 
             <section>
               <h2 className="text-2xl font-semibold mb-3">2. Allgemeine Hinweise zur Datenverarbeitung</h2>
@@ -168,7 +165,7 @@ export default function DatenschutzPage() {
                 <li><strong>Widerspruchsrecht</strong> (Art. 21 DSGVO): Sie können der Verarbeitung Ihrer Daten jederzeit widersprechen.</li>
               </ul>
               <p className="mt-3">
-                Zur Ausübung Ihrer Rechte wenden Sie sich bitte an: <strong>[ihre@email.de]</strong>
+                Zur Ausübung Ihrer Rechte wenden Sie sich bitte an: <strong>basar.neukirchen@gmail.com]</strong>
               </p>
             </section>
 
