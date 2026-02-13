@@ -81,7 +81,7 @@ export default function AGBPage() {
                 und für Rechnung des Verkäufers.
               </p>
               <p>
-                4.2. Die Provision beträgt 20% des Verkaufspreises zzgl. gesetzlicher Mehrwertsteuer.
+                4.2. Die Provision beträgt 15% des Verkaufspreises zzgl. gesetzlicher Mehrwertsteuer.
               </p>
               <p>
                 4.3. Der Verkäufer legt den Verkaufspreis selbst fest. Es wird empfohlen, realistische 
@@ -102,13 +102,8 @@ export default function AGBPage() {
               </p>
               <ul className="list-disc ml-6 space-y-2">
                 <li>Bar bei der Warenrückgabe</li>
-                <li>Per Überweisung (Auszahlung erfolgt innerhalb von 14 Tagen)</li>
-              </ul>
-              <p>
-                5.3. Bei Beträgen unter 10 EUR erfolgt keine Auszahlung, es sei denn, der Verkäufer holt 
-                seine nicht verkaufte Ware persönlich ab.
-              </p>
-            </div>
+                </ul>
+              </div>
           </section>
 
           {/* Nicht verkaufte Ware */}
@@ -160,11 +155,7 @@ export default function AGBPage() {
                 8.1. Verkäufer haben die Möglichkeit, sich als Helfer zu registrieren.
               </p>
               <p>
-                8.2. Helfer erhalten eine reduzierte Provision oder andere Vergünstigungen, die vom 
-                Veranstalter bekannt gegeben werden.
-              </p>
-              <p>
-                8.3. Die Anmeldung als Helfer ist freiwillig und begründet kein Arbeitsverhältnis.
+                8.2. Die Anmeldung als Helfer ist freiwillig und begründet kein Arbeitsverhältnis.
               </p>
             </div>
           </section>
@@ -207,10 +198,8 @@ export default function AGBPage() {
             <p className="text-gray-700 leading-relaxed">
               Bei Fragen zu diesen AGB wenden Sie sich bitte an:<br />
               <strong>Kinderbasar Neukirchen</strong><br />
-              [Ihre Adresse]<br />
-              [Ihre E-Mail]<br />
-              [Ihre Telefonnummer]
-            </p>
+              basar.neukirchen@gmail.com<br />
+             </p>
           </section>
 
           <div className="text-sm text-gray-500 border-t pt-6">
