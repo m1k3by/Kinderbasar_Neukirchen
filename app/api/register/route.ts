@@ -23,6 +23,56 @@ export async function POST(request: Request) {
       );
     }
 
+    // Check registration periods
+    const settings = await prisma.settings.findMany();
+    const settingsObj: Record<string, string> = {};
+    settings.forEach(s => {
+      settingsObj[s.key] = s.value;
+    });
+
+    const now = new Date();
+
+    // Check if registration period is open for the given type
+    if (isEmployee) {
+      if (settingsObj.registration_employee_start && settingsObj.registration_employee_end) {
+        const startStr = settingsObj.registration_employee_start.includes('T')
+          ? settingsObj.registration_employee_start
+          : settingsObj.registration_employee_start + 'T00:00:00';
+        const endStr = settingsObj.registration_employee_end.includes('T')
+          ? settingsObj.registration_employee_end
+          : settingsObj.registration_employee_end + 'T23:59:59';
+        
+        const start = new Date(startStr);
+        const end = new Date(endStr);
+        
+        if (now < start || now > end) {
+          return NextResponse.json(
+            { error: 'Die Mitarbeiter-Registrierung ist derzeit geschlossen.' },
+            { status: 403 }
+          );
+        }
+      }
+    } else {
+      if (settingsObj.registration_seller_start && settingsObj.registration_seller_end) {
+        const startStr = settingsObj.registration_seller_start.includes('T')
+          ? settingsObj.registration_seller_start
+          : settingsObj.registration_seller_start + 'T00:00:00';
+        const endStr = settingsObj.registration_seller_end.includes('T')
+          ? settingsObj.registration_seller_end
+          : settingsObj.registration_seller_end + 'T23:59:59';
+        
+        const start = new Date(startStr);
+        const end = new Date(endStr);
+        
+        if (now < start || now > end) {
+          return NextResponse.json(
+            { error: 'Die Verkäufer-Registrierung ist derzeit geschlossen.' },
+            { status: 403 }
+          );
+        }
+      }
+    }
+
     // Validate required fields
     if (!email || !firstName || !lastName) {
       return NextResponse.json(
