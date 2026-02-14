@@ -14,8 +14,12 @@ interface Settings {
   registration_employee_end?: string;
   delivery_start?: string;
   delivery_end?: string;
+  delivery_start2?: string;
+  delivery_end2?: string;
   pickup_start?: string;
   pickup_end?: string;
+  pickup_start2?: string;
+  pickup_end2?: string;
 }
 
 export default function SettingsPage() {
@@ -181,10 +185,10 @@ export default function SettingsPage() {
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Start-Datum
+                      Von (Datum + Uhrzeit)
                     </label>
                     <input
-                      type="date"
+                      type="datetime-local"
                       value={settings.registration_seller_start || ''}
                       onChange={(e) => setSettings({ ...settings, registration_seller_start: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -192,11 +196,11 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      End-Datum
+                      Bis (Datum + Uhrzeit)
                     </label>
                     <input
-                      type="date"
-                      value={settings.registration_seller_end || ''}
+                      type="datetime-local"
+                      value={settings.pickup_end2 || ''}
                       onChange={(e) => setSettings({ ...settings, registration_seller_end: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
@@ -213,10 +217,10 @@ export default function SettingsPage() {
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Start-Datum
+                      Von (Datum + Uhrzeit)
                     </label>
                     <input
-                      type="date"
+                      type="datetime-local"
                       value={settings.registration_employee_start || ''}
                       onChange={(e) => setSettings({ ...settings, registration_employee_start: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -224,10 +228,10 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      End-Datum
+                      Bis (Datum + Uhrzeit)
                     </label>
                     <input
-                      type="date"
+                      type="datetime-local"
                       value={settings.registration_employee_end || ''}
                       onChange={(e) => setSettings({ ...settings, registration_employee_end: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -247,30 +251,65 @@ export default function SettingsPage() {
               {/* Delivery Period */}
               <div className="mb-6">
                 <h3 className="text-lg font-semibold text-gray-700 mb-3">Anlieferung der Ware</h3>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Von (Datum + Uhrzeit)
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={settings.delivery_start || ''}
-                      onChange={(e) => setSettings({ ...settings, delivery_start: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Bis (Datum + Uhrzeit)
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={settings.delivery_end || ''}
-                      onChange={(e) => setSettings({ ...settings, delivery_end: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
+                
+                {/* First Delivery Window */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-600 mb-2">Zeitfenster 1</label>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Von (Datum + Uhrzeit)
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={settings.delivery_start || ''}
+                        onChange={(e) => setSettings({ ...settings, delivery_start: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Bis (Datum + Uhrzeit)
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={settings.delivery_end || ''}
+                        onChange={(e) => setSettings({ ...settings, delivery_end: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
                   </div>
                 </div>
+
+                {/* Second Delivery Window */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-600 mb-2">Zeitfenster 2</label>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Von (Datum + Uhrzeit)
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={settings.delivery_start2 || ''}
+                        onChange={(e) => setSettings({ ...settings, delivery_start2: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Bis (Datum + Uhrzeit)
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={settings.delivery_end2 || ''}
+                        onChange={(e) => setSettings({ ...settings, delivery_end2: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 <p className="mt-2 text-xs text-gray-500">
                   Diese Zeiten werden in der Bestätigungs-E-Mail an die Verkäufer gesendet.
                 </p>
@@ -279,30 +318,65 @@ export default function SettingsPage() {
               {/* Pickup Period */}
               <div>
                 <h3 className="text-lg font-semibold text-gray-700 mb-3">Abholung der Ware</h3>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Von (Datum + Uhrzeit)
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={settings.pickup_start || ''}
-                      onChange={(e) => setSettings({ ...settings, pickup_start: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Bis (Datum + Uhrzeit)
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={settings.pickup_end || ''}
-                      onChange={(e) => setSettings({ ...settings, pickup_end: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
+                
+                {/* First Pickup Window */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-600 mb-2">Zeitfenster 1</label>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Von (Datum + Uhrzeit)
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={settings.pickup_start || ''}
+                        onChange={(e) => setSettings({ ...settings, pickup_start: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Bis (Datum + Uhrzeit)
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={settings.pickup_end || ''}
+                        onChange={(e) => setSettings({ ...settings, pickup_end: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
                   </div>
                 </div>
+
+                {/* Second Pickup Window */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-600 mb-2">Zeitfenster 2</label>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Von (Datum + Uhrzeit)
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={settings.pickup_start2 || ''}
+                        onChange={(e) => setSettings({ ...settings, pickup_start2: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Bis (Datum + Uhrzeit)
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={settings.pickup_start2 || ''}
+                        onChange={(e) => setSettings({ ...settings, pickup_end2: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 <p className="mt-2 text-xs text-gray-500">
                   Diese Zeiten werden in der Bestätigungs-E-Mail an die Verkäufer gesendet.
                 </p>

@@ -137,16 +137,24 @@ export async function POST(request: Request) {
 
     const deliveryStart = formatDateTime(settingsObj.delivery_start);
     const deliveryEnd = formatDateTime(settingsObj.delivery_end);
+    const deliveryStart2 = formatDateTime(settingsObj.delivery_start2);
+    const deliveryEnd2 = formatDateTime(settingsObj.delivery_end2);
     const pickupStart = formatDateTime(settingsObj.pickup_start);
     const pickupEnd = formatDateTime(settingsObj.pickup_end);
+    const pickupStart2 = formatDateTime(settingsObj.pickup_start2);
+    const pickupEnd2 = formatDateTime(settingsObj.pickup_end2);
 
     let deliveryInfo = '';
     if (deliveryStart && deliveryEnd) {
       deliveryInfo = `
         <div style="margin-top: 20px; padding: 15px; background-color: #f0f9ff; border-left: 4px solid #3b82f6; border-radius: 4px;">
           <h3 style="margin: 0 0 10px 0; color: #1e40af;">Anlieferung der Ware</h3>
-          <p style="margin: 0;"><strong>Von:</strong> ${deliveryStart}</p>
+          <p style="margin: 0;"><strong>Zeitfenster 1 - Von:</strong> ${deliveryStart}</p>
           <p style="margin: 5px 0 0 0;"><strong>Bis:</strong> ${deliveryEnd}</p>
+          ${deliveryStart2 && deliveryEnd2 ? `
+            <p style="margin: 10px 0 0 0;"><strong>Zeitfenster 2 - Von:</strong> ${deliveryStart2}</p>
+            <p style="margin: 5px 0 0 0;"><strong>Bis:</strong> ${deliveryEnd2}</p>
+          ` : ''}
         </div>
       `;
     }
@@ -156,8 +164,12 @@ export async function POST(request: Request) {
       pickupInfo = `
         <div style="margin-top: 15px; padding: 15px; background-color: #f0fdf4; border-left: 4px solid #10b981; border-radius: 4px;">
           <h3 style="margin: 0 0 10px 0; color: #065f46;">Abholung der Ware</h3>
-          <p style="margin: 0;"><strong>Von:</strong> ${pickupStart}</p>
+          <p style="margin: 0;"><strong>Zeitfenster 1 - Von:</strong> ${pickupStart}</p>
           <p style="margin: 5px 0 0 0;"><strong>Bis:</strong> ${pickupEnd}</p>
+          ${pickupStart2 && pickupEnd2 ? `
+            <p style="margin: 10px 0 0 0;"><strong>Zeitfenster 2 - Von:</strong> ${pickupStart2}</p>
+            <p style="margin: 5px 0 0 0;"><strong>Bis:</strong> ${pickupEnd2}</p>
+          ` : ''}
         </div>
       `;
     }
@@ -166,13 +178,25 @@ export async function POST(request: Request) {
       // Prepare unified styling for delivery and pickup
       const deliverySection = deliveryStart && deliveryEnd
         ? `<div style="margin-top:20px;padding:14px;border-radius:8px;background:#f3f4f6;border:1px solid #e5e7eb;">
-             <strong>Anlieferung</strong><br/><span>${deliveryStart}</span><br/><span>${deliveryEnd}</span>
+             <strong>Anlieferung</strong><br/>
+             <span style="font-size:0.95em;">Zeitfenster 1:</span><br/>
+             <span>${deliveryStart}</span><br/><span>${deliveryEnd}</span>
+             ${deliveryStart2 && deliveryEnd2 ? `
+               <br/><br/><span style="font-size:0.95em;">Zeitfenster 2:</span><br/>
+               <span>${deliveryStart2}</span><br/><span>${deliveryEnd2}</span>
+             ` : ''}
            </div>`
         : '';
 
       const pickupSection = pickupStart && pickupEnd
         ? `<div style="margin-top:12px;padding:14px;border-radius:8px;background:#f3f4f6;border:1px solid #e5e7eb;">
-             <strong>Abholung</strong><br/><span>${pickupStart}</span><br/><span>${pickupEnd}</span>
+             <strong>Abholung</strong><br/>
+             <span style="font-size:0.95em;">Zeitfenster 1:</span><br/>
+             <span>${pickupStart}</span><br/><span>${pickupEnd}</span>
+             ${pickupStart2 && pickupEnd2 ? `
+               <br/><br/><span style="font-size:0.95em;">Zeitfenster 2:</span><br/>
+               <span>${pickupStart2}</span><br/><span>${pickupEnd2}</span>
+             ` : ''}
            </div>`
         : '';
 
