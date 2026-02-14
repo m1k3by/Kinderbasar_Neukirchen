@@ -42,21 +42,38 @@ export default async function Home() {
   const hasAnyDate = freitagDate || samstagDate || sonntagDate;
 
   // Check registration periods
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const now = new Date();
 
   const isSellerRegistrationOpen = (() => {
     if (!settingsObj.registration_seller_start || !settingsObj.registration_seller_end) return true;
-    const start = new Date(settingsObj.registration_seller_start + 'T00:00:00');
-    const end = new Date(settingsObj.registration_seller_end + 'T23:59:59');
-    return today >= start && today <= end;
+    
+    // Handle both datetime-local (with time) and old date-only formats
+    const startStr = settingsObj.registration_seller_start.includes('T') 
+      ? settingsObj.registration_seller_start 
+      : settingsObj.registration_seller_start + 'T00:00:00';
+    const endStr = settingsObj.registration_seller_end.includes('T')
+      ? settingsObj.registration_seller_end
+      : settingsObj.registration_seller_end + 'T23:59:59';
+    
+    const start = new Date(startStr);
+    const end = new Date(endStr);
+    return now >= start && now <= end;
   })();
 
   const isEmployeeRegistrationOpen = (() => {
     if (!settingsObj.registration_employee_start || !settingsObj.registration_employee_end) return true;
-    const start = new Date(settingsObj.registration_employee_start + 'T00:00:00');
-    const end = new Date(settingsObj.registration_employee_end + 'T23:59:59');
-    return today >= start && today <= end;
+    
+    // Handle both datetime-local (with time) and old date-only formats
+    const startStr = settingsObj.registration_employee_start.includes('T')
+      ? settingsObj.registration_employee_start
+      : settingsObj.registration_employee_start + 'T00:00:00';
+    const endStr = settingsObj.registration_employee_end.includes('T')
+      ? settingsObj.registration_employee_end
+      : settingsObj.registration_employee_end + 'T23:59:59';
+    
+    const start = new Date(startStr);
+    const end = new Date(endStr);
+    return now >= start && now <= end;
   })();
 
   return (
