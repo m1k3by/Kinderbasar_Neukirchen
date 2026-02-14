@@ -196,6 +196,34 @@ export default function AdminListPage() {
     }
   }
 
+  async function resetPassword(sellerId: number) {
+    if (!confirm('Möchten Sie wirklich das Passwort für diesen Benutzer zurücksetzen?')) {
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/admin/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sellerId }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setMessage(data.message);
+        setTimeout(() => setMessage(''), 5000);
+      } else {
+        const data = await res.json();
+        setMessage('Fehler: ' + (data.error || 'Unbekannter Fehler'));
+        setTimeout(() => setMessage(''), 5000);
+      }
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      setMessage('Fehler beim Zurücksetzen des Passworts');
+      setTimeout(() => setMessage(''), 5000);
+    }
+  }
+
   async function handleGlobalReset() {
     try {
       const res = await fetch('/api/admin/reset-seller-status', {
@@ -476,6 +504,13 @@ export default function AdminListPage() {
                             title={seller.sellerStatusActive ? 'Status deaktivieren' : 'Status aktivieren'}
                           >
                             {seller.sellerStatusActive ? 'Deakt' : 'Akt'}
+                          </button>
+                          <button
+                            onClick={() => resetPassword(seller.sellerId)}
+                            className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-medium transition-colors"
+                            title="Passwort zurücksetzen und per E-Mail senden"
+                          >
+                            PW↻
                           </button>
                         </div>
                       </td>
