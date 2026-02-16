@@ -59,6 +59,8 @@ export async function POST(request: Request) {
       data: {
         title: body.title,
         day: body.day,
+        timeFrom: body.timeFrom || null,
+        timeTo: body.timeTo || null,
         capacity: body.capacity,
       },
     });
@@ -77,7 +79,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { id, title, day, capacity } = body;
+    const { id, title, day, timeFrom, timeTo, capacity } = body;
 
     // Validate required fields
     if (!id) {
@@ -107,6 +109,8 @@ export async function PUT(request: Request) {
       data: {
         title,
         day,
+        timeFrom: timeFrom || null,
+        timeTo: timeTo || null,
         capacity,
       },
     });

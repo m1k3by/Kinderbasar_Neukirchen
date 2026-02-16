@@ -29,6 +29,8 @@ model Task {
   id        String   @id @default(cuid())
   title     String
   day       String
+  timeFrom  String?
+  timeTo    String?
   capacity  Int
   createdAt DateTime @default(now())
   signups   TaskSignup[]

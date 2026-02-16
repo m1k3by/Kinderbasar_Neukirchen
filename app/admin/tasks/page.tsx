@@ -7,6 +7,8 @@ interface Task {
   id: string;
   title: string;
   day: string;
+  timeFrom?: string | null;
+  timeTo?: string | null;
   capacity: number;
   createdAt: string;
   _count?: {
@@ -24,6 +26,8 @@ export default function TasksManagementPage() {
   const [formData, setFormData] = useState({
     title: '',
     day: '',
+    timeFrom: '',
+    timeTo: '',
     capacity: 10,
   });
 
@@ -32,6 +36,8 @@ export default function TasksManagementPage() {
   const [editingTaskData, setEditingTaskData] = useState({
     title: '',
     day: '',
+    timeFrom: '',
+    timeTo: '',
     capacity: 10,
   });
 
@@ -73,7 +79,7 @@ export default function TasksManagementPage() {
       }
 
       // Reset form and refresh
-      setFormData({ title: '', day: '', capacity: 10 });
+      setFormData({ title: '', day: '', timeFrom: '', timeTo: '', capacity: 10 });
       setShowForm(false);
       fetchTasks();
     } catch (err: any) {
@@ -108,6 +114,8 @@ export default function TasksManagementPage() {
     setEditingTaskData({
       title: task.title,
       day: task.day,
+      timeFrom: task.timeFrom || '',
+      timeTo: task.timeTo || '',
       capacity: task.capacity,
     });
   };
@@ -115,7 +123,7 @@ export default function TasksManagementPage() {
   // Cancel editing
   const cancelEditing = () => {
     setEditingTaskId(null);
-    setEditingTaskData({ title: '', day: '', capacity: 10 });
+    setEditingTaskData({ title: '', day: '', timeFrom: '', timeTo: '', capacity: 10 });
   };
 
   // Update task
@@ -214,6 +222,31 @@ export default function TasksManagementPage() {
                 </select>
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Uhrzeit von
+                  </label>
+                  <input
+                    type="time"
+                    value={formData.timeFrom}
+                    onChange={(e) => setFormData({ ...formData, timeFrom: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Uhrzeit bis
+                  </label>
+                  <input
+                    type="time"
+                    value={formData.timeTo}
+                    onChange={(e) => setFormData({ ...formData, timeTo: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Kapazität (Anzahl Helfer) *
@@ -302,6 +335,31 @@ export default function TasksManagementPage() {
                         </select>
                       </div>
 
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Uhrzeit von
+                          </label>
+                          <input
+                            type="time"
+                            value={editingTaskData.timeFrom}
+                            onChange={(e) => setEditingTaskData({ ...editingTaskData, timeFrom: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Uhrzeit bis
+                          </label>
+                          <input
+                            type="time"
+                            value={editingTaskData.timeTo}
+                            onChange={(e) => setEditingTaskData({ ...editingTaskData, timeTo: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+                      </div>
+
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Kapazität (Anzahl Helfer) *
@@ -341,6 +399,16 @@ export default function TasksManagementPage() {
                         </h3>
                         <div className="flex flex-col md:flex-row md:gap-4 gap-2 text-sm text-gray-600 mb-3">
                           <span className="font-medium">{task.day}</span>
+                          {(task.timeFrom || task.timeTo) && (
+                            <span className="font-medium">
+                              {task.timeFrom && task.timeTo 
+                                ? `${task.timeFrom} - ${task.timeTo} Uhr`
+                                : task.timeFrom 
+                                ? `ab ${task.timeFrom} Uhr`
+                                : `bis ${task.timeTo} Uhr`
+                              }
+                            </span>
+                          )}
                           <span className="inline-flex items-center">
                             👥 <span className="ml-1">{task._count?.signups || 0} / {task.capacity} Helfer</span>
                           </span>
