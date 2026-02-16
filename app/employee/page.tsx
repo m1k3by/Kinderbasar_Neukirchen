@@ -8,6 +8,8 @@ interface Task {
   id: string;
   title: string;
   day: string;
+  timeFrom?: string | null;
+  timeTo?: string | null;
   capacity: number;
   signups?: {
     sellerId: number;
@@ -455,11 +457,23 @@ export default function EmployeePage() {
 
                       return (
                         <div key={task.id} className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-5">
-                          <div className="flex items-center justify-between mb-3">
-                            <h4 className="text-lg font-semibold text-gray-800">{task.title}</h4>
-                            <span className="text-sm text-gray-600">
-                              {signupCount} / {task.capacity}
-                            </span>
+                          <div className="mb-3">
+                            <div className="flex items-center justify-between mb-1">
+                              <h4 className="text-lg font-semibold text-gray-800">{task.title}</h4>
+                              <span className="text-sm text-gray-600">
+                                {signupCount} / {task.capacity}
+                              </span>
+                            </div>
+                            {(task.timeFrom || task.timeTo) && (
+                              <div className="text-sm text-gray-600">
+                                {task.timeFrom && task.timeTo 
+                                  ? `${task.timeFrom} - ${task.timeTo} Uhr`
+                                  : task.timeFrom 
+                                  ? `ab ${task.timeFrom} Uhr`
+                                  : `bis ${task.timeTo} Uhr`
+                                }
+                              </div>
+                            )}
                           </div>
                           <button
                             onClick={() => handleTaskToggle(task.id)}
