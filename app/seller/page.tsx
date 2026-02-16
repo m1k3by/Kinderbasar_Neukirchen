@@ -13,11 +13,8 @@ export default function SellerPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [passwordForm, setPasswordForm] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  });
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
@@ -93,14 +90,14 @@ export default function SellerPage() {
     setPasswordSuccess('');
 
     // Validate passwords match
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      setPasswordError('Die neuen Passwörter stimmen nicht überein');
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Die Passwörter stimmen nicht überein');
       return;
     }
 
     // Validate password length
-    if (passwordForm.newPassword.length < 6) {
-      setPasswordError('Das neue Passwort muss mindestens 6 Zeichen lang sein');
+    if (newPassword.length < 6) {
+      setPasswordError('Das Passwort muss mindestens 6 Zeichen lang sein');
       return;
     }
 
@@ -112,8 +109,7 @@ export default function SellerPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sellerId: parseInt(sellerId, 10),
-          currentPassword: passwordForm.currentPassword,
-          newPassword: passwordForm.newPassword,
+          newPassword,
         }),
       });
 
@@ -121,7 +117,8 @@ export default function SellerPage() {
 
       if (res.ok) {
         setPasswordSuccess('Passwort erfolgreich geändert!');
-        setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        setNewPassword('');
+        setConfirmPassword('');
         setTimeout(() => {
           setShowPasswordModal(false);
           setPasswordSuccess('');
@@ -214,42 +211,29 @@ export default function SellerPage() {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Aktuelles Passwort
-                    </label>
-                    <input
-                      type="password"
-                      value={passwordForm.currentPassword}
-                      onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      required
-                      disabled={changingPassword}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       Neues Passwort
                     </label>
                     <input
                       type="password"
-                      value={passwordForm.newPassword}
-                      onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
                       minLength={6}
                       disabled={changingPassword}
+                      autoFocus
                     />
                     <p className="mt-1 text-xs text-gray-500">Mindestens 6 Zeichen</p>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Neues Passwort bestätigen
+                      Passwort bestätigen
                     </label>
                     <input
                       type="password"
-                      value={passwordForm.confirmPassword}
-                      onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
                       disabled={changingPassword}
@@ -262,7 +246,8 @@ export default function SellerPage() {
                     type="button"
                     onClick={() => {
                       setShowPasswordModal(false);
-                      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+                      setNewPassword('');
+                      setConfirmPassword('');
                       setPasswordError('');
                       setPasswordSuccess('');
                     }}

@@ -4,11 +4,11 @@ import bcrypt from 'bcrypt';
 
 export async function POST(req: Request) {
   try {
-    const { sellerId, currentPassword, newPassword } = await req.json();
+    const { sellerId, newPassword } = await req.json();
 
-    if (!sellerId || !currentPassword || !newPassword) {
+    if (!sellerId || !newPassword) {
       return NextResponse.json(
-        { error: 'Alle Felder sind erforderlich' },
+        { error: 'Verkäufer-ID und neues Passwort sind erforderlich' },
         { status: 400 }
       );
     }
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     // Validate new password length
     if (newPassword.length < 6) {
       return NextResponse.json(
-        { error: 'Das neue Passwort muss mindestens 6 Zeichen lang sein' },
+        { error: 'Das Passwort muss mindestens 6 Zeichen lang sein' },
         { status: 400 }
       );
     }
@@ -26,29 +26,20 @@ export async function POST(req: Request) {
       where: { sellerId: parseInt(sellerId, 10) },
     });
 
-    if (!seller || !seller.password) {
+    if (!seller) {
       return NextResponse.json(
-        { error: 'Benutzer nicht gefunden oder kein Passwort gesetzt' },
+        { error: 'Benutzer nicht gefunden' },
         { status: 404 }
       );
     }
 
-    // Verify current password
-    const isPasswordValid = await bcrypt.compare(currentPassword, seller.password);
-    if (!isPasswordValid) {
-      return NextResponse.json(
-        { error: 'Das aktuelle Passwort ist falsch' },
-        { status: 401 }
-      );
-    }
-
     // Hash new password
-    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
 
     // Update password in database
     await prisma.seller.update({
       where: { sellerId: parseInt(sellerId, 10) },
-      data: { password: hashedNewPassword },
+      data: { password: hashedPassword },
     });
 
     return NextResponse.json({

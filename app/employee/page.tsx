@@ -38,15 +38,14 @@ export default function EmployeePage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [cakes, setCakes] = useState<Cake[]>([]);
   const [settings, setSettings] = useState<Record<string, string>>({});
-  const [myCake, setMyCake] = useState<Cake | null>(null);
+  const [myCakes, setMyCakes] = useState<Cake[]>([]);
   const [cakeName, setCakeName] = useState('');
+  const [editingCakeId, setEditingCakeId] = useState<string | null>(null);
+  const [editingCakeName, setEditingCakeName] = useState('');
   const [message, setMessage] = useState('');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [passwordForm, setPasswordForm] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  });
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
@@ -89,11 +88,10 @@ export default function EmployeePage() {
 
   useEffect(() => {
     if (sellerId && cakes.length > 0) {
-      const myExistingCake = cakes.find((c: any) => c.sellerId === parseInt(sellerId, 10));
-      if (myExistingCake) {
-        setMyCake(myExistingCake);
-        setCakeName(myExistingCake.cakeName);
-      }
+      const myExistingCakes = cakes.filter((c: any) => c.sellerId === parseInt(sellerId, 10));
+      setMyCakes(myExistingCakes);
+    } else {
+      setMyCakes([]);
     }
     
     // Load seller info when sellerId changes
@@ -116,14 +114,11 @@ export default function EmployeePage() {
         const allCakes = await cakesRes.json();
         setCakes(allCakes);
         
-        // Find my cake
+        // Check if current user has cakes
         if (sellerId) {
           const sellerIdInt = parseInt(sellerId, 10);
-          const myExistingCake = allCakes.find((c: Cake & { sellerId: number }) => c.sellerId === sellerIdInt);
-          if (myExistingCake) {
-            setMyCake(myExistingCake);
-            setCakeName(myExistingCake.cakeName);
-          }
+          const myExistingCakes = allCakes.filter((c: Cake & { sellerId: number }) => c.sellerId === sellerIdInt);
+          setMyCakes(myExistingCakes);
         }
       }
     } catch (error) {
@@ -236,58 +231,82 @@ export default function EmployeePage() {
     if (!cakeName.trim() || !sellerId) return;
 
     try {
-      if (myCake) {
-        // Update existing cake
-        const res = await fetch('/api/cakes', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: myCake.id, cakeName: cakeName.trim() }),
-        });
+      // Create new cake
+      const res = await fetch('/api/cakes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cakeName: cakeName.trim(), sellerId: parseInt(sellerId, 10) }),
+      });
 
-        if (res.ok) {
-          setMessage('Kuchen erfolgreich aktualisiert');
-          loadData();
-        } else {
-          const data = await res.json();
-          setMessage(data.error || 'Fehler beim Aktualisieren');
-        }
+      if (res.ok) {
+        setMessage('✓ Kuchen erfolgreich hinzugefügt');
+        setCakeName('');
+        loadData();
       } else {
-        // Create new cake
-        const res = await fetch('/api/cakes', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cakeName: cakeName.trim(), sellerId: parseInt(sellerId, 10) }),
-        });
-
-        if (res.ok) {
-          setMessage('Kuchen erfolgreich eingetragen');
-          loadData();
-        } else {
-          const data = await res.json();
-          setMessage(data.error || 'Fehler beim Eintragen');
-        }
+        const data = await res.json();
+        setMessage(data.error || 'Fehler beim Hinzufügen');
       }
 
       setTimeout(() => setMessage(''), 3000);
     } catch (error) {
-      console.error('Error with cake:', error);
-      setMessage('Fehler beim Speichern');
+      console.error('Error adding cake:', error);
+      setMessage('Fehler beim Hinzufügen');
       setTimeout(() => setMessage(''), 3000);
     }
   }
 
-  async function handleDeleteCake() {
-    if (!myCake) return;
+  async function handleUpdateCake(cakeId: string) {
+    if (!editingCakeName.trim()) return;
 
     try {
-      const res = await fetch(`/api/cakes?id=${myCake.id}`, {
+      const res = await fetch('/api/cakes', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: cakeId, cakeName: editingCakeName.trim() }),
+      });
+
+      if (res.ok) {
+        setMessage('✓ Kuchen erfolgreich aktualisiert');
+        setEditingCakeId(null);
+        setEditingCakeName('');
+        loadData();
+      } else {
+        const data = await res.json();
+        setMessage(data.error || 'Fehler beim Aktualisieren');
+      }
+
+      setTimeout(() => setMessage(''), 3000);
+    } catch (error) {
+      console.error('Error updating cake:', error);
+      setMessage('Fehler beim Aktualisieren');
+      setTimeout(() => setMessage(''), 3000);
+    }
+  }
+
+  function startEditingCake(cake: Cake) {
+    setEditingCakeId(cake.id);
+    setEditingCakeName(cake.cakeName);
+  }
+
+  function cancelEditing() {
+    setEditingCakeId(null);
+    setEditingCakeName('');
+  }
+
+  async function handleDeleteCake(cakeId: string) {
+    if (!confirm('Kuchen wirklich löschen?')) return;
+
+    try {
+      const res = await fetch(`/api/cakes?id=${cakeId}`, {
         method: 'DELETE',
       });
 
       if (res.ok) {
-        setMessage('Kuchen erfolgreich gelöscht');
-        setCakeName('');
-        setMyCake(null);
+        setMessage('✓ Kuchen erfolgreich gelöscht');
+        if (editingCakeId === cakeId) {
+          setEditingCakeId(null);
+          setEditingCakeName('');
+        }
         loadData();
       } else {
         const data = await res.json();
@@ -308,14 +327,14 @@ export default function EmployeePage() {
     setPasswordSuccess('');
 
     // Validate passwords match
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      setPasswordError('Die neuen Passwörter stimmen nicht überein');
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Die Passwörter stimmen nicht überein');
       return;
     }
 
     // Validate password length
-    if (passwordForm.newPassword.length < 6) {
-      setPasswordError('Das neue Passwort muss mindestens 6 Zeichen lang sein');
+    if (newPassword.length < 6) {
+      setPasswordError('Das Passwort muss mindestens 6 Zeichen lang sein');
       return;
     }
 
@@ -327,8 +346,7 @@ export default function EmployeePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sellerId: parseInt(sellerId, 10),
-          currentPassword: passwordForm.currentPassword,
-          newPassword: passwordForm.newPassword,
+          newPassword,
         }),
       });
 
@@ -336,7 +354,8 @@ export default function EmployeePage() {
 
       if (res.ok) {
         setPasswordSuccess('Passwort erfolgreich geändert!');
-        setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        setNewPassword('');
+        setConfirmPassword('');
         setTimeout(() => {
           setShowPasswordModal(false);
           setPasswordSuccess('');
@@ -471,18 +490,68 @@ export default function EmployeePage() {
 
         <h2 className="text-2xl font-bold text-gray-800 mb-4">Kuchenliste</h2>
         <p className="text-sm text-gray-600 mb-4">
-          Hier kannst du einen Kuchen eintragen. Du siehst die vorhandenen Kuchenarten – nicht, wer sie mitbringt.
+          Hier kannst du Kuchen eintragen. Du siehst die vorhandenen Kuchenarten – nicht, wer sie mitbringt.
         </p>
 
-        {myCake && (
-          <div className="bg-yellow-100 border-l-4 border-yellow-500 p-4 mb-4">
-            <p className="text-sm font-medium text-gray-800">
-              <strong>Dein Kuchen:</strong> {myCake.cakeName}
+        {/* My Cakes Section */}
+        {myCakes.length > 0 && (
+          <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 mb-6">
+            <p className="text-sm font-medium text-gray-800 mb-3">
+              <strong>Deine Kuchen ({myCakes.length}):</strong>
             </p>
+            <div className="space-y-2">
+              {myCakes.map((cake) => (
+                <div key={cake.id} className="bg-white p-3 rounded shadow-sm">
+                  {editingCakeId === cake.id ? (
+                    <div className="flex flex-col md:flex-row gap-2">
+                      <input
+                        type="text"
+                        value={editingCakeName}
+                        onChange={(e) => setEditingCakeName(e.target.value)}
+                        className="flex-1 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => handleUpdateCake(cake.id)}
+                        className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded font-medium"
+                      >
+                        Speichern
+                      </button>
+                      <button
+                        onClick={cancelEditing}
+                        className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded font-medium"
+                      >
+                        Abbrechen
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-gray-900 font-medium flex-1">{cake.cakeName}</span>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => startEditingCake(cake)}
+                          className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm font-medium"
+                        >
+                          Ändern
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCake(cake.id)}
+                          className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm font-medium"
+                        >
+                          Löschen
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
+        {/* Add New Cake Form */}
         <form onSubmit={handleCakeSubmit} className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6 mb-6">
+          <h3 className="text-lg font-semibold mb-3 text-gray-800">Neuen Kuchen hinzufügen</h3>
           <div className="flex flex-col md:flex-row gap-3">
             <input
               type="text"
@@ -496,21 +565,13 @@ export default function EmployeePage() {
               type="submit"
               className="bg-yellow-500 hover:bg-yellow-600 text-gray-800 px-6 py-3 rounded font-medium shadow text-base"
             >
-              {myCake ? 'Ändern' : 'Eintragen'}
+              Hinzufügen
             </button>
-            {myCake && (
-              <button
-                type="button"
-                onClick={handleDeleteCake}
-                className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded font-medium shadow text-base"
-              >
-                Löschen
-              </button>
-            )}
           </div>
         </form>
 
         <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6">
+          <h3 className="text-lg font-semibold mb-3 text-gray-800">Alle Kuchen (gesamt: {cakes.length})</h3>
           <ul className="list-disc ml-6 text-lg text-gray-900">
             {cakes.length > 0 ? (
               cakes.map((cake) => (
@@ -558,42 +619,29 @@ export default function EmployeePage() {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Aktuelles Passwort
-                    </label>
-                    <input
-                      type="password"
-                      value={passwordForm.currentPassword}
-                      onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      required
-                      disabled={changingPassword}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       Neues Passwort
                     </label>
                     <input
                       type="password"
-                      value={passwordForm.newPassword}
-                      onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
                       minLength={6}
                       disabled={changingPassword}
+                      autoFocus
                     />
                     <p className="mt-1 text-xs text-gray-500">Mindestens 6 Zeichen</p>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Neues Passwort bestätigen
+                      Passwort bestätigen
                     </label>
                     <input
                       type="password"
-                      value={passwordForm.confirmPassword}
-                      onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
                       disabled={changingPassword}
@@ -606,7 +654,8 @@ export default function EmployeePage() {
                     type="button"
                     onClick={() => {
                       setShowPasswordModal(false);
-                      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+                      setNewPassword('');
+                      setConfirmPassword('');
                       setPasswordError('');
                       setPasswordSuccess('');
                     }}

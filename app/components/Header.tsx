@@ -87,6 +87,14 @@ export default function Header({
           </button>
         </div>
 
+        {/* Mobile Seller Info */}
+        {sellerInfo && (
+          <div className="md:hidden mt-3 bg-white/90 px-3 py-2 rounded-md text-sm">
+            <span className="font-semibold">{sellerInfo.name}</span>
+            <span className="text-gray-600 ml-2">(Verkäufer) Nummer: {sellerInfo.sellerId}</span>
+          </div>
+        )}
+
         {/* Mobile Navigation Menu */}
         {isMenuOpen && (
           <nav className="md:hidden mt-4 pt-4 border-t border-yellow-600" id="mobile-menu">
