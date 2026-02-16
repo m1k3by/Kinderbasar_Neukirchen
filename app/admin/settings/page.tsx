@@ -200,7 +200,7 @@ export default function SettingsPage() {
                     </label>
                     <input
                       type="datetime-local"
-                      value={settings.pickup_end2 || ''}
+                      value={settings.registration_seller_end || ''}
                       onChange={(e) => setSettings({ ...settings, registration_seller_end: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
@@ -369,7 +369,7 @@ export default function SettingsPage() {
                       </label>
                       <input
                         type="datetime-local"
-                        value={settings.pickup_start2 || ''}
+                        value={settings.pickup_end2 || ''}
                         onChange={(e) => setSettings({ ...settings, pickup_end2: e.target.value })}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
