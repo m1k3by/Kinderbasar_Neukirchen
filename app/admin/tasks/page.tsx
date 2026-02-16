@@ -27,6 +27,14 @@ export default function TasksManagementPage() {
     capacity: 10,
   });
 
+  // Edit state
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingTaskData, setEditingTaskData] = useState({
+    title: '',
+    day: '',
+    capacity: 10,
+  });
+
   // Fetch tasks
   const fetchTasks = async () => {
     try {
@@ -94,6 +102,45 @@ export default function TasksManagementPage() {
     }
   };
 
+  // Start editing a task
+  const startEditing = (task: Task) => {
+    setEditingTaskId(task.id);
+    setEditingTaskData({
+      title: task.title,
+      day: task.day,
+      capacity: task.capacity,
+    });
+  };
+
+  // Cancel editing
+  const cancelEditing = () => {
+    setEditingTaskId(null);
+    setEditingTaskData({ title: '', day: '', capacity: 10 });
+  };
+
+  // Update task
+  const handleUpdate = async (id: string) => {
+    setError('');
+
+    try {
+      const response = await fetch('/api/tasks', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...editingTaskData }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to update task');
+      }
+
+      cancelEditing();
+      fetchTasks();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
       <Header 
@@ -117,7 +164,7 @@ export default function TasksManagementPage() {
         {/* Error Message */}
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-            ⚠️ {error}
+            {error}
           </div>
         )}
 
@@ -127,7 +174,7 @@ export default function TasksManagementPage() {
             onClick={() => setShowForm(!showForm)}
             className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow"
           >
-            {showForm ? '✕ Abbrechen' : '+ Neue Aufgabe'}
+            {showForm ? 'Abbrechen' : 'Neue Aufgabe'}
           </button>
         </div>
 
@@ -175,7 +222,7 @@ export default function TasksManagementPage() {
                   type="number"
                   required
                   min="1"
-                  max="50"
+                  max="150"
                   value={formData.capacity}
                   onChange={(e) => setFormData({ ...formData, capacity: parseInt(e.target.value) })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -187,7 +234,7 @@ export default function TasksManagementPage() {
                   type="submit"
                   className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
                 >
-                  ✓ Aufgabe anlegen
+                  Aufgabe anlegen
                 </button>
                 <button
                   type="button"
@@ -223,53 +270,121 @@ export default function TasksManagementPage() {
             <div className="divide-y divide-gray-200">
               {tasks.map((task) => (
                 <div key={task.id} className="p-4 md:p-6 hover:bg-gray-50 transition-colors">
-                  <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                        {task.title}
-                      </h3>
-                      <div className="flex flex-col md:flex-row md:gap-4 gap-2 text-sm text-gray-600 mb-3">
-                        <span className="inline-flex items-center">
-                          📅 <span className="ml-1 font-medium">{task.day}</span>
-                        </span>
-                        <span className="inline-flex items-center">
-                          👥 <span className="ml-1">{task._count?.signups || 0} / {task.capacity} Helfer</span>
-                        </span>
-                        <span className="inline-flex items-center">
-                          🕐 <span className="ml-1">Erstellt: {new Date(task.createdAt).toLocaleDateString('de-DE')}</span>
-                        </span>
+                  {editingTaskId === task.id ? (
+                    // Edit Mode
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Aufgabe / Schicht *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={editingTaskData.title}
+                          onChange={(e) => setEditingTaskData({ ...editingTaskData, title: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
                       </div>
-                      
-                      {/* Progress Bar */}
-                      <div className="w-full md:w-64">
-                        <div className="flex justify-between text-xs text-gray-600 mb-1">
-                          <span>Auslastung</span>
-                          <span>{Math.round(((task._count?.signups || 0) / task.capacity) * 100)}%</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className={`h-2 rounded-full transition-all ${
-                              (task._count?.signups || 0) >= task.capacity
-                                ? 'bg-red-500'
-                                : (task._count?.signups || 0) > task.capacity * 0.7
-                                ? 'bg-yellow-500'
-                                : 'bg-green-500'
-                            }`}
-                            style={{
-                              width: `${Math.min(((task._count?.signups || 0) / task.capacity) * 100, 100)}%`,
-                            }}
-                          ></div>
-                        </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Tag *
+                        </label>
+                        <select
+                          required
+                          value={editingTaskData.day}
+                          onChange={(e) => setEditingTaskData({ ...editingTaskData, day: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="Freitag">Freitag</option>
+                          <option value="Samstag">Samstag</option>
+                          <option value="Sonntag">Sonntag</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Kapazität (Anzahl Helfer) *
+                        </label>
+                        <input
+                          type="number"
+                          required
+                          min="1"
+                          max="50"
+                          value={editingTaskData.capacity}
+                          onChange={(e) => setEditingTaskData({ ...editingTaskData, capacity: parseInt(e.target.value) })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => handleUpdate(task.id)}
+                          className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+                        >
+                          Speichern
+                        </button>
+                        <button
+                          onClick={cancelEditing}
+                          className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-6 py-2 rounded-lg font-medium transition-colors"
+                        >
+                          Abbrechen
+                        </button>
                       </div>
                     </div>
+                  ) : (
+                    // View Mode
+                    <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                          {task.title}
+                        </h3>
+                        <div className="flex flex-col md:flex-row md:gap-4 gap-2 text-sm text-gray-600 mb-3">
+                          <span className="font-medium">{task.day}</span>
+                          <span className="inline-flex items-center">
+                            👥 <span className="ml-1">{task._count?.signups || 0} / {task.capacity} Helfer</span>
+                          </span>
+                        </div>
+                        
+                        {/* Progress Bar */}
+                        <div className="w-full md:w-64">
+                          <div className="flex justify-between text-xs text-gray-600 mb-1">
+                            <span>Auslastung</span>
+                            <span>{Math.round(((task._count?.signups || 0) / task.capacity) * 100)}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full transition-all ${
+                                (task._count?.signups || 0) >= task.capacity
+                                  ? 'bg-red-500'
+                                  : (task._count?.signups || 0) > task.capacity * 0.7
+                                  ? 'bg-yellow-500'
+                                  : 'bg-green-500'
+                              }`}
+                              style={{
+                                width: `${Math.min(((task._count?.signups || 0) / task.capacity) * 100, 100)}%`,
+                              }}
+                            ></div>
+                          </div>
+                        </div>
+                      </div>
 
-                    <button
-                      onClick={() => handleDelete(task.id)}
-                      className="w-full md:w-auto md:ml-4 bg-red-50 hover:bg-red-100 text-red-600 px-4 py-3 md:py-2 rounded-lg font-medium transition-colors text-base"
-                    >
-                      🗑️ Löschen
-                    </button>
-                  </div>
+                      <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
+                        <button
+                          onClick={() => startEditing(task)}
+                          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                        >
+                          Bearbeiten
+                        </button>
+                        <button
+                          onClick={() => handleDelete(task.id)}
+                          className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                        >
+                          Löschen
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

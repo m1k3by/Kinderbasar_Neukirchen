@@ -74,6 +74,53 @@ export async function POST(request: Request) {
   }
 }
 
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+    const { id, title, day, capacity } = body;
+
+    // Validate required fields
+    if (!id) {
+      return NextResponse.json(
+        { error: 'Task-ID fehlt' },
+        { status: 400 }
+      );
+    }
+
+    if (!title || !day || !capacity) {
+      return NextResponse.json(
+        { error: 'Fehlende Pflichtfelder: title, day, capacity' },
+        { status: 400 }
+      );
+    }
+
+    // Validate capacity is a positive number
+    if (typeof capacity !== 'number' || capacity <= 0) {
+      return NextResponse.json(
+        { error: 'Kapazität muss eine positive Zahl sein' },
+        { status: 400 }
+      );
+    }
+
+    const task = await prisma.task.update({
+      where: { id },
+      data: {
+        title,
+        day,
+        capacity,
+      },
+    });
+
+    return NextResponse.json(task);
+  } catch (error: any) {
+    console.error('Error updating task:', error);
+    return NextResponse.json(
+      { error: 'Fehler beim Aktualisieren der Aufgabe' },
+      { status: 500 }
+    );
+  }
+}
+
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
