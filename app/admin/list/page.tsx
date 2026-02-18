@@ -269,6 +269,7 @@ export default function AdminListPage() {
       const res = await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Ensure cookies are sent
         body: JSON.stringify(newUserData),
       });
 
