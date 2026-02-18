@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '../../lib/prisma';
 import { generateQR, generateBarcode } from '../../lib/qr';
 import { sendMail } from '../../lib/mail';
@@ -7,7 +7,7 @@ import fs from 'fs';
 import { rateLimit } from '../../lib/rateLimit';
 import bcrypt from 'bcrypt';
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { email, firstName, lastName, isEmployee } = body;
