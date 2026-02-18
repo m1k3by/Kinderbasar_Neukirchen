@@ -2,10 +2,12 @@ import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '../../lib/prisma';
 import { generateQR, generateBarcode } from '../../lib/qr';
 import { sendMail } from '../../lib/mail';
+import { env } from '../../lib/env';
 import path from 'path';
 import fs from 'fs';
 import { rateLimit } from '../../lib/rateLimit';
 import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,12 +19,15 @@ export async function POST(request: NextRequest) {
     let isAdmin = false;
     if (token) {
       try {
-        const jwt = require('jsonwebtoken');
-        const decoded: any = jwt.verify(token, process.env.JWT_SECRET);
+        const decoded: any = jwt.verify(token, env.JWT_SECRET);
         isAdmin = decoded.role === 'admin';
+        console.log('Admin check:', { isAdmin, role: decoded.role });
       } catch (e) {
+        console.log('Token verification failed:', e);
         // Invalid token, continue as non-admin
       }
+    } else {
+      console.log('No token found in cookies');
     }
 
     // Rate limiting: 5 registration attempts per 15 minutes per IP (skip for admin)
