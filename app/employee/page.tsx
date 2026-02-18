@@ -165,6 +165,29 @@ export default function EmployeePage() {
       const sellerIdInt = parseInt(sellerId, 10);
       const isSignedUp = task?.signups?.some(s => s.sellerId === sellerIdInt);
 
+      // Wenn User sich eintragen will (nicht austragen), prüfe auf Zeitüberschneidungen
+      if (!isSignedUp && task?.timeFrom && task?.timeTo) {
+        // Finde alle Tasks, für die der User bereits eingetragen ist
+        const mySignedUpTasks = tasks.filter(t => 
+          t.signups?.some(s => s.sellerId === sellerIdInt)
+        );
+
+        // Prüfe auf Überschneidungen
+        for (const signedTask of mySignedUpTasks) {
+          if (signedTask.day === task.day && signedTask.timeFrom && signedTask.timeTo) {
+            // Zeitüberschneidung: start1 < end2 UND start2 < end1
+            const hasOverlap = 
+              task.timeFrom < signedTask.timeTo && 
+              signedTask.timeFrom < task.timeTo;
+
+            if (hasOverlap) {
+              alert(`Eintragung nicht möglich!\n\nDu bist bereits für "${signedTask.title}" (${signedTask.timeFrom} - ${signedTask.timeTo}) am ${signedTask.day} eingetragen.`);
+              return; // Abbrechen
+            }
+          }
+        }
+      }
+
       // Optimistic UI update - sofort aktualisieren
       if (isSignedUp) {
         // Sofort aus Liste entfernen (optimistisch)
@@ -200,7 +223,7 @@ export default function EmployeePage() {
           // Bei Fehler: zurücksetzen
           loadData();
           const data = await res.json();
-          setMessage(data.error || 'Fehler beim Austragen');
+          alert(data.error || 'Fehler beim Austragen');
         }
       } else {
         const res = await fetch('/api/task-signups', {
@@ -215,7 +238,7 @@ export default function EmployeePage() {
           // Bei Fehler: zurücksetzen
           loadData();
           const data = await res.json();
-          setMessage(data.error || 'Fehler beim Eintragen');
+          alert(data.error || 'Fehler beim Eintragen');
         }
       }
 
@@ -223,8 +246,7 @@ export default function EmployeePage() {
     } catch (error) {
       console.error('Error toggling task:', error);
       loadData(); // Bei Fehler neu laden
-      setMessage('Fehler beim Aktualisieren');
-      setTimeout(() => setMessage(''), 2000);
+      alert('Fehler beim Aktualisieren');
     }
   }
 
