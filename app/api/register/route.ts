@@ -12,18 +12,33 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { email, firstName, lastName, isEmployee } = body;
 
-    // Rate limiting: 5 registration attempts per 15 minutes per IP
-    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
-    const rateLimitKey = `register:${ip}`;
-    
-    if (!rateLimit(rateLimitKey, { maxRequests: 5, windowMs: 15 * 60 * 1000 })) {
-      return NextResponse.json(
-        { error: 'Zu viele Registrierungsversuche. Bitte versuchen Sie es später erneut.' },
-        { status: 429 }
-      );
+    // Check if request is from admin (skip validations)
+    const token = request.cookies.get('token')?.value;
+    let isAdmin = false;
+    if (token) {
+      try {
+        const jwt = require('jsonwebtoken');
+        const decoded: any = jwt.verify(token, process.env.JWT_SECRET);
+        isAdmin = decoded.role === 'admin';
+      } catch (e) {
+        // Invalid token, continue as non-admin
+      }
     }
 
-    // Check registration periods
+    // Rate limiting: 5 registration attempts per 15 minutes per IP (skip for admin)
+    if (!isAdmin) {
+      const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
+      const rateLimitKey = `register:${ip}`;
+      
+      if (!rateLimit(rateLimitKey, { maxRequests: 5, windowMs: 15 * 60 * 1000 })) {
+        return NextResponse.json(
+          { error: 'Zu viele Registrierungsversuche. Bitte versuchen Sie es später erneut.' },
+          { status: 429 }
+        );
+      }
+    }
+
+    // Check registration periods (skip for admin)
     const settings = await prisma.settings.findMany();
     const settingsObj: Record<string, string> = {};
     settings.forEach(s => {
@@ -77,29 +92,31 @@ export async function POST(request: Request) {
 
     const now = new Date();
 
-    // Check if registration period is open for the given type
-    if (isEmployee) {
-      if (settingsObj.registration_employee_start && settingsObj.registration_employee_end) {
-        const start = parseAsGermanTime(settingsObj.registration_employee_start);
-        const end = parseAsGermanTime(settingsObj.registration_employee_end);
-        
-        if (now < start || now > end) {
-          return NextResponse.json(
-            { error: 'Die Mitarbeiter-Registrierung ist derzeit geschlossen.' },
-            { status: 403 }
-          );
+    // Check if registration period is open for the given type (skip for admin)
+    if (!isAdmin) {
+      if (isEmployee) {
+        if (settingsObj.registration_employee_start && settingsObj.registration_employee_end) {
+          const start = parseAsGermanTime(settingsObj.registration_employee_start);
+          const end = parseAsGermanTime(settingsObj.registration_employee_end);
+          
+          if (now < start || now > end) {
+            return NextResponse.json(
+              { error: 'Die Mitarbeiter-Registrierung ist derzeit geschlossen.' },
+              { status: 403 }
+            );
+          }
         }
-      }
-    } else {
-      if (settingsObj.registration_seller_start && settingsObj.registration_seller_end) {
-        const start = parseAsGermanTime(settingsObj.registration_seller_start);
-        const end = parseAsGermanTime(settingsObj.registration_seller_end);
-        
-        if (now < start || now > end) {
-          return NextResponse.json(
-            { error: 'Die Verkäufer-Registrierung ist derzeit geschlossen.' },
-            { status: 403 }
-          );
+      } else {
+        if (settingsObj.registration_seller_start && settingsObj.registration_seller_end) {
+          const start = parseAsGermanTime(settingsObj.registration_seller_start);
+          const end = parseAsGermanTime(settingsObj.registration_seller_end);
+          
+          if (now < start || now > end) {
+            return NextResponse.json(
+              { error: 'Die Verkäufer-Registrierung ist derzeit geschlossen.' },
+              { status: 403 }
+            );
+          }
         }
       }
     }

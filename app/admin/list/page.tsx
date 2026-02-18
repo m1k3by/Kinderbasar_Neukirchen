@@ -38,6 +38,7 @@ export default function AdminListPage() {
     isEmployee: false,
   });
   const [createUserLoading, setCreateUserLoading] = useState(false);
+  const [deleteUserId, setDeleteUserId] = useState<number | null>(null);
 
   useEffect(() => {
     loadSellers();
@@ -292,6 +293,35 @@ export default function AdminListPage() {
     }
   }
 
+  async function deleteUser(sellerId: number | null = deleteUserId) {
+    if (!sellerId) return;
+
+    try {
+      const res = await fetch('/api/admin/delete-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sellerId }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setMessage(data.message);
+        setTimeout(() => setMessage(''), 5000);
+        loadSellers();
+      } else {
+        const data = await res.json();
+        setMessage('Fehler: ' + (data.error || 'Unbekannter Fehler'));
+        setTimeout(() => setMessage(''), 5000);
+      }
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      setMessage('Fehler beim Löschen des Benutzers');
+      setTimeout(() => setMessage(''), 5000);
+    } finally {
+      setDeleteUserId(null);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-100">
       <Header 
@@ -411,6 +441,30 @@ export default function AdminListPage() {
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
                   Ja, zurücksetzen
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete User Confirmation Modal */}
+        {deleteUserId && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full">
+              <h3 className="text-xl font-bold mb-4 text-red-600">Benutzer löschen?</h3>
+              <p className="mb-6 text-gray-800">Möchten Sie diesen Benutzer wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden!</p>
+              <div className="flex justify-end gap-4">
+                <button
+                  onClick={() => setDeleteUserId(null)}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={() => deleteUser()}
+                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                >
+                  Ja, löschen
                 </button>
               </div>
             </div>
@@ -601,7 +655,7 @@ export default function AdminListPage() {
                   >
                     E-Mail{getSortIcon('email')}
                   </th>
-                  <th className="w-32 px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="w-44 px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Aktionen
                   </th>
                 </tr>
@@ -682,6 +736,13 @@ export default function AdminListPage() {
                             title="Passwort zurücksetzen und per E-Mail senden"
                           >
                             PW↻
+                          </button>
+                          <button
+                            onClick={() => setDeleteUserId(seller.sellerId)}
+                            className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-medium transition-colors"
+                            title="Benutzer löschen"
+                          >
+                            Lösch
                           </button>
                         </div>
                       </td>
