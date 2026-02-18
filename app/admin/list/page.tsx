@@ -29,6 +29,15 @@ export default function AdminListPage() {
   const [message, setMessage] = useState('');
   const [showResetConfirm1, setShowResetConfirm1] = useState(false);
   const [showResetConfirm2, setShowResetConfirm2] = useState(false);
+  const [resetPasswordSellerId, setResetPasswordSellerId] = useState<number | null>(null);
+  const [showCreateUserModal, setShowCreateUserModal] = useState(false);
+  const [newUserData, setNewUserData] = useState({
+    email: '',
+    firstName: '',
+    lastName: '',
+    isEmployee: false,
+  });
+  const [createUserLoading, setCreateUserLoading] = useState(false);
 
   useEffect(() => {
     loadSellers();
@@ -196,10 +205,8 @@ export default function AdminListPage() {
     }
   }
 
-  async function resetPassword(sellerId: number) {
-    if (!confirm('Möchten Sie wirklich das Passwort für diesen Benutzer zurücksetzen?')) {
-      return;
-    }
+  async function resetPassword(sellerId: number | null = resetPasswordSellerId) {
+    if (!sellerId) return;
 
     try {
       const res = await fetch('/api/admin/reset-password', {
@@ -221,6 +228,8 @@ export default function AdminListPage() {
       console.error('Error resetting password:', error);
       setMessage('Fehler beim Zurücksetzen des Passworts');
       setTimeout(() => setMessage(''), 5000);
+    } finally {
+      setResetPasswordSellerId(null);
     }
   }
 
@@ -243,6 +252,43 @@ export default function AdminListPage() {
     } catch (err) {
       setMessage('Ein Fehler ist aufgetreten.');
       setTimeout(() => setMessage(''), 5000);
+    }
+  }
+
+  async function handleCreateUser() {
+    if (!newUserData.email || !newUserData.firstName || !newUserData.lastName) {
+      setMessage('Bitte alle Felder ausfüllen');
+      setTimeout(() => setMessage(''), 3000);
+      return;
+    }
+
+    setCreateUserLoading(true);
+
+    try {
+      const res = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUserData),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setMessage(`Benutzer erfolgreich angelegt! Verkäufer-Nr: ${data.sellerId}. Login-Daten wurden per E-Mail versendet.`);
+        setShowCreateUserModal(false);
+        setNewUserData({ email: '', firstName: '', lastName: '', isEmployee: false });
+        setTimeout(() => setMessage(''), 5000);
+        loadSellers();
+      } else {
+        setMessage('Fehler: ' + (data.error || 'Ein Fehler ist aufgetreten'));
+        setTimeout(() => setMessage(''), 5000);
+      }
+    } catch (error) {
+      console.error('Error creating user:', error);
+      setMessage('Fehler beim Anlegen des Benutzers');
+      setTimeout(() => setMessage(''), 5000);
+    } finally {
+      setCreateUserLoading(false);
     }
   }
 
@@ -269,17 +315,30 @@ export default function AdminListPage() {
         <div className="mb-8 bg-white rounded-lg shadow-md p-6">
           <h2 className="text-2xl font-bold text-gray-800 mb-4">Globale Aktionen</h2>
           
-          <div className="flex flex-col items-start space-y-4">
-            <p className="text-gray-600">
-              Setzen Sie den Status aller Verkäufer (inkl. Mitarbeiter) auf "Inaktiv".
-            </p>
+          <div className="flex flex-col md:flex-row items-start gap-4">
+            <div className="flex-1">
+              <p className="text-gray-600 mb-2">
+                Setzen Sie den Status aller Verkäufer (inkl. Mitarbeiter) auf "Inaktiv".
+              </p>
+              <button
+                onClick={() => setShowResetConfirm1(true)}
+                className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
+              >
+                Alle Verkäufer Status zurücksetzen
+              </button>
+            </div>
             
-            <button
-              onClick={() => setShowResetConfirm1(true)}
-              className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
-            >
-              Alle Verkäufer Status zurücksetzen
-            </button>
+            <div className="flex-1">
+              <p className="text-gray-600 mb-2">
+                Neuen Verkäufer oder Mitarbeiter anlegen.
+              </p>
+              <button
+                onClick={() => setShowCreateUserModal(true)}
+                className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+              >
+                Neuer User anlegen
+              </button>
+            </div>
           </div>
         </div>
 
@@ -315,7 +374,7 @@ export default function AdminListPage() {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full border-4 border-red-500">
               <h3 className="text-xl font-bold mb-4 text-red-600">Wirklich wirklich?</h3>
-              <p className="mb-6 font-bold">Dies kann nicht rückgängig gemacht werden!</p>
+              <p className="mb-6 font-bold text-gray-800">Dies kann nicht rückgängig gemacht werden!</p>
               <div className="flex justify-end gap-4">
                 <button
                   onClick={() => setShowResetConfirm2(false)}
@@ -328,6 +387,118 @@ export default function AdminListPage() {
                   className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 font-bold"
                 >
                   JA, ALLES ZURÜCKSETZEN
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Password Reset Confirmation Modal */}
+        {resetPasswordSellerId && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full">
+              <h3 className="text-xl font-bold mb-4 text-gray-800">Passwort zurücksetzen?</h3>
+              <p className="mb-6 text-gray-800">Das neue Passwort wird per E-Mail gesendet.</p>
+              <div className="flex justify-end gap-4">
+                <button
+                  onClick={() => setResetPasswordSellerId(null)}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={() => resetPassword()}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Ja, zurücksetzen
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Create User Modal */}
+        {showCreateUserModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full">
+              <h3 className="text-xl font-bold mb-4 text-gray-800">Neuer User anlegen</h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    E-Mail *
+                  </label>
+                  <input
+                    type="email"
+                    value={newUserData.email}
+                    onChange={(e) => setNewUserData({ ...newUserData, email: e.target.value })}
+                    className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
+                    placeholder="email@beispiel.de"
+                    disabled={createUserLoading}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Vorname *
+                  </label>
+                  <input
+                    type="text"
+                    value={newUserData.firstName}
+                    onChange={(e) => setNewUserData({ ...newUserData, firstName: e.target.value })}
+                    className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
+                    placeholder="Max"
+                    disabled={createUserLoading}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Nachname *
+                  </label>
+                  <input
+                    type="text"
+                    value={newUserData.lastName}
+                    onChange={(e) => setNewUserData({ ...newUserData, lastName: e.target.value })}
+                    className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
+                    placeholder="Mustermann"
+                    disabled={createUserLoading}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Rolle *
+                  </label>
+                  <select
+                    value={newUserData.isEmployee ? 'employee' : 'seller'}
+                    onChange={(e) => setNewUserData({ ...newUserData, isEmployee: e.target.value === 'employee' })}
+                    className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
+                    disabled={createUserLoading}
+                  >
+                    <option value="seller">Verkäufer</option>
+                    <option value="employee">Mitarbeiter</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-4 mt-6">
+                <button
+                  onClick={() => {
+                    setShowCreateUserModal(false);
+                    setNewUserData({ email: '', firstName: '', lastName: '', isEmployee: false });
+                  }}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                  disabled={createUserLoading}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={handleCreateUser}
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400"
+                  disabled={createUserLoading}
+                >
+                  {createUserLoading ? 'Anlegen...' : 'Anlegen'}
                 </button>
               </div>
             </div>
@@ -506,7 +677,7 @@ export default function AdminListPage() {
                             {seller.sellerStatusActive ? 'Deakt' : 'Akt'}
                           </button>
                           <button
-                            onClick={() => resetPassword(seller.sellerId)}
+                            onClick={() => setResetPasswordSellerId(seller.sellerId)}
                             className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-medium transition-colors"
                             title="Passwort zurücksetzen und per E-Mail senden"
                           >
