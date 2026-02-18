@@ -43,6 +43,9 @@ export default function TasksManagementPage() {
 
   // Clear signups state
   const [showClearSignupsConfirm, setShowClearSignupsConfirm] = useState(false);
+  
+  // Clear cakes state
+  const [showClearCakesConfirm, setShowClearCakesConfirm] = useState(false);
 
   // Fetch tasks
   const fetchTasks = async () => {
@@ -135,6 +138,29 @@ export default function TasksManagementPage() {
     }
   };
 
+  // Clear all cakes
+  const handleClearCakes = async () => {
+    try {
+      setError('');
+      const response = await fetch('/api/admin/clear-cakes', {
+        method: 'POST',
+      });
+      
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Fehler beim Löschen');
+      }
+      
+      const data = await response.json();
+      setError('');
+      alert(data.message);
+      setShowClearCakesConfirm(false);
+    } catch (err: any) {
+      setError(err.message);
+      setShowClearCakesConfirm(false);
+    }
+  };
+
   // Start editing a task
   const startEditing = (task: Task) => {
     setEditingTaskId(task.id);
@@ -217,6 +243,13 @@ export default function TasksManagementPage() {
             className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow"
           >
             Alle Anmeldungen löschen
+          </button>
+          
+          <button
+            onClick={() => setShowClearCakesConfirm(true)}
+            className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow"
+          >
+            Alle Kuchen löschen
           </button>
         </div>
 
@@ -515,6 +548,35 @@ export default function TasksManagementPage() {
                 <button
                   onClick={handleClearSignups}
                   className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                >
+                  Ja, alle löschen
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Clear Cakes Confirmation Modal */}
+        {showClearCakesConfirm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full">
+              <h3 className="text-xl font-bold mb-4 text-orange-600">Alle Kuchen löschen?</h3>
+              <p className="mb-6 text-gray-800">
+                Möchten Sie wirklich alle Kuchen-Einträge löschen?
+              </p>
+              <p className="mb-6 text-sm text-gray-600">
+                Diese Aktion kann nicht rückgängig gemacht werden!
+              </p>
+              <div className="flex justify-end gap-4">
+                <button
+                  onClick={() => setShowClearCakesConfirm(false)}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={handleClearCakes}
+                  className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
                 >
                   Ja, alle löschen
                 </button>
