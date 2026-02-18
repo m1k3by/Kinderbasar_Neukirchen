@@ -32,19 +32,54 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Prüfen ob noch Platz ist
-    const task = await prisma.task.findUnique({
+    // Hole die Aufgabe, für die sich der User anmelden will
+    const targetTask = await prisma.task.findUnique({
       where: { id: taskId },
       include: {
         signups: true,
       },
     });
 
-    if (!task) {
+    if (!targetTask) {
       return NextResponse.json({ error: 'Aufgabe nicht gefunden' }, { status: 404 });
     }
 
-    if (task.signups.length >= task.capacity) {
+    // Prüfen auf zeitliche Überschneidungen mit bereits angemeldeten Aufgaben
+    if (targetTask.timeFrom && targetTask.timeTo) {
+      // Hole alle Aufgaben, für die der User bereits angemeldet ist
+      const userSignups = await prisma.taskSignup.findMany({
+        where: { sellerId: sellerIdInt },
+        include: { task: true },
+      });
+
+      // Prüfe jede Aufgabe auf Überschneidung
+      for (const signup of userSignups) {
+        const existingTask = signup.task;
+        
+        // Prüfen: Gleicher Tag?
+        if (existingTask.day === targetTask.day) {
+          // Prüfen: Zeitüberschneidung?
+          if (existingTask.timeFrom && existingTask.timeTo) {
+            // Zwei Zeiträume überschneiden sich wenn: start1 < end2 UND start2 < end1
+            const hasOverlap = 
+              targetTask.timeFrom < existingTask.timeTo && 
+              existingTask.timeFrom < targetTask.timeTo;
+
+            if (hasOverlap) {
+              return NextResponse.json(
+                { 
+                  error: `Eintragung nicht möglich! Du hast dich bereits für "${existingTask.title}" (${existingTask.timeFrom} - ${existingTask.timeTo}) am ${existingTask.day} eingetragen.` 
+                },
+                { status: 400 }
+              );
+            }
+          }
+        }
+      }
+    }
+
+    // Prüfen ob noch Platz ist
+    if (targetTask.signups.length >= targetTask.capacity) {
       return NextResponse.json({ error: 'Keine Plätze mehr verfügbar' }, { status: 400 });
     }
 

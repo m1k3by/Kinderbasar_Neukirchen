@@ -717,7 +717,7 @@ export default function AdminListPage() {
                             className="px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-gray-800 rounded text-xs font-medium transition-colors"
                             title={seller.isEmployee ? 'Zu Verkäufer machen' : 'Zu Mitarbeiter machen'}
                           >
-                            {seller.isEmployee ? '→V' : '→M'}
+                            {seller.isEmployee ? '→VK' : '→MA'}
                           </button>
                           <button
                             onClick={() => toggleSellerStatus(seller.sellerId)}
@@ -742,7 +742,7 @@ export default function AdminListPage() {
                             className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-medium transition-colors"
                             title="Benutzer löschen"
                           >
-                            Lösch
+                            DEL
                           </button>
                         </div>
                       </td>
