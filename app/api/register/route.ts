@@ -12,30 +12,23 @@ import jwt from 'jsonwebtoken';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email, firstName, lastName, isEmployee } = body;
-
-    console.log('=== REGISTER API CALLED ===');
-    console.log('Request headers:', request.headers.get('cookie'));
+    let { email, firstName, lastName, isEmployee } = body;
+    
+    // Normalize email to lowercase for case-insensitive comparison
+    email = email?.toLowerCase();
 
     // Check if request is from admin (skip validations)
     const token = request.cookies.get('token')?.value;
-    console.log('Token from cookies:', token ? 'EXISTS' : 'MISSING');
     
     let isAdmin = false;
     if (token) {
       try {
         const decoded: any = jwt.verify(token, env.JWT_SECRET);
         isAdmin = decoded.role === 'admin';
-        console.log('✓ Admin check SUCCESS:', { isAdmin, role: decoded.role });
       } catch (e) {
-        console.log('✗ Token verification FAILED:', e);
         // Invalid token, continue as non-admin
       }
-    } else {
-      console.log('✗ No token found in cookies');
     }
-
-    console.log('Final isAdmin value:', isAdmin);
 
     // Rate limiting: 5 registration attempts per 15 minutes per IP (skip for admin)
     if (!isAdmin) {
@@ -105,16 +98,13 @@ export async function POST(request: NextRequest) {
     const now = new Date();
 
     // Check if registration period is open for the given type (skip for admin)
-    console.log('About to check registration periods. isAdmin:', isAdmin);
     if (!isAdmin) {
-      console.log('→ Checking registration periods (not admin)');
       if (isEmployee) {
         if (settingsObj.registration_employee_start && settingsObj.registration_employee_end) {
           const start = parseAsGermanTime(settingsObj.registration_employee_start);
           const end = parseAsGermanTime(settingsObj.registration_employee_end);
           
           if (now < start || now > end) {
-            console.log('✗ Employee registration CLOSED');
             return NextResponse.json(
               { error: 'Die Mitarbeiter-Registrierung ist derzeit geschlossen.' },
               { status: 403 }
@@ -127,7 +117,6 @@ export async function POST(request: NextRequest) {
           const end = parseAsGermanTime(settingsObj.registration_seller_end);
           
           if (now < start || now > end) {
-            console.log('✗ Seller registration CLOSED');
             return NextResponse.json(
               { error: 'Die Verkäufer-Registrierung ist derzeit geschlossen.' },
               { status: 403 }
@@ -135,8 +124,6 @@ export async function POST(request: NextRequest) {
           }
         }
       }
-    } else {
-      console.log('→ Skipping registration period check (ADMIN)');
     }
 
     // Validate required fields

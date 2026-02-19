@@ -7,7 +7,10 @@ import bcrypt from 'bcrypt';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { email, password } = body;
+    let { email, password } = body;
+    
+    // Normalize email to lowercase for case-insensitive comparison
+    email = email?.toLowerCase();
 
     // Rate limiting: 10 login attempts per 15 minutes per IP
     const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
@@ -20,8 +23,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check for admin login
-    if (email === process.env.ADMIN_USER && password === process.env.ADMIN_PASS) {
+    // Check for admin login (case-insensitive)
+    if (email === process.env.ADMIN_USER?.toLowerCase() && password === process.env.ADMIN_PASS) {
       const token = createToken({ role: 'admin' });
       const response = NextResponse.json({ success: true, role: 'admin' });
       response.cookies.set('token', token, { httpOnly: true });
