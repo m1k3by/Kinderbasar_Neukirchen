@@ -39,6 +39,15 @@ export default function AdminListPage() {
   });
   const [createUserLoading, setCreateUserLoading] = useState(false);
   const [deleteUserId, setDeleteUserId] = useState<number | null>(null);
+  const [showEditUserModal, setShowEditUserModal] = useState(false);
+  const [editUserData, setEditUserData] = useState<{
+    sellerId: number;
+    email: string;
+    firstName: string;
+    lastName: string;
+    isEmployee: boolean;
+  } | null>(null);
+  const [editUserLoading, setEditUserLoading] = useState(false);
 
   useEffect(() => {
     loadSellers();
@@ -323,6 +332,56 @@ export default function AdminListPage() {
     }
   }
 
+  function openEditModal(seller: Seller) {
+    setEditUserData({
+      sellerId: seller.sellerId,
+      email: seller.email,
+      firstName: seller.firstName,
+      lastName: seller.lastName,
+      isEmployee: seller.isEmployee,
+    });
+    setShowEditUserModal(true);
+  }
+
+  async function handleEditUser() {
+    if (!editUserData) return;
+
+    if (!editUserData.email || !editUserData.firstName || !editUserData.lastName) {
+      setMessage('Bitte alle Felder ausfüllen');
+      setTimeout(() => setMessage(''), 3000);
+      return;
+    }
+
+    setEditUserLoading(true);
+
+    try {
+      const res = await fetch('/api/admin/edit-user', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editUserData),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setMessage(`Benutzer erfolgreich aktualisiert!`);
+        setShowEditUserModal(false);
+        setEditUserData(null);
+        setTimeout(() => setMessage(''), 5000);
+        loadSellers();
+      } else {
+        setMessage('Fehler: ' + (data.error || 'Ein Fehler ist aufgetreten'));
+        setTimeout(() => setMessage(''), 5000);
+      }
+    } catch (error) {
+      console.error('Error editing user:', error);
+      setMessage('Fehler beim Bearbeiten des Benutzers');
+      setTimeout(() => setMessage(''), 5000);
+    } finally {
+      setEditUserLoading(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-100">
       <Header 
@@ -466,6 +525,80 @@ export default function AdminListPage() {
                   className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
                 >
                   Ja, löschen
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit User Modal */}
+        {showEditUserModal && editUserData && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full">
+              <h3 className="text-xl font-bold mb-4">Benutzer bearbeiten (#{editUserData.sellerId})</h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">E-Mail</label>
+                  <input
+                    type="email"
+                    value={editUserData.email}
+                    onChange={(e) => setEditUserData({ ...editUserData, email: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Vorname</label>
+                  <input
+                    type="text"
+                    value={editUserData.firstName}
+                    onChange={(e) => setEditUserData({ ...editUserData, firstName: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nachname</label>
+                  <input
+                    type="text"
+                    value={editUserData.lastName}
+                    onChange={(e) => setEditUserData({ ...editUserData, lastName: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="edit-isEmployee"
+                    checked={editUserData.isEmployee}
+                    onChange={(e) => setEditUserData({ ...editUserData, isEmployee: e.target.checked })}
+                    className="mr-2 h-4 w-4"
+                  />
+                  <label htmlFor="edit-isEmployee" className="text-sm font-medium text-gray-700">
+                    Mitarbeiter (sonst Verkäufer)
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-4 mt-6">
+                <button
+                  onClick={() => {
+                    setShowEditUserModal(false);
+                    setEditUserData(null);
+                  }}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                  disabled={editUserLoading}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={handleEditUser}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400"
+                  disabled={editUserLoading}
+                >
+                  {editUserLoading ? 'Speichern...' : 'Speichern'}
                 </button>
               </div>
             </div>
@@ -712,7 +845,14 @@ export default function AdminListPage() {
                         {seller.email}
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap text-sm">
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 flex-wrap">
+                          <button
+                            onClick={() => openEditModal(seller)}
+                            className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-medium transition-colors"
+                            title="Benutzer bearbeiten"
+                          >
+                            Edit
+                          </button>
                           <button
                             onClick={() => toggleEmployeeStatus(seller.sellerId)}
                             className="px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-gray-800 rounded text-xs font-medium transition-colors"
