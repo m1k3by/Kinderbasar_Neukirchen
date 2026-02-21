@@ -12,10 +12,12 @@ import jwt from 'jsonwebtoken';
 export async function POST(request: NextRequest) {
   const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
   const userAgent = request.headers.get('user-agent') || 'unknown';
+  let email: string | undefined;
   
   try {
     const body = await request.json();
-    let { email, firstName, lastName, isEmployee } = body;
+    let { email: emailInput, firstName, lastName, isEmployee } = body;
+    email = emailInput;
     
     console.log('[REGISTER] Attempt:', {
       email: email ? email.substring(0, 3) + '***' : 'undefined',
