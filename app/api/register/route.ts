@@ -10,9 +10,22 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 
 export async function POST(request: NextRequest) {
+  const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
+  const userAgent = request.headers.get('user-agent') || 'unknown';
+  
   try {
     const body = await request.json();
     let { email, firstName, lastName, isEmployee } = body;
+    
+    console.log('[REGISTER] Attempt:', {
+      email: email ? email.substring(0, 3) + '***' : 'undefined',
+      firstName: firstName ? firstName.substring(0, 1) + '***' : 'undefined',
+      lastName: lastName ? lastName.substring(0, 1) + '***' : 'undefined',
+      isEmployee: !!isEmployee,
+      ip,
+      userAgent: userAgent.substring(0, 50),
+      timestamp: new Date().toISOString()
+    });
     
     // Normalize email to lowercase for case-insensitive comparison
     email = email?.toLowerCase();
@@ -32,10 +45,10 @@ export async function POST(request: NextRequest) {
 
     // Rate limiting: 5 registration attempts per 15 minutes per IP (skip for admin)
     if (!isAdmin) {
-      const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
       const rateLimitKey = `register:${ip}`;
       
       if (!rateLimit(rateLimitKey, { maxRequests: 5, windowMs: 15 * 60 * 1000 })) {
+        console.log('[REGISTER] Rate limit exceeded:', { email: email?.substring(0, 3) + '***', ip });
         return NextResponse.json(
           { error: 'Zu viele Registrierungsversuche. Bitte versuchen Sie es später erneut.' },
           { status: 429 }
@@ -105,6 +118,12 @@ export async function POST(request: NextRequest) {
           const end = parseAsGermanTime(settingsObj.registration_employee_end);
           
           if (now < start || now > end) {
+            console.log('[REGISTER] Failed: Employee registration period closed', { 
+              now: now.toISOString(),
+              start: start.toISOString(),
+              end: end.toISOString(),
+              ip 
+            });
             return NextResponse.json(
               { error: 'Die Mitarbeiter-Registrierung ist derzeit geschlossen.' },
               { status: 403 }
@@ -117,6 +136,12 @@ export async function POST(request: NextRequest) {
           const end = parseAsGermanTime(settingsObj.registration_seller_end);
           
           if (now < start || now > end) {
+            console.log('[REGISTER] Failed: Seller registration period closed', { 
+              now: now.toISOString(),
+              start: start.toISOString(),
+              end: end.toISOString(),
+              ip 
+            });
             return NextResponse.json(
               { error: 'Die Verkäufer-Registrierung ist derzeit geschlossen.' },
               { status: 403 }
@@ -128,6 +153,12 @@ export async function POST(request: NextRequest) {
 
     // Validate required fields
     if (!email || !firstName || !lastName) {
+      console.log('[REGISTER] Failed: Missing fields', { 
+        hasEmail: !!email, 
+        hasFirstName: !!firstName, 
+        hasLastName: !!lastName,
+        ip 
+      });
       return NextResponse.json(
         { error: 'Fehlende Pflichtfelder: email, firstName, lastName' },
         { status: 400 }
@@ -137,6 +168,7 @@ export async function POST(request: NextRequest) {
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
+      console.log('[REGISTER] Failed: Invalid email format', { email: email?.substring(0, 3) + '***', ip });
       return NextResponse.json(
         { error: 'Ungültige E-Mail Adresse' },
         { status: 400 }
@@ -149,6 +181,11 @@ export async function POST(request: NextRequest) {
     });
 
     if (existingSeller) {
+      console.log('[REGISTER] Failed: Email already exists', { 
+        email: email?.substring(0, 3) + '***', 
+        existingSellerId: existingSeller.sellerId,
+        ip 
+      });
       return NextResponse.json(
         { error: 'Diese E-Mail Adresse ist bereits registriert' },
         { status: 400 }
@@ -175,16 +212,23 @@ export async function POST(request: NextRequest) {
     
     let sellerId = null;
     
-    // First, try to find the next available ID starting from 1000
-    for (let id = 1000; id <= 9999; id++) {
-      if (!existingIds.has(id)) {
-        sellerId = id;
-        break;
+    // First, try 10er numbers (ending in 0): 1010, 1020, 1030, ..., 9990
+    // Then fill in ones place: 1011, 1021, 1031, etc.
+    // Priority order: first all ending in 0, then 1, then 2, etc.
+    for (let lastDigit = 0; lastDigit <= 9; lastDigit++) {
+      for (let base = 100; base <= 999; base++) {
+        const id = base * 10 + lastDigit;
+        if (id >= 1000 && id <= 9999 && !existingIds.has(id)) {
+          sellerId = id;
+          break;
+        }
       }
+      if (sellerId !== null) break;
     }
     
     // If no ID available (all 9000 IDs are used)
     if (sellerId === null) {
+      console.log('[REGISTER] Failed: All IDs used', { totalExisting: existingIds.size, ip });
       return NextResponse.json(
         { error: 'Alle Verkäufer-IDs sind vergeben (1000-9999). Keine weiteren Registrierungen möglich.' },
         { status: 400 }
@@ -341,9 +385,21 @@ export async function POST(request: NextRequest) {
       // Send email with attachments if any
       await sendMail(email, 'Ihre Registrierung beim Kinderbasar Neukirchen', emailHtml, attachments);
     } catch (emailError) {
-      console.error('Email sending failed:', emailError);
+      console.error('[REGISTER] Email sending failed:', { 
+        sellerId, 
+        email: email?.substring(0, 3) + '***',
+        error: emailError,
+        ip
+      });
       // Don't return error to client, registration was successful
     }
+
+    console.log('[REGISTER] Success:', { 
+      sellerId, 
+      email: email?.substring(0, 3) + '***',
+      isEmployee: !!isEmployee,
+      ip 
+    });
 
     return NextResponse.json({ 
       success: true, 
@@ -352,7 +408,13 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('Registration error:', error);
+    console.error('[REGISTER] Exception:', { 
+      error: error.message,
+      code: error.code,
+      stack: error.stack?.substring(0, 200),
+      email: email?.substring(0, 3) + '***',
+      ip
+    });
 
     if (error.code === 'P2002') {
       return NextResponse.json(

@@ -12,6 +12,10 @@ interface Settings {
   registration_seller_end?: string;
   registration_employee_start?: string;
   registration_employee_end?: string;
+  activation_seller_start?: string;
+  activation_seller_end?: string;
+  activation_employee_start?: string;
+  activation_employee_end?: string;
   delivery_start?: string;
   delivery_end?: string;
   delivery_start2?: string;
@@ -240,6 +244,78 @@ export default function SettingsPage() {
                 </div>
                 <p className="mt-2 text-xs text-gray-500">
                   Die Mitarbeiter-Registrierung wird nur in diesem Zeitraum auf der Startseite angezeigt.
+                </p>
+              </div>
+            </div>
+
+            {/* Activation Periods */}
+            <div className="mt-8 pt-8 border-t border-gray-300">
+              <h2 className="text-xl font-bold text-gray-800 mb-6">Aktivierungszeiträume</h2>
+              <p className="text-sm text-gray-600 mb-4">
+                Nur während dieser Zeiträume können sich Verkäufer und Mitarbeiter selbst aktiv schalten.
+              </p>
+              
+              {/* Seller Activation Period */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-700 mb-3">Verkäufer-Aktivierung</h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Von (Datum + Uhrzeit)
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={settings.activation_seller_start || ''}
+                      onChange={(e) => setSettings({ ...settings, activation_seller_start: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Bis (Datum + Uhrzeit)
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={settings.activation_seller_end || ''}
+                      onChange={(e) => setSettings({ ...settings, activation_seller_end: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  Verkäufer können sich nur in diesem Zeitraum aktiv schalten.
+                </p>
+              </div>
+
+              {/* Employee Activation Period */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-700 mb-3">Mitarbeiter-Aktivierung</h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Von (Datum + Uhrzeit)
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={settings.activation_employee_start || ''}
+                      onChange={(e) => setSettings({ ...settings, activation_employee_start: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Bis (Datum + Uhrzeit)
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={settings.activation_employee_end || ''}
+                      onChange={(e) => setSettings({ ...settings, activation_employee_end: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  Mitarbeiter können sich nur in diesem Zeitraum aktiv schalten.
                 </p>
               </div>
             </div>
