@@ -93,7 +93,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const sales = await prisma.sale.findMany({
       where: { basarId, isCancelled: false },
       include: {
-        article: { include: { basarSeller: { select: { sellerNumber: true } } } },
+        article: { include: { basarSeller: { select: { sellerId: true } } } },
       },
       orderBy: { soldAt: 'desc' },
     });

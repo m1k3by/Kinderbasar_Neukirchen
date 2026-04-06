@@ -22,7 +22,6 @@ interface Basar {
 interface BasarSellerEntry {
   id: string;
   sellerId: number;
-  sellerNumber: number;
   seller: { sellerId: number; firstName: string; lastName: string; email: string; sellerStatusActive: boolean };
   _count: { articles: number };
 }
@@ -112,7 +111,7 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
     bs.seller.firstName.toLowerCase().includes(search.toLowerCase()) ||
     bs.seller.lastName.toLowerCase().includes(search.toLowerCase()) ||
     bs.seller.email.toLowerCase().includes(search.toLowerCase()) ||
-    String(bs.sellerNumber).includes(search)
+    String(bs.seller.sellerId).includes(search)
   );
 
   if (loading) return (
@@ -276,7 +275,7 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
                   <tbody className="divide-y divide-gray-100">
                     {filteredSellers.map(bs => (
                       <tr key={bs.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-bold text-gray-700">#{bs.sellerNumber}</td>
+                        <td className="px-4 py-3 font-bold text-gray-700">#{bs.seller.sellerId}</td>
                         <td className="px-4 py-3 text-gray-800">{bs.seller.firstName} {bs.seller.lastName}
                           <span className={`ml-2 text-xs px-1.5 py-0.5 rounded ${bs.seller.sellerStatusActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                             {bs.seller.sellerStatusActive ? 'aktiv' : 'inaktiv'}

@@ -104,7 +104,6 @@ model BasarSeller {
   id                  String    @id @default(cuid())
   basarId             String
   sellerId            Int
-  sellerNumber        Int
   maxArticlesOverride Int?
   commissionOverride  Decimal?  @db.Decimal(5, 2)
   createdAt           DateTime  @default(now())
@@ -114,7 +113,6 @@ model BasarSeller {
   settlement          Settlement?
 
   @@unique([basarId, sellerId])
-  @@unique([basarId, sellerNumber])
 }
 
 model Article {

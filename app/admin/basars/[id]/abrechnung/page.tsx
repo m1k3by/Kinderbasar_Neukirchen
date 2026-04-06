@@ -14,7 +14,6 @@ interface Settlement {
   netPayout: number;
   generatedAt: string;
   basarSeller: {
-    sellerNumber: number;
     seller: { firstName: string; lastName: string; sellerId: number };
     _count?: { articles: number };
   };
@@ -78,13 +77,13 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
     try {
       const { jsPDF } = await import('jspdf');
       const doc = new jsPDF({ orientation: 'portrait', format: 'a4' });
-      const { sellerNumber, seller } = settlement.basarSeller;
+      const { seller } = settlement.basarSeller;
 
       doc.setFontSize(20);
       doc.text('Abrechnung Kinderbasar', 20, 20);
       doc.setFontSize(12);
       doc.text(basar?.title ?? '', 20, 30);
-      doc.text(`Verkäufer #${sellerNumber}: ${seller.firstName} ${seller.lastName}`, 20, 40);
+      doc.text(`Verkäufer #${seller.sellerId}: ${seller.firstName} ${seller.lastName}`, 20, 40);
       doc.text(`Erstellt: ${new Date(settlement.generatedAt).toLocaleDateString('de-DE')}`, 20, 48);
 
       doc.setFillColor(240, 240, 240);
@@ -102,7 +101,7 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
       doc.text('Netto-Auszahlung:', 20, 108);
       doc.text(`${Number(settlement.netPayout).toFixed(2)} €`, 170, 108, { align: 'right' });
 
-      doc.save(`Abrechnung-${sellerNumber}-${seller.lastName}.pdf`);
+      doc.save(`Abrechnung-${seller.sellerId}-${seller.lastName}.pdf`);
     } catch (err) {
       console.error('PDF error:', err);
       setMessage('Fehler beim Erstellen des PDFs');
@@ -196,7 +195,7 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
                 <tbody className="divide-y divide-gray-100">
                   {settlements.map(s => (
                     <tr key={s.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-bold text-gray-700">#{s.basarSeller.sellerNumber}</td>
+                      <td className="px-4 py-3 font-bold text-gray-700">#{s.basarSeller.seller.sellerId}</td>
                       <td className="px-4 py-3 text-gray-800">{s.basarSeller.seller.firstName} {s.basarSeller.seller.lastName}</td>
                       <td className="px-4 py-3 text-right text-gray-700">{Number(s.grossRevenue).toFixed(2)} €</td>
                       <td className="px-4 py-3 text-right text-orange-600 hidden md:table-cell">- {Number(s.commissionAmount).toFixed(2)} €</td>

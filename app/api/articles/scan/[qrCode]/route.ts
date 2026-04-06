@@ -52,7 +52,7 @@ export async function GET(
       price: Number(article.price),
       status: article.status,
       qrCode: article.qrCode,
-      sellerNumber: article.basarSeller.sellerNumber,
+      sellerId: article.basarSeller.sellerId,
       sellerName: `${article.basarSeller.seller.firstName} ${article.basarSeller.seller.lastName}`,
       basarId: article.basarSeller.basar.id,
       basarTitle: article.basarSeller.basar.title,

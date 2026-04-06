@@ -35,7 +35,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           },
         },
       },
-      orderBy: { basarSeller: { sellerNumber: 'asc' } },
+      orderBy: { basarSeller: { sellerId: 'asc' } },
     });
 
     return NextResponse.json({ settlements });

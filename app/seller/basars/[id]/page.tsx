@@ -17,8 +17,7 @@ interface Article {
 
 interface BasarSeller {
   id: string;
-  sellerNumber: number;
-  sellerId?: number;
+  sellerId: number;
   seller?: { sellerId: number };
   maxArticlesOverride?: number;
 }
@@ -251,19 +250,19 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
       .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
       .label {
         display: grid;
-        grid-template-columns: 28mm 1fr 1fr;
+        grid-template-columns: 34mm 1fr 1fr;
         grid-template-rows: 1fr 1fr;
         gap: 0 3mm;
         border: 1px solid #bbb;
         padding: 3mm;
         border-radius: 2mm;
         page-break-inside: avoid;
-        min-height: 28mm;
+        min-height: 34mm;
         box-sizing: border-box;
       }
       .qr {
-        width: 28mm;
-        height: 28mm;
+        width: 34mm;
+        height: 34mm;
         grid-column: 1;
         grid-row: 1 / span 2;
         align-self: center;
@@ -276,11 +275,11 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
         overflow: hidden;
         padding: 1mm 0;
       }
-      .lbl { font-size: 7pt; color: #888; display: block; margin-bottom: 0.5mm; }
-      .vknr { font-size: 9pt; color: #555; font-weight: bold; grid-column: 2; grid-row: 1; }
-      .title { font-size: 9pt; font-weight: bold; word-break: break-word; grid-column: 3; grid-row: 1; }
-      .size  { font-size: 9pt; color: #444; grid-column: 2; grid-row: 2; }
-      .price { font-size: 13pt; font-weight: bold; color: #000; grid-column: 3; grid-row: 2; }
+      .lbl { font-size: 8pt; color: #888; display: block; margin-bottom: 0.5mm; }
+      .vknr { font-size: 12pt; color: #555; font-weight: bold; grid-column: 2; grid-row: 1; }
+      .title { font-size: 12pt; font-weight: bold; word-break: break-word; grid-column: 3; grid-row: 1; }
+      .size  { font-size: 12pt; color: #444; grid-column: 2; grid-row: 2; }
+      .price { font-size: 17pt; font-weight: bold; color: #000; grid-column: 3; grid-row: 2; }
       @media print { button { display: none; } }
     </style></head><body>
     <button onclick="window.print()" style="margin:4mm;padding:6px 16px;font-size:13px;cursor:pointer;">🖨 Drucken</button>
@@ -302,7 +301,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
       doc.text('Meine Abrechnung – Kinderbasar', 20, 20);
       doc.setFontSize(12);
       doc.text(basar?.title ?? '', 20, 30);
-      doc.text(`Verkäufer #${basarSeller?.seller?.sellerId ?? basarSeller?.sellerId ?? basarSeller?.sellerNumber}: ${sellerName}`, 20, 40);
+      doc.text(`Verkäufer #${basarSeller?.seller?.sellerId ?? basarSeller?.sellerId}: ${sellerName}`, 20, 40);
       doc.setFontSize(11);
       doc.text(`Brutto-Erlös:`, 20, 60);
       doc.text(`${fmt(Number(settlement.grossRevenue))} €`, 170, 60, { align: 'right' });
@@ -363,7 +362,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
           </p>
           {basarSeller && (
             <div className="mt-2 inline-flex items-center gap-2 bg-yellow-50 px-3 py-1.5 rounded-lg text-sm font-semibold text-gray-700">
-              Deine Verkäufernummer: <span className="text-xl font-bold text-yellow-600">#{basarSeller.sellerNumber}</span>
+              Deine Verkäufernummer: <span className="text-xl font-bold text-yellow-600">#{basarSeller.seller?.sellerId ?? basarSeller.sellerId}</span>
             </div>
           )}
         </div>
@@ -436,7 +435,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-5">
             <div className="flex items-center justify-between mb-2">
               <h2 className="font-semibold text-gray-700">
-                📦 Aus früherem Basar übernehmen
+                Aus früherem Basar übernehmen
                 <span className="ml-2 text-sm font-normal text-gray-500">({archiveAvailable.length} verfügbar)</span>
               </h2>
               <button

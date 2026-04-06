@@ -81,13 +81,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
 
     if (!basarSeller) {
-      // Auto-assign next seller number
-      const maxEntry = await prisma.basarSeller.findFirst({
-        where: { basarId },
-        orderBy: { sellerNumber: 'desc' },
-      });
-      const nextNumber = (maxEntry?.sellerNumber ?? 0) + 1;
-
       // Check max sellers
       const sellerCount = await prisma.basarSeller.count({ where: { basarId } });
       if (sellerCount >= basar.maxSellers) {
@@ -95,7 +88,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
 
       basarSeller = await prisma.basarSeller.create({
-        data: { basarId, sellerId, sellerNumber: nextNumber },
+        data: { basarId, sellerId },
       });
     }
 

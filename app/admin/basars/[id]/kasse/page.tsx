@@ -10,7 +10,7 @@ interface ScannedArticle {
   sizeLabel?: string;
   price: number;
   salePrice: number;
-  sellerNumber: number;
+  sellerId: number;
   sellerName: string;
   qrCode: string;
   basarId: string;
@@ -338,7 +338,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-800 truncate">{item.title}</p>
                     <p className="text-xs text-gray-500">
-                      Verk. #{item.sellerNumber}{item.sizeLabel && ` · ${item.sizeLabel}`}
+                      Verk. #{item.sellerId}{item.sizeLabel && ` · ${item.sizeLabel}`}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">

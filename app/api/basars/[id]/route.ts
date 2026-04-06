@@ -23,7 +23,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             seller: { select: { sellerId: true, firstName: true, lastName: true, email: true, sellerStatusActive: true } },
             _count: { select: { articles: true } },
           },
-          orderBy: { sellerNumber: 'asc' },
+          orderBy: { sellerId: 'asc' },
         },
       },
     });

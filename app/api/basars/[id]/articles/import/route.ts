@@ -44,17 +44,12 @@ export async function POST(
     });
 
     if (!basarSeller) {
-      const maxEntry = await prisma.basarSeller.findFirst({
-        where: { basarId },
-        orderBy: { sellerNumber: 'desc' },
-      });
-      const nextNumber = (maxEntry?.sellerNumber ?? 0) + 1;
       const sellerCount = await prisma.basarSeller.count({ where: { basarId } });
       if (sellerCount >= basar.maxSellers) {
         return NextResponse.json({ error: 'Maximale Verkäuferanzahl erreicht' }, { status: 400 });
       }
       basarSeller = await prisma.basarSeller.create({
-        data: { basarId, sellerId, sellerNumber: nextNumber },
+        data: { basarId, sellerId },
       });
     }
 
