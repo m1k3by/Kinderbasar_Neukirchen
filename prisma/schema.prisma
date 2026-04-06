@@ -9,20 +9,23 @@ datasource db {
 }
 
 model Seller {
-  sellerId          Int      @id
-  email             String   @unique
-  firstName         String
-  lastName          String
-  isEmployee        Boolean  @default(false)
-  sellerStatusActive Boolean @default(false)
-  createdAt         DateTime @default(now())
-  password          String?
-  qrCode            String?
-  barcode           String?
-  resetToken        String?  @unique
-  resetTokenExpiry  DateTime?
-  taskSignups       TaskSignup[]
-  cakes             Cake[]
+  sellerId           Int      @id
+  email              String   @unique
+  firstName          String
+  lastName           String
+  isEmployee         Boolean  @default(false)
+  isCashier          Boolean  @default(false)
+  sellerStatusActive Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  password           String?
+  qrCode             String?
+  barcode            String?
+  resetToken         String?  @unique
+  resetTokenExpiry   DateTime?
+  taskSignups        TaskSignup[]
+  cakes              Cake[]
+  basarSellers       BasarSeller[]
+  cashierSales       Sale[]   @relation("CashierSales")
 }
 
 model Task {
@@ -60,4 +63,99 @@ model Settings {
   key           String   @unique
   value         String
   updatedAt     DateTime @updatedAt
+}
+
+// ───────────────────────────────────────────────
+// Basar Feature
+// ───────────────────────────────────────────────
+
+enum BasarStatus {
+  DRAFT
+  OPEN
+  ACTIVE
+  CLOSED
+}
+
+enum ArticleStatus {
+  AVAILABLE
+  SOLD
+  RETURNED
+}
+
+model Basar {
+  id                   String      @id @default(cuid())
+  title                String
+  description          String?
+  eventDate            DateTime
+  location             String?
+  maxSellers           Int         @default(100)
+  maxArticlesPerSeller Int         @default(50)
+  commissionPercent    Decimal     @db.Decimal(5, 2) @default(20)
+  entryFee             Decimal     @db.Decimal(6, 2) @default(0)
+  status               BasarStatus @default(DRAFT)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  basarSellers         BasarSeller[]
+  sales                Sale[]
+}
+
+model BasarSeller {
+  id                  String    @id @default(cuid())
+  basarId             String
+  sellerId            Int
+  sellerNumber        Int
+  maxArticlesOverride Int?
+  commissionOverride  Decimal?  @db.Decimal(5, 2)
+  createdAt           DateTime  @default(now())
+  basar               Basar     @relation(fields: [basarId], references: [id], onDelete: Cascade)
+  seller              Seller    @relation(fields: [sellerId], references: [sellerId], onDelete: Cascade)
+  articles            Article[]
+  settlement          Settlement?
+
+  @@unique([basarId, sellerId])
+  @@unique([basarId, sellerNumber])
+}
+
+model Article {
+  id            String        @id @default(cuid())
+  basarSellerId String
+  title         String        @db.VarChar(120)
+  sizeLabel     String?       @db.VarChar(40)
+  price         Decimal       @db.Decimal(6, 2)
+  qrCode        String        @unique
+  status        ArticleStatus @default(AVAILABLE)
+  soldAt        DateTime?
+  createdAt     DateTime      @default(now())
+  basarSeller   BasarSeller   @relation(fields: [basarSellerId], references: [id], onDelete: Cascade)
+  sale          Sale?
+
+  @@index([basarSellerId, status])
+}
+
+model Sale {
+  id          String   @id @default(cuid())
+  basarId     String
+  articleId   String   @unique
+  cashierId   Int
+  salePrice   Decimal  @db.Decimal(6, 2)
+  soldAt      DateTime @default(now())
+  syncedAt    DateTime?
+  isCancelled Boolean  @default(false)
+  basar       Basar    @relation(fields: [basarId], references: [id])
+  article     Article  @relation(fields: [articleId], references: [id])
+  cashier     Seller   @relation("CashierSales", fields: [cashierId], references: [sellerId])
+
+  @@index([basarId, soldAt])
+}
+
+model Settlement {
+  id               String      @id @default(cuid())
+  basarId          String
+  basarSellerId    String      @unique
+  grossRevenue     Decimal     @db.Decimal(10, 2)
+  commissionAmount Decimal     @db.Decimal(10, 2)
+  entryFeeAmount   Decimal     @db.Decimal(10, 2)
+  netPayout        Decimal     @db.Decimal(10, 2)
+  generatedAt      DateTime    @default(now())
+  basarSeller      BasarSeller @relation(fields: [basarSellerId], references: [id])
 }

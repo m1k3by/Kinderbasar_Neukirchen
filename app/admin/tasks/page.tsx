@@ -207,6 +207,7 @@ export default function TasksManagementPage() {
       <Header 
         links={[
           { href: '/admin', label: 'Basarliste' },
+          { href: '/admin/basars', label: 'Basare' },
           { href: '/admin/list', label: 'Helferliste' },
           { href: '/admin/tasks', label: 'Aufgaben', active: true },
           { href: '/admin/settings', label: 'Datum einstellen' },

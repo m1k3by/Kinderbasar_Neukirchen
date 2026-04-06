@@ -48,6 +48,8 @@ export default function EmployeePage() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showSellerConfirmModal, setShowSellerConfirmModal] = useState(false);
   const [sellerStatusLoading, setSellerStatusLoading] = useState(false);
+  const [isCashier, setIsCashier] = useState(false);
+  const [activeBasars, setActiveBasars] = useState<{ id: string; title: string }[]>([]);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
@@ -85,6 +87,13 @@ export default function EmployeePage() {
           setSellerStatusActive(currentSeller.sellerStatusActive || false);
           setSellerName(`${currentSeller.firstName} ${currentSeller.lastName}`);
           setSellerNumber(currentSeller.sellerId);
+          setIsCashier(currentSeller.isCashier || false);
+          if (currentSeller.isCashier) {
+            fetch('/api/basars')
+              .then(r => r.ok ? r.json() : { basars: [] })
+              .then(data => setActiveBasars((data.basars || []).filter((b: any) => b.status === 'ACTIVE')))
+              .catch(() => {});
+          }
         }
       }
     } catch (error) {
@@ -435,6 +444,10 @@ export default function EmployeePage() {
     <div className="min-h-screen bg-gray-100">
       <Header 
         links={[
+          { href: '/seller/basars', label: 'Mein Basar' },
+          ...(isCashier && activeBasars.length > 0
+            ? activeBasars.map(b => ({ href: `/admin/basars/${b.id}/kasse`, label: 'Kasse' }))
+            : isCashier ? [{ href: '/admin/basars', label: 'Kasse' }] : []),
           { href: '/', label: 'Logout' },
         ]}
         sellerInfo={sellerName && sellerNumber ? { name: sellerName, sellerId: sellerNumber } : null}
@@ -476,6 +489,51 @@ export default function EmployeePage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Kasse Card – only for cashiers */}
+        {isCashier && (
+          <div className="mb-8 bg-purple-50 border border-purple-200 rounded-lg shadow-sm p-6 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-gray-800">Kasse 💳</h2>
+              <p className="text-gray-600 mt-1 text-sm">
+                Du bist als Kassierer eingetragen. Wähle einen aktiven Basar, um die Kasse zu öffnen.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 flex-shrink-0">
+              {activeBasars.length === 0 ? (
+                <span className="px-6 py-3 bg-gray-200 text-gray-500 font-semibold rounded-xl text-sm">
+                  Kein aktiver Basar
+                </span>
+              ) : (
+                activeBasars.map(b => (
+                  <a
+                    key={b.id}
+                    href={`/admin/basars/${b.id}/kasse`}
+                    className="px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white font-bold rounded-xl transition-colors shadow-sm text-center"
+                  >
+                    Kasse: {b.title} →
+                  </a>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Mein Basar Card */}
+        <div className="mb-8 bg-yellow-50 border border-yellow-200 rounded-lg shadow-sm p-6 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-gray-800">Mein Basar – Artikel erfassen</h2>
+            <p className="text-gray-600 mt-1 text-sm">
+              Lege Artikel für den Basar an, drucke Etiketten mit QR-Code und verfolge deine Verkäufe.
+            </p>
+          </div>
+          <a
+            href="/seller/basars"
+            className="flex-shrink-0 px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold rounded-xl transition-colors shadow-sm"
+          >
+            Zu meinen Artikeln →
+          </a>
         </div>
 
         <h2 className="text-2xl font-bold text-gray-800 mb-4">Helferliste</h2>

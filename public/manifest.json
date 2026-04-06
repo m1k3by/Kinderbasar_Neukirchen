@@ -1,0 +1,34 @@
+{
+  "name": "Kinderbasar Neukirchen",
+  "short_name": "Kinderbasar",
+  "description": "Kasse, Artikel und Abrechnung für den Kinderbasar",
+  "start_url": "/employee",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#EAB308",
+  "background_color": "#ffffff",
+  "lang": "de",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Kasse",
+      "short_name": "Kasse",
+      "url": "/admin/basars",
+      "description": "Direkt zur Kassenübersicht"
+    },
+    {
+      "name": "Mein Basar",
+      "short_name": "Artikel",
+      "url": "/seller/basars",
+      "description": "Artikel verwalten"
+    }
+  ]
+}

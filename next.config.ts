@@ -5,6 +5,16 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // Kasse page: allow camera for QR scanner
+        source: '/admin/basars/:id/kasse',
+        headers: [
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(self), microphone=(), geolocation=(), interest-cohort=()',
+          },
+        ],
+      },
+      {
         source: '/:path*',
         headers: [
           {

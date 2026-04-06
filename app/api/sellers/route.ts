@@ -11,6 +11,7 @@ export async function GET(request: Request) {
         lastName: true,
         email: true,
         isEmployee: true,
+        isCashier: true,
         createdAt: true,
         qrCode: true,
         barcode: true,

@@ -20,16 +20,21 @@
   "dependencies": {
     "@prisma/adapter-d1": "^6.19.0",
     "@prisma/client": "^6.19.0",
+    "@tanstack/react-query": "^5.96.2",
     "@types/jsbarcode": "^3.11.4",
     "bcrypt": "^6.0.0",
     "bwip-js": "^4.7.0",
+    "html5-qrcode": "^2.3.8",
+    "idb-keyval": "^6.2.2",
     "jsbarcode": "^3.12.1",
     "jsonwebtoken": "^9.0.2",
+    "jspdf": "^4.2.1",
     "next": "^16.1.1",
     "nodemailer": "^7.0.10",
     "qrcode": "^1.5.4",
     "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "react-dom": "19.2.0",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@tailwindcss/forms": "^0.5.10",
@@ -37,7 +42,7 @@
     "@types/bcrypt": "^6.0.0",
     "@types/bwip-js": "^3.2.3",
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "^20",
+    "@types/node": "^20.19.39",
     "@types/nodemailer": "^7.0.3",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",

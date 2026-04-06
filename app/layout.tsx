@@ -1,12 +1,29 @@
 import './globals.css';
 import { Inter } from 'next/font/google';
 import LegalFooter from './components/LegalFooter';
+import type { Metadata, Viewport } from 'next';
 
 const inter = Inter({ subsets: ['latin'] });
 
-export const metadata = {
-  title: 'Kinderbasar Neukirchen - Registration',
-  description: 'Registrierung für Verkäufer und Mitarbeiter',
+export const viewport: Viewport = {
+  themeColor: '#EAB308',
+  width: 'device-width',
+  initialScale: 1,
+};
+
+export const metadata: Metadata = {
+  title: 'Kinderbasar Neukirchen',
+  description: 'Kasse, Artikel und Abrechnung für den Kinderbasar',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Kinderbasar',
+  },
+  icons: {
+    icon: '/icons/icon.svg',
+    apple: '/icons/icon.svg',
+  },
 };
 
 export default function RootLayout({

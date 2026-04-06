@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     // Rate limiting: 10 login attempts per 15 minutes per IP
     const rateLimitKey = `login:${ip}`;
     
-    if (!rateLimit(rateLimitKey, { maxRequests: 10, windowMs: 15 * 60 * 1000 })) {
+    if (!rateLimit(rateLimitKey, { maxRequests: 30, windowMs: 15 * 60 * 1000 })) {
       console.log('[LOGIN] Rate limit exceeded:', { email: email?.substring(0, 3) + '***', ip });
       return NextResponse.json(
         { error: 'Zu viele Login-Versuche. Bitte versuchen Sie es später erneut.' },
@@ -79,7 +79,8 @@ export async function POST(request: Request) {
     const token = createToken({ 
       sellerId: seller.sellerId,
       role: role,
-      isEmployee: seller.isEmployee 
+      isEmployee: seller.isEmployee,
+      isCashier: seller.isCashier,
     });
 
     console.log('[LOGIN] Success:', { 

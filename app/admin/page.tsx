@@ -122,6 +122,7 @@ export default function AdminPage() {
       <Header 
         links={[
           { href: '/admin', label: 'Basarliste', active: true },
+          { href: '/admin/basars', label: 'Basare' },
           { href: '/admin/list', label: 'Helferliste' },
           { href: '/admin/tasks', label: 'Aufgaben' },
           { href: '/admin/settings', label: 'Datum einstellen' },
@@ -138,6 +139,22 @@ export default function AdminPage() {
             <p className="mt-2">Der Bereich 1000-9999 ist vollständig belegt. Keine weiteren Registrierungen möglich.</p>
           </div>
         )}
+
+        {/* Basare Card */}
+        <div className="mb-8 bg-yellow-50 border border-yellow-200 rounded-lg shadow-sm p-6 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-gray-800">Basare verwalten</h2>
+            <p className="text-gray-600 mt-1 text-sm">
+              Basare anlegen, Artikel-Kasse betreiben, Abrechnungen erstellen.
+            </p>
+          </div>
+          <a
+            href="/admin/basars"
+            className="flex-shrink-0 px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold rounded-xl transition-colors shadow-sm"
+          >
+            Zu den Basaren →
+          </a>
+        </div>
 
         {/* Helferliste */}
         <h2 className="text-2xl font-bold text-gray-800 mb-4">Helferliste (Admin)</h2>

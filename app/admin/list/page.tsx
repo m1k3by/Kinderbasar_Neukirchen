@@ -11,6 +11,7 @@ interface Seller {
   lastName: string;
   email: string;
   isEmployee: boolean;
+  isCashier: boolean;
   createdAt: string;
   taskSignups?: any[];
   cakes?: any[];
@@ -186,6 +187,31 @@ export default function AdminListPage() {
     } catch (error) {
       console.error('Error toggling employee status:', error);
       setMessage('Fehler beim Ändern der Rolle');
+      setTimeout(() => setMessage(''), 5000);
+    }
+  }
+
+  async function toggleCashierStatus(sellerId: number) {
+    try {
+      const res = await fetch('/api/admin/toggle-cashier-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sellerId }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setMessage(data.message);
+        setTimeout(() => setMessage(''), 3000);
+        loadSellers();
+      } else {
+        const data = await res.json();
+        setMessage('Fehler: ' + (data.error || 'Unbekannter Fehler'));
+        setTimeout(() => setMessage(''), 5000);
+      }
+    } catch (error) {
+      console.error('Error toggling cashier status:', error);
+      setMessage('Fehler beim Ändern des Kassierer-Status');
       setTimeout(() => setMessage(''), 5000);
     }
   }
@@ -387,6 +413,7 @@ export default function AdminListPage() {
       <Header 
         links={[
           { href: '/admin', label: 'Basarliste' },
+          { href: '/admin/basars', label: 'Basare' },
           { href: '/admin/list', label: 'Helferliste', active: true },
           { href: '/admin/tasks', label: 'Aufgaben' },
           { href: '/admin/settings', label: 'Datum einstellen' },
@@ -870,6 +897,17 @@ export default function AdminListPage() {
                             title={seller.sellerStatusActive ? 'Status deaktivieren' : 'Status aktivieren'}
                           >
                             {seller.sellerStatusActive ? 'Deakt' : 'Akt'}
+                          </button>
+                          <button
+                            onClick={() => toggleCashierStatus(seller.sellerId)}
+                            className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                              seller.isCashier
+                                ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                                : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                            }`}
+                            title={seller.isCashier ? 'Als Kassierer deaktivieren' : 'Als Kassierer aktivieren'}
+                          >
+                            {seller.isCashier ? 'Kas✓' : 'Kas'}
                           </button>
                           <button
                             onClick={() => setResetPasswordSellerId(seller.sellerId)}

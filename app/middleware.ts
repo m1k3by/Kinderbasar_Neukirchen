@@ -2,6 +2,17 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { env } from './lib/env';
 
+/** Decode JWT payload without signature verification (Edge Runtime compatible).
+ *  Full verification is done in every API route handler. */
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(base64));
+  } catch {
+    return null;
+  }
+}
+
 export async function middleware(request: NextRequest) {
   // Protected routes
   const protectedPaths = ['/admin', '/api/sellers', '/api/tasks', '/api/cakes'];
@@ -11,6 +22,15 @@ export async function middleware(request: NextRequest) {
     
     if (!token) {
       return NextResponse.redirect(new URL('/login', request.url));
+    }
+
+    // Allow cashiers through to the kasse page without Basic Auth
+    const kassePath = /^\/admin\/basars\/[^/]+\/kasse(\/|$)/;
+    if (kassePath.test(request.nextUrl.pathname)) {
+      const payload = decodeJwtPayload(token);
+      if (payload?.isCashier === true) {
+        return NextResponse.next();
+      }
     }
 
     // Check for admin basic auth
