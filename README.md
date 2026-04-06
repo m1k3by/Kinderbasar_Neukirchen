@@ -18,6 +18,9 @@ Eine einfache Web-Anwendung für die Verwaltung von Verkäufern und Helfern beim
 
 ## Lokale Installation (zum Testen)
 
+> **Wichtig:** Die App benötigt eine PostgreSQL-Datenbank. Ohne gültige `.env`-Datei
+> mit `POSTGRES_PRISMA_URL` schlägt sowohl `npx prisma db push` als auch `npm run dev` fehl.
+
 1. **Dateien herunterladen**
    - Projekt von GitHub herunterladen oder entpacken
 
@@ -31,26 +34,49 @@ Eine einfache Web-Anwendung für die Verwaltung von Verkäufern und Helfern beim
    npm install
    ```
 
-5. **Datenbank einrichten**
+5. **PostgreSQL-Datenbank bereitstellen** (einmalig)
+
+   Du benötigst zwei Verbindungs-URLs für deine PostgreSQL-Datenbank.
+   Kostenlose Optionen:
+   - **Neon** (empfohlen für lokale Tests): https://neon.tech → New Project → Connection String kopieren
+   - **Supabase**: https://supabase.com → New Project → Settings → Database → Connection string
+
+   Nach dem Anlegen erhältst du zwei URLs:
+   - **Pooling-URL** → für `POSTGRES_PRISMA_URL`
+   - **Direkte URL** → für `POSTGRES_URL_NON_POOLING`
+
+6. **`.env` Datei anlegen** (vor `prisma db push`!)
+
+   Kopiere `.env.example` als `.env` und trage deine Werte ein:
+   ```bash
+   copy .env.example .env
+   ```
+   Dann `.env` öffnen und alle Felder ausfüllen (mindestens `POSTGRES_PRISMA_URL` und `POSTGRES_URL_NON_POOLING`).
+
+7. **Datenbank-Schema hochladen**
    ```bash
    npx prisma db push
    ```
 
-6. **Entwicklungsserver starten**
+8. **Entwicklungsserver starten**
    ```bash
    npm run dev
    ```
 
-7. **Im Browser öffnen**: http://localhost:3000
+9. **Im Browser öffnen**: http://localhost:3000
 
 ## Einstellungen anpassen (.env Datei)
 
-Erstelle eine `.env` Datei im Hauptordner mit folgenden Einstellungen:
+Die vollständige `.env` Datei im Hauptordner:
 
 ```properties
 # Admin-Zugangsdaten
 ADMIN_USER=admin
 ADMIN_PASS=deinPasswort
+
+# PostgreSQL-Datenbank (Pflichtfeld!)
+POSTGRES_PRISMA_URL=postgres://USER:PASS@HOST:5432/DBNAME?sslmode=require
+POSTGRES_URL_NON_POOLING=postgres://USER:PASS@HOST:5432/DBNAME?sslmode=require
 
 # E-Mail-Versand (Mailjet)
 SMTP_HOST=in-v3.mailjet.com
@@ -64,10 +90,6 @@ JWT_SECRET=deinGeheimesPasswort123
 
 # Maximale Anzahl Verkäufer
 MAX_SELLERS=200
-
-# PostgreSQL Datenbank (Supabase via Vercel)
-POSTGRES_PRISMA_URL=postgres://...
-POSTGRES_URL_NON_POOLING=postgres://...
 ```
 
 **E-Mail-Versand einrichten:**

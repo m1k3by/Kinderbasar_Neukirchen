@@ -46,6 +46,8 @@ export default function EmployeePage() {
   const [editingCakeName, setEditingCakeName] = useState('');
   const [message, setMessage] = useState('');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showSellerConfirmModal, setShowSellerConfirmModal] = useState(false);
+  const [sellerStatusLoading, setSellerStatusLoading] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
@@ -130,11 +132,25 @@ export default function EmployeePage() {
     }
   }
 
-  async function handleToggleSellerStatus() {
+  function handleToggleSellerStatus() {
     if (!sellerId) return;
+    setShowSellerConfirmModal(true);
+  }
+
+  async function handleConfirmSellerStatusToggle() {
+    if (!sellerId) return;
+    setShowSellerConfirmModal(false);
+
+    const newStatus = !sellerStatusActive;
+
+    // Optimistic update – sofortige visuelle Rückmeldung
+    setSellerStatusActive(newStatus);
+    setSellerStatusLoading(true);
+    setMessage(newStatus
+      ? '⏳ Wird aktiviert…'
+      : '⏳ Wird deaktiviert…');
 
     try {
-      const newStatus = !sellerStatusActive;
       const res = await fetch('/api/sellers/seller-status', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -142,20 +158,25 @@ export default function EmployeePage() {
       });
 
       if (res.ok) {
-        setSellerStatusActive(newStatus);
-        setMessage(newStatus 
-          ? '✓ Verkäuferstatus wurde aktiviert! Du kannst jetzt als Verkäufer aktiv sein.' 
+        setMessage(newStatus
+          ? '✓ Verkäuferstatus wurde aktiviert! Du bist jetzt als Verkäufer aktiv.'
           : '✓ Verkäuferstatus wurde deaktiviert.');
         setTimeout(() => setMessage(''), 5000);
       } else {
+        // Rollback on error
+        setSellerStatusActive(!newStatus);
         const data = await res.json();
         setMessage(data.error || 'Fehler beim Aktualisieren des Verkäuferstatus');
-        setTimeout(() => setMessage(''), 3000);
+        setTimeout(() => setMessage(''), 4000);
       }
     } catch (error) {
+      // Rollback on network error
+      setSellerStatusActive(!newStatus);
       console.error('Error toggling seller status:', error);
       setMessage('Fehler beim Aktualisieren des Verkäuferstatus');
-      setTimeout(() => setMessage(''), 3000);
+      setTimeout(() => setMessage(''), 4000);
+    } finally {
+      setSellerStatusLoading(false);
     }
   }
 
@@ -431,13 +452,20 @@ export default function EmployeePage() {
             
             <button
               onClick={handleToggleSellerStatus}
-              className={`w-full md:w-auto px-12 py-6 rounded-xl text-2xl font-bold transition-all transform hover:scale-105 shadow-lg ${
-                sellerStatusActive
-                  ? 'bg-green-500 hover:bg-green-600 text-white ring-4 ring-green-200'
-                  : 'bg-red-500 hover:bg-red-600 text-white ring-4 ring-red-200'
+              disabled={sellerStatusLoading}
+              className={`w-full md:w-auto px-12 py-6 rounded-xl text-2xl font-bold transition-all transform shadow-lg ${
+                sellerStatusLoading
+                  ? 'opacity-60 cursor-not-allowed bg-gray-400 text-white'
+                  : sellerStatusActive
+                  ? 'bg-green-500 hover:bg-green-600 hover:scale-105 text-white ring-4 ring-green-200'
+                  : 'bg-red-500 hover:bg-red-600 hover:scale-105 text-white ring-4 ring-red-200'
               }`}
             >
-              {sellerStatusActive ? 'Status: AKTIV' : 'Status: INAKTIV'}
+              {sellerStatusLoading
+                ? 'Wird gespeichert…'
+                : sellerStatusActive
+                ? 'Status: AKTIV'
+                : 'Status: INAKTIV'}
             </button>
 
             {message && (
@@ -755,6 +783,66 @@ export default function EmployeePage() {
           </div>
         )}
       </div>
+
+      {/* Bestätigungsdialog: Verkäuferstatus umschalten */}
+      {showSellerConfirmModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="seller-modal-title"
+        >
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-8 animate-fade-in">
+            <div className="flex items-center gap-3 mb-4">
+              <span className="text-3xl">{sellerStatusActive ? '❌' : '✅'}</span>
+              <h2 id="seller-modal-title" className="text-xl font-bold text-gray-800">
+                {sellerStatusActive ? 'Verkäuferstatus deaktivieren?' : 'Als Verkäufer aktivieren?'}
+              </h2>
+            </div>
+
+            <div className="text-gray-700 space-y-2 mb-6">
+              {sellerStatusActive ? (
+                <>
+                  <p>Du möchtest deinen <strong>Verkäuferstatus deaktivieren</strong>.</p>
+                  <p className="text-sm text-gray-500">
+                    Dein Status beim Basar wird dann als <span className="font-semibold text-red-600">nicht aktiv</span> markiert.
+                    Du kannst den Status jederzeit wieder aktivieren.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p>Du möchtest dich als <strong>Verkäufer aktivieren</strong>.</p>
+                  <ul className="text-sm text-gray-500 list-disc list-inside space-y-1 mt-2">
+                    <li>Dein Status wird als <span className="font-semibold text-green-600">aktiv</span> registriert.</li>
+                    <li>Du wirst beim nächsten Basar verkaufen können.</li>
+                    <li>Verkäufernummer: <span className="font-semibold">#{sellerNumber}</span></li>
+                    <li>Du kannst den Status jederzeit wieder deaktivieren.</li>
+                  </ul>
+                </>
+              )}
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowSellerConfirmModal(false)}
+                className="px-5 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors font-medium"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={handleConfirmSellerStatusToggle}
+                className={`px-5 py-2 rounded-lg text-white font-semibold transition-colors ${
+                  sellerStatusActive
+                    ? 'bg-red-500 hover:bg-red-600'
+                    : 'bg-green-500 hover:bg-green-600'
+                }`}
+              >
+                {sellerStatusActive ? 'Ja, deaktivieren' : 'Ja, aktivieren'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
