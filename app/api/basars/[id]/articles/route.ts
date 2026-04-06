@@ -29,6 +29,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
       const basarSeller = await prisma.basarSeller.findUnique({
         where: { basarId_sellerId: { basarId, sellerId } },
+        include: { seller: { select: { sellerId: true } } },
       });
       if (!basarSeller) return NextResponse.json({ articles: [], basarSeller: null });
 

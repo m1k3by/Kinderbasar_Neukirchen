@@ -18,6 +18,8 @@ interface Article {
 interface BasarSeller {
   id: string;
   sellerNumber: number;
+  sellerId?: number;
+  seller?: { sellerId: number };
   maxArticlesOverride?: number;
 }
 
@@ -60,14 +62,12 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   const [basarSeller, setBasarSeller] = useState<BasarSeller | null>(null);
   const [settlement, setSettlement] = useState<Settlement | null>(null);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
   const [messageOk, setMessageOk] = useState(true);
   const [form, setForm] = useState({ title: '', sizeLabel: '', price: '' });
   const [archiveItems, setArchiveItems] = useState<SellerArchiveEntry[]>([]);
   const [showArchive, setShowArchive] = useState(false);
   const [selectedArchiveIds, setSelectedArchiveIds] = useState<Set<string>>(new Set());
-  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     const cookies = document.cookie.split(';');
@@ -140,7 +140,11 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   async function handleImportFromArchive() {
     const ids = [...selectedArchiveIds];
     if (ids.length === 0) return;
-    setImporting(true);
+
+    // Optimistic: clear selection + mark as alreadyInBasar immediately
+    setSelectedArchiveIds(new Set());
+    setArchiveItems(prev => prev.map(a => ids.includes(a.id) ? { ...a, alreadyInBasar: true } : a));
+
     try {
       const res = await fetch(`/api/basars/${basarId}/articles/import`, {
         method: 'POST',
@@ -151,50 +155,73 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
       if (res.ok) {
         setArticles(prev => [...prev, ...data.articles]);
         if (!basarSeller) setBasarSeller(data.basarSeller);
-        setSelectedArchiveIds(new Set());
-        // Mark imported entries as alreadyInBasar
-        setArchiveItems(prev => prev.map(a => ids.includes(a.id) ? { ...a, alreadyInBasar: true } : a));
         showMsg(`✓ ${data.articles.length} Artikel aus Archiv importiert`, true);
       } else {
+        // Revert
+        setArchiveItems(prev => prev.map(a => ids.includes(a.id) ? { ...a, alreadyInBasar: false } : a));
         showMsg(data.error || 'Fehler beim Importieren', false);
       }
-    } finally {
-      setImporting(false);
+    } catch {
+      setArchiveItems(prev => prev.map(a => ids.includes(a.id) ? { ...a, alreadyInBasar: false } : a));
+      showMsg('Netzwerkfehler', false);
     }
   }
 
   async function handleAddArticle(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title || !form.price) return;
-    setSubmitting(true);
+
+    // Optimistic: reset form + add temp article immediately
+    const tempId = `temp-${Date.now()}`;
+    const tempArticle: Article = {
+      id: tempId,
+      title: form.title,
+      sizeLabel: form.sizeLabel || undefined,
+      price: parseFloat(form.price),
+      qrCode: '',
+      status: 'AVAILABLE',
+      createdAt: new Date().toISOString(),
+    };
+    setArticles(prev => [...prev, tempArticle]);
+    setForm({ title: '', sizeLabel: '', price: '' });
+
     try {
       const res = await fetch(`/api/basars/${basarId}/articles`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: form.title, sizeLabel: form.sizeLabel, price: parseFloat(form.price) }),
+        body: JSON.stringify({ title: tempArticle.title, sizeLabel: tempArticle.sizeLabel, price: tempArticle.price }),
       });
       const data = await res.json();
       if (res.ok) {
-        setArticles(prev => [...prev, data.article]);
+        // Replace temp article with real one from server
+        setArticles(prev => prev.map(a => a.id === tempId ? data.article : a));
         if (!basarSeller) setBasarSeller(data.basarSeller);
-        setForm({ title: '', sizeLabel: '', price: '' });
         showMsg('✓ Artikel hinzugefügt', true);
       } else {
+        // Revert on error
+        setArticles(prev => prev.filter(a => a.id !== tempId));
+        setForm({ title: tempArticle.title, sizeLabel: tempArticle.sizeLabel ?? '', price: String(tempArticle.price) });
         showMsg(data.error || 'Fehler', false);
       }
-    } finally {
-      setSubmitting(false);
+    } catch {
+      setArticles(prev => prev.filter(a => a.id !== tempId));
+      setForm({ title: tempArticle.title, sizeLabel: tempArticle.sizeLabel ?? '', price: String(tempArticle.price) });
+      showMsg('Netzwerkfehler', false);
     }
   }
 
   async function handleDelete(artId: string) {
     if (!confirm('Artikel wirklich löschen?')) return;
+    // Optimistic: remove immediately
+    const removed = articles.find(a => a.id === artId);
+    setArticles(prev => prev.filter(a => a.id !== artId));
     const res = await fetch(`/api/basars/${basarId}/articles/${artId}`, { method: 'DELETE' });
     if (res.ok) {
-      setArticles(prev => prev.filter(a => a.id !== artId));
       showMsg('Artikel gelöscht', true);
     } else {
-      const data = await res.json();
+      // Revert
+      if (removed) setArticles(prev => [...prev, removed].sort((a, b) => a.createdAt.localeCompare(b.createdAt)));
+      const data = await res.json().catch(() => ({}));
       showMsg(data.error || 'Fehler', false);
     }
   }
@@ -212,7 +239,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
     const rows = articles.map(a => `
       <div class="label">
         <img src="/api/articles/${a.qrCode}/qr" alt="QR" class="qr" />
-        <div class="cell vknr"><span class="lbl">Verkäufernummer:</span>${basarSeller?.sellerNumber ?? '?'}</div>
+        <div class="cell vknr"><span class="lbl">Verkäufernummer:</span>${basarSeller?.seller?.sellerId ?? basarSeller?.sellerId ?? '?'}</div>
         <div class="cell title"><span class="lbl">Bezeichnung:</span>${escapeHtml(a.title)}</div>
         <div class="cell size"><span class="lbl">Größe:</span>${a.sizeLabel ? escapeHtml(a.sizeLabel) : '–'}</div>
         <div class="cell price"><span class="lbl">Preis:</span>${fmt(Number(a.price))} €</div>
@@ -275,7 +302,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
       doc.text('Meine Abrechnung – Kinderbasar', 20, 20);
       doc.setFontSize(12);
       doc.text(basar?.title ?? '', 20, 30);
-      doc.text(`Verkäufer #${basarSeller?.sellerNumber}: ${sellerName}`, 20, 40);
+      doc.text(`Verkäufer #${basarSeller?.seller?.sellerId ?? basarSeller?.sellerId ?? basarSeller?.sellerNumber}: ${sellerName}`, 20, 40);
       doc.setFontSize(11);
       doc.text(`Brutto-Erlös:`, 20, 60);
       doc.text(`${fmt(Number(settlement.grossRevenue))} €`, 170, 60, { align: 'right' });
@@ -457,10 +484,10 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
                   <button
                     type="button"
                     onClick={handleImportFromArchive}
-                    disabled={importing || selectedArchiveIds.size === 0}
+                    disabled={selectedArchiveIds.size === 0}
                     className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold text-sm rounded-lg transition-colors disabled:opacity-50"
                   >
-                    {importing ? 'Importieren…' : `${selectedArchiveIds.size > 0 ? selectedArchiveIds.size + ' ' : ''}Importieren`}
+                    {`${selectedArchiveIds.size > 0 ? selectedArchiveIds.size + ' ' : ''}Importieren`}
                   </button>
                 </div>
               </>
@@ -510,10 +537,10 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
               <div className="flex items-end">
                 <button
                   type="submit"
-                  disabled={submitting || articles.length >= maxArticles}
+                  disabled={articles.length >= maxArticles}
                   className="w-full py-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold text-sm rounded-lg transition-colors disabled:opacity-50"
                 >
-                  {submitting ? 'Hinzufügen…' : '+ Hinzufügen'}
+                  + Hinzufügen
                 </button>
               </div>
             </form>
