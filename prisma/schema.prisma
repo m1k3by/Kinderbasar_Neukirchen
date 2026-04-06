@@ -25,7 +25,8 @@ model Seller {
   taskSignups        TaskSignup[]
   cakes              Cake[]
   basarSellers       BasarSeller[]
-  cashierSales       Sale[]   @relation("CashierSales")
+  cashierSales       Sale[]         @relation("CashierSales")
+  sellerArticles     SellerArticle[]
 }
 
 model Task {
@@ -117,19 +118,34 @@ model BasarSeller {
 }
 
 model Article {
-  id            String        @id @default(cuid())
-  basarSellerId String
-  title         String        @db.VarChar(120)
-  sizeLabel     String?       @db.VarChar(40)
-  price         Decimal       @db.Decimal(6, 2)
-  qrCode        String        @unique
-  status        ArticleStatus @default(AVAILABLE)
-  soldAt        DateTime?
-  createdAt     DateTime      @default(now())
-  basarSeller   BasarSeller   @relation(fields: [basarSellerId], references: [id], onDelete: Cascade)
-  sale          Sale?
+  id              String        @id @default(cuid())
+  basarSellerId   String
+  sellerArticleId String?
+  title           String        @db.VarChar(120)
+  sizeLabel       String?       @db.VarChar(40)
+  price           Decimal       @db.Decimal(6, 2)
+  qrCode          String        @unique
+  status          ArticleStatus @default(AVAILABLE)
+  soldAt          DateTime?
+  createdAt       DateTime      @default(now())
+  basarSeller     BasarSeller    @relation(fields: [basarSellerId], references: [id], onDelete: Cascade)
+  sellerArticle   SellerArticle? @relation(fields: [sellerArticleId], references: [id])
+  sale            Sale?
 
   @@index([basarSellerId, status])
+}
+
+// Personal article archive – survives basar closures
+model SellerArticle {
+  id        String    @id @default(cuid())
+  sellerId  Int
+  title     String    @db.VarChar(120)
+  sizeLabel String?   @db.VarChar(40)
+  price     Decimal   @db.Decimal(6, 2)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  seller    Seller    @relation(fields: [sellerId], references: [sellerId], onDelete: Cascade)
+  articles  Article[]
 }
 
 model Sale {

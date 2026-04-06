@@ -115,9 +115,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Preis muss größer als 0 sein' }, { status: 400 });
     }
 
+    // Auto-create a SellerArticle archive entry so it survives basar closure
+    const sellerArticle = await prisma.sellerArticle.create({
+      data: {
+        sellerId,
+        title: title.substring(0, 120),
+        sizeLabel: sizeLabel ? sizeLabel.substring(0, 40) : null,
+        price: parseFloat(price),
+      },
+    });
+
     const article = await prisma.article.create({
       data: {
         basarSellerId: basarSeller.id,
+        sellerArticleId: sellerArticle.id,
         title: title.substring(0, 120),
         sizeLabel: sizeLabel ? sizeLabel.substring(0, 40) : null,
         price: parseFloat(price),

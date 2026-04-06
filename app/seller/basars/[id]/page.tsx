@@ -39,6 +39,14 @@ interface Settlement {
   netPayout: number;
 }
 
+interface SellerArchiveEntry {
+  id: string;
+  title: string;
+  sizeLabel?: string;
+  price: number;
+  alreadyInBasar: boolean;
+}
+
 const fmt = (n: number) => n.toFixed(2).replace('.', ',');
 
 export default function SellerBasarDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -56,6 +64,10 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   const [message, setMessage] = useState('');
   const [messageOk, setMessageOk] = useState(true);
   const [form, setForm] = useState({ title: '', sizeLabel: '', price: '' });
+  const [archiveItems, setArchiveItems] = useState<SellerArchiveEntry[]>([]);
+  const [showArchive, setShowArchive] = useState(false);
+  const [selectedArchiveIds, setSelectedArchiveIds] = useState<Set<string>>(new Set());
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     const cookies = document.cookie.split(';');
@@ -79,7 +91,8 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
         fetch('/api/sellers'),
       ]);
 
-      if (basarRes.ok) setBasar(await basarRes.json());
+      let basarData: BasarDetail | null = null;
+      if (basarRes.ok) { basarData = await basarRes.json(); setBasar(basarData); }
       if (articlesRes.ok) {
         const data = await articlesRes.json();
         setArticles(data.articles ?? []);
@@ -91,6 +104,14 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
         if (me) {
           setSellerName(`${me.firstName} ${me.lastName}`);
           setActiveSellerStatus(me.sellerStatusActive ?? false);
+          // Load archive for OPEN basars where user is active
+          if (me.sellerStatusActive && basarData?.status === 'OPEN') {
+            const archRes = await fetch(`/api/seller-articles?basarId=${basarId}`);
+            if (archRes.ok) {
+              const archData = await archRes.json();
+              setArchiveItems(archData.sellerArticles ?? []);
+            }
+          }
         }
       }
 
@@ -115,6 +136,32 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
         .then(data => { if (data) setSettlement(data.basarSeller?.settlement ?? null); });
     }
   }, [basar?.status, sellerId, basarId]);
+
+  async function handleImportFromArchive() {
+    const ids = [...selectedArchiveIds];
+    if (ids.length === 0) return;
+    setImporting(true);
+    try {
+      const res = await fetch(`/api/basars/${basarId}/articles/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sellerArticleIds: ids }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setArticles(prev => [...prev, ...data.articles]);
+        if (!basarSeller) setBasarSeller(data.basarSeller);
+        setSelectedArchiveIds(new Set());
+        // Mark imported entries as alreadyInBasar
+        setArchiveItems(prev => prev.map(a => ids.includes(a.id) ? { ...a, alreadyInBasar: true } : a));
+        showMsg(`✓ ${data.articles.length} Artikel aus Archiv importiert`, true);
+      } else {
+        showMsg(data.error || 'Fehler beim Importieren', false);
+      }
+    } finally {
+      setImporting(false);
+    }
+  }
 
   async function handleAddArticle(e: React.FormEvent) {
     e.preventDefault();
@@ -165,10 +212,10 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
     const rows = articles.map(a => `
       <div class="label">
         <img src="/api/articles/${a.qrCode}/qr" alt="QR" class="qr" />
-        <div class="cell vknr">Verk. #${basarSeller?.sellerNumber ?? '?'}</div>
-        <div class="cell title">${escapeHtml(a.title)}</div>
-        <div class="cell size">${a.sizeLabel ? escapeHtml(a.sizeLabel) : '–'}</div>
-        <div class="cell price">${fmt(Number(a.price))} €</div>
+        <div class="cell vknr"><span class="lbl">Verkäufernummer:</span>${basarSeller?.sellerNumber ?? '?'}</div>
+        <div class="cell title"><span class="lbl">Bezeichnung:</span>${escapeHtml(a.title)}</div>
+        <div class="cell size"><span class="lbl">Größe:</span>${a.sizeLabel ? escapeHtml(a.sizeLabel) : '–'}</div>
+        <div class="cell price"><span class="lbl">Preis:</span>${fmt(Number(a.price))} €</div>
       </div>`).join('');
     win.document.write(`<!DOCTYPE html><html><head><title>Etiketten</title>
     <style>
@@ -197,14 +244,16 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
       }
       .cell {
         display: flex;
-        align-items: center;
+        flex-direction: column;
+        justify-content: center;
         overflow: hidden;
         padding: 1mm 0;
       }
+      .lbl { font-size: 7pt; color: #888; display: block; margin-bottom: 0.5mm; }
       .vknr { font-size: 9pt; color: #555; font-weight: bold; grid-column: 2; grid-row: 1; }
       .title { font-size: 9pt; font-weight: bold; word-break: break-word; grid-column: 3; grid-row: 1; }
       .size  { font-size: 9pt; color: #444; grid-column: 2; grid-row: 2; }
-      .price { font-size: 15pt; font-weight: bold; color: #000; grid-column: 3; grid-row: 2; justify-content: flex-end; }
+      .price { font-size: 13pt; font-weight: bold; color: #000; grid-column: 3; grid-row: 2; }
       @media print { button { display: none; } }
     </style></head><body>
     <button onclick="window.print()" style="margin:4mm;padding:6px 16px;font-size:13px;cursor:pointer;">🖨 Drucken</button>
@@ -264,6 +313,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   const soldRevenue = articles.filter(a => a.status === 'SOLD').reduce((s, a) => s + Number(a.price), 0);
   const canAddArticles = basar.status === 'OPEN' && activeSellerStatus;
   const isReadOnly = basar.status === 'ACTIVE' || basar.status === 'CLOSED';
+  const archiveAvailable = archiveItems.filter(a => !a.alreadyInBasar);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -351,6 +401,70 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
                 <span className="text-2xl font-extrabold text-green-600">{fmt(Number(settlement.netPayout))} €</span>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Archive import section */}
+        {canAddArticles && archiveAvailable.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-5">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="font-semibold text-gray-700">
+                📦 Aus früherem Basar übernehmen
+                <span className="ml-2 text-sm font-normal text-gray-500">({archiveAvailable.length} verfügbar)</span>
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowArchive(p => !p)}
+                className="text-sm text-amber-700 hover:underline"
+              >
+                {showArchive ? 'Ausblenden' : 'Anzeigen'}
+              </button>
+            </div>
+            {showArchive && (
+              <>
+                <p className="text-xs text-gray-500 mb-3">Wähle Artikel aus deinem Archiv aus – sie erhalten einen neuen QR-Code für diesen Basar.</p>
+                <div className="space-y-1.5 mb-3 max-h-64 overflow-y-auto pr-1">
+                  {archiveAvailable.map(a => (
+                    <label key={a.id} className="flex items-center gap-3 p-2.5 bg-white rounded-lg border border-amber-100 hover:border-amber-300 cursor-pointer transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={selectedArchiveIds.has(a.id)}
+                        onChange={() => {
+                          setSelectedArchiveIds(prev => {
+                            const next = new Set(prev);
+                            next.has(a.id) ? next.delete(a.id) : next.add(a.id);
+                            return next;
+                          });
+                        }}
+                        className="w-4 h-4 accent-yellow-500 flex-shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <span className="font-medium text-sm text-gray-800 truncate block">{a.title}</span>
+                        {a.sizeLabel && <span className="text-xs text-gray-500">{a.sizeLabel}</span>}
+                      </div>
+                      <span className="text-sm font-bold text-gray-700 flex-shrink-0">{fmt(a.price)} €</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedArchiveIds(new Set(archiveAvailable.map(a => a.id)))}
+                    className="text-xs text-amber-700 hover:underline"
+                  >
+                    Alle auswählen
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleImportFromArchive}
+                    disabled={importing || selectedArchiveIds.size === 0}
+                    className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold text-sm rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {importing ? 'Importieren…' : `${selectedArchiveIds.size > 0 ? selectedArchiveIds.size + ' ' : ''}Importieren`}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
 
