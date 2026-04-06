@@ -165,25 +165,46 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
     const rows = articles.map(a => `
       <div class="label">
         <img src="/api/articles/${a.qrCode}/qr" alt="QR" class="qr" />
-        <div class="info">
-          <div class="seller">Verk. #${basarSeller?.sellerNumber ?? '?'}</div>
-          <div class="title">${escapeHtml(a.title)}</div>
-          ${a.sizeLabel ? `<div class="size">Größe: ${escapeHtml(a.sizeLabel)}</div>` : ''}
-          <div class="price">${fmt(Number(a.price))} €</div>
-        </div>
+        <div class="cell vknr">Verk. #${basarSeller?.sellerNumber ?? '?'}</div>
+        <div class="cell title">${escapeHtml(a.title)}</div>
+        <div class="cell size">${a.sizeLabel ? escapeHtml(a.sizeLabel) : '–'}</div>
+        <div class="cell price">${fmt(Number(a.price))} €</div>
       </div>`).join('');
     win.document.write(`<!DOCTYPE html><html><head><title>Etiketten</title>
     <style>
       @page { size: A4; margin: 10mm; }
       body { font-family: Arial, sans-serif; margin: 0; }
-      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; }
-      .label { display: flex; align-items: center; gap: 4mm; border: 1px solid #ccc; padding: 4mm; border-radius: 3mm; page-break-inside: avoid; }
-      .qr { width: 30mm; height: 30mm; flex-shrink: 0; }
-      .info { flex: 1; min-width: 0; }
-      .seller { font-size: 9pt; color: #666; }
-      .title { font-size: 10pt; font-weight: bold; word-break: break-word; }
-      .size { font-size: 9pt; color: #555; }
-      .price { font-size: 14pt; font-weight: bold; color: #000; margin-top: 1mm; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+      .label {
+        display: grid;
+        grid-template-columns: 28mm 1fr 1fr;
+        grid-template-rows: 1fr 1fr;
+        gap: 0 3mm;
+        border: 1px solid #bbb;
+        padding: 3mm;
+        border-radius: 2mm;
+        page-break-inside: avoid;
+        min-height: 28mm;
+        box-sizing: border-box;
+      }
+      .qr {
+        width: 28mm;
+        height: 28mm;
+        grid-column: 1;
+        grid-row: 1 / span 2;
+        align-self: center;
+        flex-shrink: 0;
+      }
+      .cell {
+        display: flex;
+        align-items: center;
+        overflow: hidden;
+        padding: 1mm 0;
+      }
+      .vknr { font-size: 9pt; color: #555; font-weight: bold; grid-column: 2; grid-row: 1; }
+      .title { font-size: 9pt; font-weight: bold; word-break: break-word; grid-column: 3; grid-row: 1; }
+      .size  { font-size: 9pt; color: #444; grid-column: 2; grid-row: 2; }
+      .price { font-size: 15pt; font-weight: bold; color: #000; grid-column: 3; grid-row: 2; justify-content: flex-end; }
       @media print { button { display: none; } }
     </style></head><body>
     <button onclick="window.print()" style="margin:4mm;padding:6px 16px;font-size:13px;cursor:pointer;">🖨 Drucken</button>

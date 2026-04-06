@@ -37,6 +37,48 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
   const [pendingCount, setPendingCount] = useState(0);
   const scannerRef = useRef<any>(null);
   const scannerDivRef = useRef<HTMLDivElement>(null);
+  // Ref-based Set tracks scanned codes independently of React state batching
+  // This prevents duplicate scans from rapid re-fires of the scanner callback
+  const scannedCodesRef = useRef<Set<string>>(new Set());
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  function getAudioCtx(): AudioContext {
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    return audioCtxRef.current;
+  }
+
+  function playBeep(frequency: number, duration: number, type: OscillatorType = 'sine', volume = 0.4) {
+    try {
+      const ctx = getAudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = type;
+      osc.frequency.value = frequency;
+      gain.gain.setValueAtTime(volume, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + duration);
+    } catch { /* ignore – AudioContext blocked */ }
+  }
+
+  function playScanSuccess() {
+    playBeep(1200, 0.12, 'sine', 0.35);
+  }
+
+  function playScanError() {
+    playBeep(300, 0.15, 'square', 0.3);
+    setTimeout(() => playBeep(250, 0.2, 'square', 0.3), 170);
+  }
+
+  function playKassierenSound() {
+    // Cash register "ding": two ascending tones
+    playBeep(880, 0.15, 'sine', 0.45);
+    setTimeout(() => playBeep(1320, 0.25, 'sine', 0.45), 160);
+  }
 
   // Track online status
   useEffect(() => {
@@ -115,22 +157,30 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
   useEffect(() => { return () => { stopScanner(); }; }, []);
 
   async function handleQrScan(qrCode: string) {
-    // Prevent duplicates in cart
-    if (cart.some(c => c.qrCode === qrCode)) {
-      showMessage('Artikel bereits im Warenkorb', 'error');
+    // Use ref-based Set to catch duplicates even under stale React closures
+    if (scannedCodesRef.current.has(qrCode)) {
+      showMessage('Artikel bereits im Warenkorb!', 'error');
+      playScanError();
       return;
     }
+    // Reserve the code immediately to block concurrent scans of the same code
+    scannedCodesRef.current.add(qrCode);
     try {
       const res = await fetch(`/api/articles/scan/${encodeURIComponent(qrCode)}`);
       const data = await res.json();
       if (!res.ok) {
+        scannedCodesRef.current.delete(qrCode); // release on error so it could be retried
         showMessage(data.error || 'Fehler beim Laden des Artikels', 'error');
+        playScanError();
         return;
       }
       setCart(prev => [...prev, { ...data, salePrice: data.price }]);
       showMessage(`✓ "${data.title}" hinzugefügt`, 'success');
+      playScanSuccess();
     } catch {
+      scannedCodesRef.current.delete(qrCode);
       showMessage('Netzwerkfehler beim Scannen', 'error');
+      playScanError();
     }
   }
 
@@ -157,8 +207,10 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
           showMessage(`${cart.length - failedCount} kassiert, ${failedCount} Fehler`, 'error');
         } else {
           showMessage(`✓ ${cart.length} Artikel kassiert – Gesamt: ${totalAmount.toFixed(2)} €`, 'success');
-          setCart([]);
-          setCashInput('');
+          playKassierenSound();
+        setCart([]);
+        scannedCodesRef.current.clear();
+        setCashInput('');
         }
       } else if (!navigator.onLine || res.status >= 500) {
         await saveOffline(items);
@@ -180,9 +232,11 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
       const key = `pending-sale-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       await set(key, { id: key, basarId, items: cart, timestamp: Date.now() } as PendingTransaction);
       setPendingCount(p => p + 1);
-      setCart([]);
-      setCashInput('');
-      showMessage('Offline gespeichert – wird synchronisiert wenn du wieder online bist', 'info');
+      playKassierenSound();
+    setCart([]);
+    scannedCodesRef.current.clear();
+    setCashInput('');
+    showMessage('Offline gespeichert – wird synchronisiert wenn du wieder online bist', 'info');
     } catch {
       showMessage('Fehler beim Offline-Speichern', 'error');
     }
@@ -190,13 +244,15 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
 
   async function handleStorno(item: ScannedArticle) {
     if (!item.saleId) {
-      setCart(prev => prev.filter(c => c.qrCode !== item.qrCode));
+      setCart(prev => prev.filter(c => c.id !== item.id));
+      scannedCodesRef.current.delete(item.qrCode);
       return;
     }
     if (!confirm('Verkauf stornieren?')) return;
     const res = await fetch(`/api/sales/${item.saleId}`, { method: 'DELETE' });
     if (res.ok) {
-      setCart(prev => prev.filter(c => c.qrCode !== item.qrCode));
+      setCart(prev => prev.filter(c => c.id !== item.id));
+      scannedCodesRef.current.delete(item.qrCode);
       showMessage('Storno erfolgreich', 'success');
     } else {
       const data = await res.json();
@@ -268,7 +324,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-semibold text-gray-700">Warenkorb ({cart.length})</h2>
             {cart.length > 0 && (
-              <button onClick={() => { if (confirm('Warenkorb leeren?')) { setCart([]); setCashInput(''); } }}
+              <button onClick={() => { if (confirm('Warenkorb leeren?')) { setCart([]); scannedCodesRef.current.clear(); setCashInput(''); } }}
                 className="text-sm text-red-500 hover:underline">Leeren</button>
             )}
           </div>
@@ -295,7 +351,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
                       className="w-20 text-right border border-gray-300 rounded px-2 py-1 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-yellow-500"
                     />
                     <span className="text-sm text-gray-500">€</span>
-                    <button onClick={() => handleStorno(item)} className="text-red-400 hover:text-red-600 transition-colors" title="Entfernen">
+                    <button type="button" onClick={() => handleStorno(item)} className="text-red-400 hover:text-red-600 transition-colors" title="Entfernen">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                   </div>
