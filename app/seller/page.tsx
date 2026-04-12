@@ -9,7 +9,7 @@ export default function SellerPage() {
   const [sellerId, setSellerId] = useState('');
   const [sellerStatusActive, setSellerStatusActive] = useState(false);
   const [sellerName, setSellerName] = useState('');
-  const [sellerNumber, setSellerNumber] = useState(0);
+  const [sellerId, setSellerId] = useState(0);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -48,7 +48,7 @@ export default function SellerPage() {
         if (currentSeller) {
           setSellerStatusActive(currentSeller.sellerStatusActive || false);
           setSellerName(`${currentSeller.firstName} ${currentSeller.lastName}`);
-          setSellerNumber(currentSeller.sellerId);
+          setSellerId(currentSeller.sellerId);
         }
       }
     } catch (error) {
@@ -144,12 +144,31 @@ export default function SellerPage() {
     <div className="min-h-screen bg-gray-100">
       <Header 
         title="Verkäufer Dashboard"
-        links={[{ href: '/', label: 'Logout' }]} 
-        sellerInfo={{ name: sellerName, sellerId: sellerNumber }}
+        links={[
+          { href: '/seller/basars', label: 'Mein Basar' },
+          { href: '/', label: 'Logout' },
+        ]} 
+        sellerInfo={{ name: sellerName, sellerId: sellerId }}
         noTitleLink={true}
       />
 
       <main className="max-w-4xl mx-auto p-4 md:p-8">
+        {/* Mein Basar */}
+        <a
+          href="/seller/basars"
+          className="block bg-yellow-400 hover:bg-yellow-500 transition-colors rounded-lg shadow-md p-6 mb-8 text-gray-900"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold mb-1">Mein Basar</h2>
+              <p className="text-gray-700">Artikel anlegen, Etiketten drucken, Abrechnung ansehen</p>
+            </div>
+            <svg className="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+        </a>
+
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <h2 className="text-2xl font-bold mb-6 text-center">Verkäuferstatus</h2>
           
