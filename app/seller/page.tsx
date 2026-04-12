@@ -9,7 +9,6 @@ export default function SellerPage() {
   const [sellerId, setSellerId] = useState('');
   const [sellerStatusActive, setSellerStatusActive] = useState(false);
   const [sellerName, setSellerName] = useState('');
-  const [sellerId, setSellerId] = useState(0);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -48,7 +47,6 @@ export default function SellerPage() {
         if (currentSeller) {
           setSellerStatusActive(currentSeller.sellerStatusActive || false);
           setSellerName(`${currentSeller.firstName} ${currentSeller.lastName}`);
-          setSellerId(currentSeller.sellerId);
         }
       }
     } catch (error) {
@@ -148,7 +146,7 @@ export default function SellerPage() {
           { href: '/seller/basars', label: 'Mein Basar' },
           { href: '/', label: 'Logout' },
         ]} 
-        sellerInfo={{ name: sellerName, sellerId: sellerId }}
+        sellerInfo={{ name: sellerName, sellerId: parseInt(sellerId, 10) }}
         noTitleLink={true}
       />
 
