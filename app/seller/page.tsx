@@ -179,7 +179,7 @@ export default function SellerPage() {
               className={`w-full md:w-auto px-12 py-6 rounded-xl text-2xl font-bold transition-all transform hover:scale-105 shadow-lg ${
                 sellerStatusActive
                   ? 'bg-green-500 hover:bg-green-600 text-white ring-4 ring-green-200'
-                  : 'bg-red-500 hover:bg-red-600 text-white ring-4 ring-red-200'
+                  : 'bg-gray-900 hover:bg-gray-800 text-white ring-4 ring-gray-300'
               }`}
             >
               {sellerStatusActive ? 'Status: AKTIV' : 'Status: INAKTIV'}

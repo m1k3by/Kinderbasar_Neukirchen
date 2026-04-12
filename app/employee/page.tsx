@@ -469,10 +469,10 @@ export default function EmployeePage() {
               disabled={sellerStatusLoading}
               className={`w-full md:w-auto px-12 py-6 rounded-xl text-2xl font-bold transition-all transform shadow-lg ${
                 sellerStatusLoading
-                  ? 'opacity-60 cursor-not-allowed bg-gray-400 text-white'
+                  ? 'opacity-60 cursor-not-allowed bg-gray-900 text-white'
                   : sellerStatusActive
                   ? 'bg-green-500 hover:bg-green-600 hover:scale-105 text-white ring-4 ring-green-200'
-                  : 'bg-red-500 hover:bg-red-600 hover:scale-105 text-white ring-4 ring-red-200'
+                  : 'bg-gray-900 hover:bg-gray-800 hover:scale-105 text-white ring-4 ring-gray-300'
               }`}
             >
               {sellerStatusLoading

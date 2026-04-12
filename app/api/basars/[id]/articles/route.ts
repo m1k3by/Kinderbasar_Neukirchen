@@ -100,7 +100,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     const body = await request.json();
-    const { title, sizeLabel, price } = body;
+    const { title, sizeLabel, gender, price } = body;
 
     if (!title || !price) {
       return NextResponse.json({ error: 'Beschreibung und Preis sind Pflichtfelder' }, { status: 400 });
@@ -109,12 +109,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Preis muss größer als 0 sein' }, { status: 400 });
     }
 
+    const genderValue = (gender === 'Junge' || gender === 'Mädchen') ? gender : null;
+
     // Auto-create a SellerArticle archive entry so it survives basar closure
     const sellerArticle = await prisma.sellerArticle.create({
       data: {
         sellerId,
         title: title.substring(0, 120),
         sizeLabel: sizeLabel ? sizeLabel.substring(0, 40) : null,
+        gender: genderValue,
         price: parseFloat(price),
       },
     });
@@ -125,6 +128,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         sellerArticleId: sellerArticle.id,
         title: title.substring(0, 120),
         sizeLabel: sizeLabel ? sizeLabel.substring(0, 40) : null,
+        gender: genderValue,
         price: parseFloat(price),
         qrCode: crypto.randomUUID(),
       },

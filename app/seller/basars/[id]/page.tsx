@@ -8,6 +8,7 @@ interface Article {
   id: string;
   title: string;
   sizeLabel?: string;
+  gender?: string;
   price: number;
   qrCode: string;
   status: 'AVAILABLE' | 'SOLD' | 'RETURNED';
@@ -63,7 +64,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [messageOk, setMessageOk] = useState(true);
-  const [form, setForm] = useState({ title: '', sizeLabel: '', price: '' });
+  const [form, setForm] = useState({ title: '', sizeLabel: '', gender: '', price: '' });
   const [archiveItems, setArchiveItems] = useState<SellerArchiveEntry[]>([]);
   const [showArchive, setShowArchive] = useState(false);
   const [selectedArchiveIds, setSelectedArchiveIds] = useState<Set<string>>(new Set());
@@ -174,19 +175,20 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
       id: tempId,
       title: form.title,
       sizeLabel: form.sizeLabel || undefined,
+      gender: form.gender || undefined,
       price: parseFloat(form.price),
       qrCode: '',
       status: 'AVAILABLE',
       createdAt: new Date().toISOString(),
     };
     setArticles(prev => [...prev, tempArticle]);
-    setForm({ title: '', sizeLabel: '', price: '' });
+    setForm({ title: '', sizeLabel: '', gender: '', price: '' });
 
     try {
       const res = await fetch(`/api/basars/${basarId}/articles`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: tempArticle.title, sizeLabel: tempArticle.sizeLabel, price: tempArticle.price }),
+        body: JSON.stringify({ title: tempArticle.title, sizeLabel: tempArticle.sizeLabel, gender: tempArticle.gender, price: tempArticle.price }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -197,12 +199,12 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
       } else {
         // Revert on error
         setArticles(prev => prev.filter(a => a.id !== tempId));
-        setForm({ title: tempArticle.title, sizeLabel: tempArticle.sizeLabel ?? '', price: String(tempArticle.price) });
+        setForm({ title: tempArticle.title, sizeLabel: tempArticle.sizeLabel ?? '', gender: tempArticle.gender ?? '', price: String(tempArticle.price) });
         showMsg(data.error || 'Fehler', false);
       }
     } catch {
       setArticles(prev => prev.filter(a => a.id !== tempId));
-      setForm({ title: tempArticle.title, sizeLabel: tempArticle.sizeLabel ?? '', price: String(tempArticle.price) });
+      setForm({ title: tempArticle.title, sizeLabel: tempArticle.sizeLabel ?? '', gender: tempArticle.gender ?? '', price: String(tempArticle.price) });
       showMsg('Netzwerkfehler', false);
     }
   }
@@ -238,7 +240,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
         <img src="/api/articles/${a.qrCode}/qr" alt="QR" class="qr" />
         <div class="cell vknr"><span class="lbl">Verkäufernummer:</span>${basarSeller?.seller?.sellerId ?? basarSeller?.sellerId ?? '?'}</div>
         <div class="cell title"><span class="lbl">Bezeichnung:</span>${escapeHtml(a.title)}</div>
-        <div class="cell size"><span class="lbl">Größe:</span>${a.sizeLabel ? escapeHtml(a.sizeLabel) : '–'}</div>
+        <div class="cell size"><span class="lbl">Größe:</span>${a.sizeLabel ? escapeHtml(a.sizeLabel) : '–'}${a.gender ? `<span class="gender-badge">${escapeHtml(a.gender)}</span>` : ''}</div>
         <div class="cell price"><span class="lbl">Preis:</span>${fmt(Number(a.price))} €</div>
       </div>`).join('');
     win.document.write(`<!DOCTYPE html><html><head><title>Etiketten</title>
@@ -278,6 +280,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
       .title { font-size: 12pt; font-weight: bold; word-break: break-word; grid-column: 3; grid-row: 1; }
       .size  { font-size: 12pt; color: #444; grid-column: 2; grid-row: 2; }
       .price { font-size: 17pt; font-weight: bold; color: #000; grid-column: 3; grid-row: 2; }
+      .gender-badge { display: block; margin-top: 1mm; font-size: 9pt; font-weight: bold; color: #1d4ed8; }
       @media print { button { display: none; } }
     </style></head><body>
     <button onclick="window.print()" style="margin:4mm;padding:6px 16px;font-size:13px;cursor:pointer;">🖨 Drucken</button>
@@ -523,6 +526,33 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
                 />
                 <div className="text-right text-xs text-gray-400 mt-0.5">{form.title.length}/120</div>
               </div>
+              <div className="md:col-span-3">
+                <span className="block text-xs font-medium text-gray-600 mb-1">Für wen?</span>
+                <div className="flex gap-5">
+                  {(['Junge', 'Mädchen'] as const).map(g => (
+                    <label key={g} className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="radio"
+                        name="gender"
+                        value={g}
+                        checked={form.gender === g}
+                        onChange={() => setForm(f => ({ ...f, gender: g }))}
+                        className="accent-yellow-500 w-4 h-4"
+                      />
+                      <span className="text-sm text-gray-700">{g}</span>
+                    </label>
+                  ))}
+                  {form.gender && (
+                    <button
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, gender: '' }))}
+                      className="text-xs text-gray-400 hover:text-gray-600 underline"
+                    >
+                      Auswahl aufheben
+                    </button>
+                  )}
+                </div>
+              </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Größe / Bezeichnung</label>
                 <input
@@ -577,6 +607,9 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
                     <p className="font-medium text-gray-800 truncate">{article.title}</p>
                     <p className="text-xs text-gray-500">
                       {article.sizeLabel && `Größe: ${article.sizeLabel} · `}
+                      {article.gender && (
+                        <span className="inline-block mr-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-600">{article.gender}</span>
+                      )}
                       {fmt(Number(article.price))} €
                       {article.status === 'SOLD' && article.soldAt && (
                         <span className="ml-1 text-gray-400">· verkauft {new Date(article.soldAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</span>

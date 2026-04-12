@@ -121,6 +121,7 @@ model Article {
   sellerArticleId String?
   title           String        @db.VarChar(120)
   sizeLabel       String?       @db.VarChar(40)
+  gender          String?       @db.VarChar(10)
   price           Decimal       @db.Decimal(6, 2)
   qrCode          String        @unique
   status          ArticleStatus @default(AVAILABLE)
@@ -139,6 +140,7 @@ model SellerArticle {
   sellerId  Int
   title     String    @db.VarChar(120)
   sizeLabel String?   @db.VarChar(40)
+  gender    String?   @db.VarChar(10)
   price     Decimal   @db.Decimal(6, 2)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt

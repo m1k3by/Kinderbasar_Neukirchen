@@ -94,6 +94,7 @@ export async function POST(
             sellerArticleId: sa.id,
             title: sa.title,
             sizeLabel: sa.sizeLabel,
+            gender: sa.gender ?? null,
             price: sa.price,
             qrCode: crypto.randomUUID(),
           },
