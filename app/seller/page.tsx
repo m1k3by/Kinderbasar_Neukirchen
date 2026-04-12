@@ -141,13 +141,12 @@ export default function SellerPage() {
   return (
     <div className="min-h-screen bg-gray-100">
       <Header 
-        title="Verkäufer Dashboard"
         links={[
-          { href: '/seller/basars', label: 'Mein Basar' },
+          { href: '/seller', label: 'Verkäuferbereich', active: true },
+          { href: '/seller/basars', label: 'Basare' },
           { href: '/', label: 'Logout' },
         ]} 
         sellerInfo={{ name: sellerName, sellerId: parseInt(sellerId, 10) }}
-        noTitleLink={true}
       />
 
       <main className="max-w-4xl mx-auto p-4 md:p-8">

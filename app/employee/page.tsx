@@ -444,7 +444,8 @@ export default function EmployeePage() {
     <div className="min-h-screen bg-gray-100">
       <Header 
         links={[
-          { href: '/seller/basars', label: 'Mein Basar' },
+          { href: '/employee', label: 'Mitarbeiterbereich', active: true },
+          { href: '/seller/basars', label: 'Basare' },
           ...(isCashier && activeBasars.length > 0
             ? activeBasars.map(b => ({ href: `/admin/basars/${b.id}/kasse`, label: 'Kasse' }))
             : isCashier ? [{ href: '/admin/basars', label: 'Kasse' }] : []),

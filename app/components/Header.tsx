@@ -40,12 +40,16 @@ export default function Header({
           </div>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex gap-4">
+          <nav className="hidden md:flex gap-1 items-center">
             {links.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`hover:underline text-base ${link.active ? 'font-bold' : ''}`}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  link.active
+                    ? 'bg-gray-900 text-white'
+                    : 'hover:bg-yellow-600'
+                }`}
               >
                 {link.label}
               </Link>

@@ -50,7 +50,13 @@ export default function SellerBasarsPage() {
       if (basarsRes.ok) {
         const data = await basarsRes.json();
         // Show only OPEN and ACTIVE basars – CLOSED basars are admin-only
-        setBasars((data.basars ?? []).filter((b: Basar) => b.status === 'OPEN' || b.status === 'ACTIVE'));
+        const relevant = (data.basars ?? []).filter((b: Basar) => b.status === 'OPEN' || b.status === 'ACTIVE');
+        // Skip the list if there's exactly one active basar
+        if (relevant.length === 1) {
+          router.replace(`/seller/basars/${relevant[0].id}`);
+          return;
+        }
+        setBasars(relevant);
       }
       if (sellersRes.ok) {
         const sellers = await sellersRes.json();
@@ -70,7 +76,11 @@ export default function SellerBasarsPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Header
-        links={[{ href: '/employee', label: '← Zurück' }]}
+        links={[
+          { href: '/seller', label: 'Verkäuferbereich' },
+          { href: '/seller/basars', label: 'Basare', active: true },
+          { href: '/', label: 'Logout' },
+        ]}
         sellerInfo={sellerName && sellerNumber ? { name: sellerName, sellerId: sellerNumber } : null}
       />
       <div className="max-w-3xl mx-auto p-6">
