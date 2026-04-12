@@ -92,6 +92,13 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
 
       let basarData: BasarDetail | null = null;
       if (basarRes.ok) { basarData = await basarRes.json(); setBasar(basarData); }
+
+      // Sellers may not view closed basars
+      if (basarData?.status === 'CLOSED') {
+        router.replace('/seller/basars');
+        return;
+      }
+
       if (articlesRes.ok) {
         const data = await articlesRes.json();
         setArticles(data.articles ?? []);
@@ -111,15 +118,6 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
               setArchiveItems(archData.sellerArticles ?? []);
             }
           }
-        }
-      }
-
-      // Load settlement if basar is closed
-      if (basar?.status === 'CLOSED' && sellerId) {
-        const stRes = await fetch(`/api/basars/${basarId}/settlements/${sellerId}`);
-        if (stRes.ok) {
-          const stData = await stRes.json();
-          setSettlement(stData.basarSeller?.settlement ?? null);
         }
       }
     } finally {

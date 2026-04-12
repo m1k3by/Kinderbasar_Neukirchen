@@ -49,8 +49,8 @@ export default function SellerBasarsPage() {
       ]);
       if (basarsRes.ok) {
         const data = await basarsRes.json();
-        // Show only OPEN, ACTIVE, CLOSED basars (not DRAFT)
-        setBasars((data.basars ?? []).filter((b: Basar) => b.status !== 'DRAFT'));
+        // Show only OPEN and ACTIVE basars – CLOSED basars are admin-only
+        setBasars((data.basars ?? []).filter((b: Basar) => b.status === 'OPEN' || b.status === 'ACTIVE'));
       }
       if (sellersRes.ok) {
         const sellers = await sellersRes.json();
@@ -105,7 +105,7 @@ export default function SellerBasarsPage() {
                     href={`/seller/basars/${basar.id}`}
                     className="flex-shrink-0 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold text-sm rounded-lg transition-colors"
                   >
-                    {basar.status === 'OPEN' ? 'Artikel anlegen' : basar.status === 'ACTIVE' ? 'Verkäufe ansehen' : 'Abrechnung'}
+                    {basar.status === 'OPEN' ? 'Artikel anlegen' : 'Verkäufe ansehen'}
                   </Link>
                 </div>
               </div>
