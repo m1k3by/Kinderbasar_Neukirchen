@@ -111,6 +111,27 @@ vercel --prod         # Manueller Deploy
 
 ---
 
+## Unit Tests
+
+Tests sind mit **Vitest** umgesetzt und decken `app/lib/**` sowie `app/api/**` ab.
+
+**Setup** (`__tests__/`):
+- `setup.ts` – setzt Test-Umgebungsvariablen (JWT_SECRET, ADMIN_PASS, etc.)
+- `helpers/tokens.ts` – erzeugt signierte JWTs für verschiedene Rollen (admin, seller, cashier)
+- Prisma und externe Dienste (Mail, QR-Code) werden pro Testdatei gemockt
+
+**Befehle:**
+
+```bash
+npm run test:run          # alle Tests einmalig ausführen
+npm test                  # Tests im Watch-Modus
+npm run test:coverage     # Coverage-Report (Schwellwert: 90 %)
+```
+
+Das Coverage-Ergebnis wird in der Konsole angezeigt. Fehlgeschlagene Tests werden mit `✕` markiert und zeigen Datei + Zeile. Der HTML-Report liegt unter `coverage/index.html`.
+
+---
+
 ## Rechtliches (Deutschland)
 
 - **Impressum** (`/impressum`) und **Datenschutzerklärung** (`/datenschutz`) müssen mit echten Daten befüllt werden
