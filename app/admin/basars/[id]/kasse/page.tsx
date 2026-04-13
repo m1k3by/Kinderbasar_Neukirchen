@@ -173,7 +173,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
       scannerRef.current = scanner;
       await scanner.start(
         { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
+        { fps: 15, qrbox: (w, h) => { const s = Math.floor(Math.min(w, h) * 0.72); return { width: s, height: s }; } },
         async (decodedText: string) => {
           try { await scanner.pause(); } catch { /* ignore */ }
           const resumeDelay = await handleQrScan(decodedText);
@@ -435,8 +435,8 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
           <div
             id="qr-reader-container"
             ref={scannerDivRef}
-            className={`w-full rounded-lg overflow-hidden bg-gray-100 relative ${scanning ? 'block' : 'hidden'}`}
-            style={{ aspectRatio: scanning ? '1 / 1' : undefined, maxHeight: scanning ? '55vw' : '0', minHeight: scanning ? '180px' : '0' }}
+            className={`w-full rounded-lg bg-gray-100 relative ${scanning ? 'block' : 'hidden'}`}
+            style={{ minHeight: scanning ? '280px' : '0' }}
           >
             {scanFlash && (
               <div className={`absolute inset-0 z-10 flex flex-col items-center justify-center pointer-events-none
