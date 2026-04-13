@@ -39,6 +39,9 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
   const [pendingManualQr, setPendingManualQr] = useState<string | null>(null);
   const [manualTitle, setManualTitle] = useState('');
   const [manualPrice, setManualPrice] = useState('');
+  // Visual scan feedback overlay
+  const [scanFlash, setScanFlash] = useState<'success' | 'error' | null>(null);
+  const [scanLastTitle, setScanLastTitle] = useState('');
   const scannerRef = useRef<any>(null);
   const scannerDivRef = useRef<HTMLDivElement>(null);
   // Ref-based Set tracks scanned codes independently of React state batching
@@ -47,6 +50,8 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
   const audioCtxRef = useRef<AudioContext | null>(null);
   // In-memory article cache for offline scan lookups
   const articleCacheRef = useRef<Map<string, Omit<ScannedArticle, 'salePrice'>>>(new Map());
+  // Tracks when each qrCode was last successfully added (to suppress rapid re-fire noise)
+  const scanTimestampsRef = useRef<Map<string, number>>(new Map());
 
   function getAudioCtx(): AudioContext {
     if (!audioCtxRef.current) {
@@ -172,9 +177,9 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
         { facingMode: 'environment' },
         { fps: 10, qrbox: { width: 250, height: 250 } },
         async (decodedText: string) => {
-          // Pause scanner while processing
           try { await scanner.pause(); } catch { /* ignore */ }
-          await handleQrScan(decodedText);
+          const resumeDelay = await handleQrScan(decodedText);
+          if (resumeDelay > 0) await new Promise(r => setTimeout(r, resumeDelay));
           try { await scanner.resume(); } catch { /* ignore */ }
         },
         (_error: any) => { /* ignore frequent scan errors */ }
@@ -195,42 +200,58 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
 
   useEffect(() => { return () => { stopScanner(); }; }, []);
 
-  async function handleQrScan(qrCode: string) {
-    // Use ref-based Set to catch duplicates even under stale React closures
+  async function handleQrScan(qrCode: string): Promise<number> {
+    // Deduplicate: code already in cart
     if (scannedCodesRef.current.has(qrCode)) {
-      showMessage('Artikel bereits im Warenkorb!', 'error');
-      playScanError();
-      return;
+      // Rapid re-fire from scanner (same code still in frame) → silent ignore
+      const lastTime = scanTimestampsRef.current.get(qrCode) ?? 0;
+      if (Date.now() - lastTime < 3000) return 0;
+      // Intentional re-scan after some time → gentle info, no error sound
+      showMessage('Bereits im Warenkorb', 'info');
+      return 0;
     }
-    // Reserve the code immediately to block concurrent scans of the same code
+    // Reserve immediately to block concurrent scans of the same code
     scannedCodesRef.current.add(qrCode);
     try {
       const res = await fetch(`/api/articles/scan/${encodeURIComponent(qrCode)}`);
       const data = await res.json();
       if (!res.ok) {
-        scannedCodesRef.current.delete(qrCode); // release on error so it could be retried
+        scannedCodesRef.current.delete(qrCode);
         showMessage(data.error || 'Fehler beim Laden des Artikels', 'error');
+        setScanFlash('error');
+        setTimeout(() => setScanFlash(null), 900);
         playScanError();
-        return;
+        return 0;
       }
       setCart(prev => [...prev, { ...data, salePrice: data.price }]);
-      showMessage(`✓ "${data.title}" hinzugefügt`, 'success');
+      scanTimestampsRef.current.set(qrCode, Date.now());
+      setScanLastTitle(data.title);
+      setScanFlash('success');
+      setTimeout(() => setScanFlash(null), 1400);
       playScanSuccess();
+      return 1500; // keep scanner paused so the same code doesn't re-fire
     } catch {
       // When offline: try the local article cache first
       const cached = articleCacheRef.current.get(qrCode);
       if (cached) {
         setCart(prev => [...prev, { ...cached, salePrice: cached.price }]);
-        showMessage(`✓ "${cached.title}" (offline Cache)`, 'success');
+        scanTimestampsRef.current.set(qrCode, Date.now());
+        setScanLastTitle(cached.title + ' (offline)');
+        setScanFlash('success');
+        setTimeout(() => setScanFlash(null), 1400);
         playScanSuccess();
+        return 1500;
       } else if (!navigator.onLine) {
-        // Article not in cache → ask for manual input
         setPendingManualQr(qrCode);
         showMessage('Offline: Artikel nicht im Cache – bitte manuell eingeben', 'info');
+        return 0;
       } else {
         scannedCodesRef.current.delete(qrCode);
+        setScanFlash('error');
+        setTimeout(() => setScanFlash(null), 900);
         showMessage('Netzwerkfehler beim Scannen', 'error');
         playScanError();
+        return 0;
       }
     }
   }
@@ -283,6 +304,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
           playKassierenSound();
         setCart([]);
         scannedCodesRef.current.clear();
+        scanTimestampsRef.current.clear();
         setCashInput('');
         }
       } else if (!navigator.onLine || res.status >= 500) {
@@ -308,6 +330,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
       playKassierenSound();
     setCart([]);
     scannedCodesRef.current.clear();
+    scanTimestampsRef.current.clear();
     setCashInput('');
     showMessage('Offline gespeichert – wird synchronisiert wenn du wieder online bist', 'info');
     } catch {
@@ -422,9 +445,23 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
           <div
             id="qr-reader-container"
             ref={scannerDivRef}
-            className={`w-full rounded-lg overflow-hidden bg-gray-100 ${scanning ? 'block' : 'hidden'}`}
+            className={`w-full rounded-lg overflow-hidden bg-gray-100 relative ${scanning ? 'block' : 'hidden'}`}
             style={{ minHeight: scanning ? '300px' : '0' }}
-          />
+          >
+            {scanFlash && (
+              <div className={`absolute inset-0 z-10 flex flex-col items-center justify-center pointer-events-none
+                ${scanFlash === 'success' ? 'bg-green-500/85' : 'bg-red-500/85'}`}>
+                {scanFlash === 'success' ? (
+                  <>
+                    <span className="text-white font-bold" style={{ fontSize: '4rem', lineHeight: 1 }}>✓</span>
+                    <span className="text-white font-bold text-base text-center px-6 mt-2 drop-shadow">{scanLastTitle}</span>
+                  </>
+                ) : (
+                  <span className="text-white font-bold" style={{ fontSize: '4rem', lineHeight: 1 }}>✕</span>
+                )}
+              </div>
+            )}
+          </div>
 
           {!scanning && (
             <p className="text-gray-400 text-sm text-center py-4">Scanner stoppen und starten um Artikel zu scannen</p>
@@ -436,7 +473,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-semibold text-gray-700">Warenkorb ({cart.length})</h2>
             {cart.length > 0 && (
-              <button onClick={() => { if (confirm('Warenkorb leeren?')) { setCart([]); scannedCodesRef.current.clear(); setCashInput(''); } }}
+              <button onClick={() => { if (confirm('Warenkorb leeren?')) { setCart([]); scannedCodesRef.current.clear(); scanTimestampsRef.current.clear(); setCashInput(''); } }}
                 className="text-sm text-red-500 hover:underline">Leeren</button>
             )}
           </div>
