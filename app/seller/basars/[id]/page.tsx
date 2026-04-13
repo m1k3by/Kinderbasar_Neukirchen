@@ -68,6 +68,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   const [archiveItems, setArchiveItems] = useState<SellerArchiveEntry[]>([]);
   const [showArchive, setShowArchive] = useState(false);
   const [selectedArchiveIds, setSelectedArchiveIds] = useState<Set<string>>(new Set());
+  const [isEmployee, setIsEmployee] = useState(false);
 
   useEffect(() => {
     const cookies = document.cookie.split(';');
@@ -111,6 +112,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
         if (me) {
           setSellerName(`${me.firstName} ${me.lastName}`);
           setActiveSellerStatus(me.sellerStatusActive ?? false);
+          setIsEmployee(me.isEmployee || false);
           // Load archive for OPEN basars where user is active
           if (me.sellerStatusActive && basarData?.status === 'OPEN') {
             const archRes = await fetch(`/api/seller-articles?basarId=${basarId}`);
@@ -340,6 +342,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   if (loading) return (
     <div className="min-h-screen bg-gray-50">
       <Header links={[
+        ...(isEmployee ? [{ href: '/employee', label: 'Mitarbeiterbereich' }] : []),
         { href: '/seller', label: 'Verkäuferbereich' },
         { href: '/seller/basars', label: 'Basare', active: true },
         { href: '/', label: 'Logout' },
@@ -351,6 +354,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   if (!basar) return (
     <div className="min-h-screen bg-gray-50">
       <Header links={[
+        ...(isEmployee ? [{ href: '/employee', label: 'Mitarbeiterbereich' }] : []),
         { href: '/seller', label: 'Verkäuferbereich' },
         { href: '/seller/basars', label: 'Basare', active: true },
         { href: '/', label: 'Logout' },
@@ -370,6 +374,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
     <div className="min-h-screen bg-gray-50">
       <Header
         links={[
+          ...(isEmployee ? [{ href: '/employee', label: 'Mitarbeiterbereich' }] : []),
           { href: '/seller', label: 'Verkäuferbereich' },
           { href: '/seller/basars', label: 'Basare', active: true },
           { href: '/', label: 'Logout' },

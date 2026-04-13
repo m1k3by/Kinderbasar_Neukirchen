@@ -31,6 +31,7 @@ export default function SellerBasarsPage() {
   const [loading, setLoading] = useState(true);
   const [sellerName, setSellerName] = useState('');
   const [sellerNumber, setSellerNumber] = useState(0);
+  const [isEmployee, setIsEmployee] = useState(false);
 
   useEffect(() => {
     // Auth check
@@ -65,7 +66,7 @@ export default function SellerBasarsPage() {
         if (sellerIdCookie) {
           const id = parseInt(sellerIdCookie.split('=')[1], 10);
           const me = sellers.find((s: any) => s.sellerId === id);
-          if (me) { setSellerName(`${me.firstName} ${me.lastName}`); setSellerNumber(me.sellerId); }
+          if (me) { setSellerName(`${me.firstName} ${me.lastName}`); setSellerNumber(me.sellerId); setIsEmployee(me.isEmployee || false); }
         }
       }
     } finally {
@@ -77,6 +78,7 @@ export default function SellerBasarsPage() {
     <div className="min-h-screen bg-gray-50">
       <Header
         links={[
+          ...(isEmployee ? [{ href: '/employee', label: 'Mitarbeiterbereich' }] : []),
           { href: '/seller', label: 'Verkäuferbereich' },
           { href: '/seller/basars', label: 'Basare', active: true },
           { href: '/', label: 'Logout' },
