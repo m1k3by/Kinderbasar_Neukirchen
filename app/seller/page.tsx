@@ -139,7 +139,7 @@ export default function SellerPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-gray-100">
       <Header 
         links={[
           { href: '/seller', label: 'Verkäuferbereich', active: true },
@@ -166,11 +166,11 @@ export default function SellerPage() {
           </div>
         </a>
 
-        <div className="bg-black border border-gray-700 rounded-lg p-6 mb-8">
-          <h2 className="text-2xl font-bold mb-6 text-center text-white">Verkäuferstatus</h2>
+        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+          <h2 className="text-2xl font-bold mb-6 text-center text-gray-900">Verkäuferstatus</h2>
           
           <div className="flex flex-col items-center justify-center space-y-6">
-            <p className="text-lg text-center text-gray-300">
+            <p className="text-lg text-center text-gray-900">
               Hier können Sie Ihren Verkäuferstatus aktivieren oder deaktivieren.
             </p>
             
@@ -196,9 +196,9 @@ export default function SellerPage() {
         </div>
 
         {/* Password Change Section */}
-        <div className="bg-black border border-gray-700 rounded-lg p-6">
-          <h2 className="text-2xl font-bold mb-4 text-white">Sicherheit</h2>
-          <p className="text-gray-300 mb-4">Ändern Sie hier Ihr Passwort</p>
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-2xl font-bold mb-4 text-gray-900">Sicherheit</h2>
+          <p className="text-gray-900 mb-4">Ändern Sie hier Ihr Passwort</p>
           <button
             onClick={() => setShowPasswordModal(true)}
             className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
@@ -210,8 +210,8 @@ export default function SellerPage() {
         {/* Password Change Modal */}
         {showPasswordModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-black border border-gray-700 rounded-lg shadow-xl max-w-md w-full p-6">
-              <h3 className="text-xl font-bold mb-4 text-white">Passwort ändern</h3>
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+              <h3 className="text-xl font-bold mb-4 text-gray-900">Passwort ändern</h3>
               
               {passwordError && (
                 <div className="mb-4 p-3 bg-red-100 text-red-800 rounded-lg text-sm">
@@ -228,7 +228,7 @@ export default function SellerPage() {
               <form onSubmit={handlePasswordChange}>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">
+                    <label className="block text-sm font-medium text-gray-900 mb-1">
                       Neues Passwort
                     </label>
                     <div className="relative">
@@ -236,7 +236,7 @@ export default function SellerPage() {
                         type={showNewPassword ? "text" : "password"}
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
-                        className="w-full px-3 py-2 pr-10 bg-gray-900 border border-gray-600 text-white rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                        className="w-full px-3 py-2 pr-10 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
                         required
                         minLength={6}
                         disabled={changingPassword}
@@ -245,7 +245,7 @@ export default function SellerPage() {
                       <button
                         type="button"
                         onClick={() => setShowNewPassword(!showNewPassword)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 focus:outline-none"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none"
                         aria-label={showNewPassword ? "Passwort verbergen" : "Passwort anzeigen"}
                         disabled={changingPassword}
                       >
@@ -261,11 +261,11 @@ export default function SellerPage() {
                         )}
                       </button>
                     </div>
-                    <p className="mt-1 text-xs text-gray-400">Mindestens 6 Zeichen</p>
+                    <p className="mt-1 text-xs text-gray-500">Mindestens 6 Zeichen</p>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">
+                    <label className="block text-sm font-medium text-gray-900 mb-1">
                       Passwort bestätigen
                     </label>
                     <div className="relative">
@@ -273,14 +273,14 @@ export default function SellerPage() {
                         type={showConfirmPassword ? "text" : "password"}
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
-                        className="w-full px-3 py-2 pr-10 bg-gray-900 border border-gray-600 text-white rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                        className="w-full px-3 py-2 pr-10 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
                         required
                         disabled={changingPassword}
                       />
                       <button
                         type="button"
                         onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 focus:outline-none"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none"
                         aria-label={showConfirmPassword ? "Passwort verbergen" : "Passwort anzeigen"}
                         disabled={changingPassword}
                       >
@@ -309,7 +309,7 @@ export default function SellerPage() {
                       setPasswordError('');
                       setPasswordSuccess('');
                     }}
-                    className="px-4 py-2 text-gray-300 hover:bg-gray-800 rounded-lg transition-colors"
+                    className="px-4 py-2 text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
                     disabled={changingPassword}
                   >
                     Abbrechen

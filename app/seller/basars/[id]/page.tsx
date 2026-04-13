@@ -238,49 +238,65 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
     const rows = articles.map(a => `
       <div class="label">
         <img src="/api/articles/${a.qrCode}/qr" alt="QR" class="qr" />
-        <div class="cell vknr"><span class="lbl">Verkäufernummer:</span>${basarSeller?.seller?.sellerId ?? basarSeller?.sellerId ?? '?'}</div>
-        <div class="cell title"><span class="lbl">Bezeichnung:</span>${escapeHtml(a.title)}</div>
-        <div class="cell size"><span class="lbl">Größe:</span>${a.sizeLabel ? escapeHtml(a.sizeLabel) : '–'}${a.gender ? `<span class="gender-badge">${escapeHtml(a.gender)}</span>` : ''}</div>
-        <div class="cell price"><span class="lbl">Preis:</span>${fmt(Number(a.price))} €</div>
+        <div class="info">
+          <div class="top">
+            <div class="cell vknr"><span class="lbl">Verkäufernummer</span>${basarSeller?.seller?.sellerId ?? basarSeller?.sellerId ?? '?'}</div>
+            <div class="cell title"><span class="lbl">Bezeichnung</span>${escapeHtml(a.title)}</div>
+          </div>
+          <div class="bottom">
+            <div class="cell size"><span class="lbl">Größe</span>${a.sizeLabel ? escapeHtml(a.sizeLabel) : '–'}${a.gender ? `<span class="gender-badge">${escapeHtml(a.gender)}</span>` : ''}</div>
+            <div class="cell price"><span class="lbl">Preis</span>${fmt(Number(a.price))} €</div>
+          </div>
+        </div>
       </div>`).join('');
     win.document.write(`<!DOCTYPE html><html><head><title>Etiketten</title>
     <style>
       @page { size: A4; margin: 10mm; }
       body { font-family: Arial, sans-serif; margin: 0; }
-      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
       .label {
-        display: grid;
-        grid-template-columns: 34mm 1fr 1fr;
-        grid-template-rows: 1fr 1fr;
-        gap: 0 3mm;
+        display: flex;
+        flex-direction: row;
+        align-items: stretch;
+        gap: 3mm;
         border: 1px solid #bbb;
         padding: 3mm;
         border-radius: 2mm;
         page-break-inside: avoid;
-        min-height: 34mm;
+        height: 28mm;
         box-sizing: border-box;
       }
       .qr {
-        width: 34mm;
-        height: 34mm;
-        grid-column: 1;
-        grid-row: 1 / span 2;
-        align-self: center;
+        width: 22mm;
+        height: 22mm;
         flex-shrink: 0;
+        align-self: center;
+      }
+      .info {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        overflow: hidden;
+        min-width: 0;
+      }
+      .top, .bottom {
+        display: flex;
+        gap: 3mm;
+        align-items: flex-start;
       }
       .cell {
         display: flex;
         flex-direction: column;
-        justify-content: center;
         overflow: hidden;
-        padding: 1mm 0;
+        min-width: 0;
       }
-      .lbl { font-size: 8pt; color: #888; display: block; margin-bottom: 0.5mm; }
-      .vknr { font-size: 12pt; color: #555; font-weight: bold; grid-column: 2; grid-row: 1; }
-      .title { font-size: 12pt; font-weight: bold; word-break: break-word; grid-column: 3; grid-row: 1; }
-      .size  { font-size: 12pt; color: #444; grid-column: 2; grid-row: 2; }
-      .price { font-size: 17pt; font-weight: bold; color: #000; grid-column: 3; grid-row: 2; }
-      .gender-badge { display: block; margin-top: 1mm; font-size: 9pt; font-weight: bold; color: #1d4ed8; }
+      .lbl { font-size: 7pt; color: #999; display: block; margin-bottom: 0.5mm; }
+      .vknr { font-size: 11pt; color: #333; font-weight: bold; flex-shrink: 0; }
+      .title { font-size: 11pt; font-weight: bold; word-break: break-word; flex: 1; }
+      .size { font-size: 11pt; color: #333; flex-shrink: 0; }
+      .price { font-size: 16pt; font-weight: bold; color: #000; flex: 1; }
+      .gender-badge { font-size: 8pt; font-weight: bold; color: #1d4ed8; margin-top: 0.5mm; }
       @media print { button { display: none; } }
     </style></head><body>
     <button onclick="window.print()" style="margin:4mm;padding:6px 16px;font-size:13px;cursor:pointer;">🖨 Drucken</button>
