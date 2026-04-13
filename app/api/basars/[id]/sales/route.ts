@@ -1,9 +1,9 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../../../../lib/prisma';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+const JWT_SECRET = process.env.JWT_SECRET!;
 
 // POST /api/basars/:id/sales – kassiere einen oder mehrere Artikel
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
