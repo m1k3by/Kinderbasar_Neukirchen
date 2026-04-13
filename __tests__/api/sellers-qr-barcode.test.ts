@@ -20,7 +20,7 @@ import { GET as getBarcode } from '@/app/api/sellers/[id]/barcode/route';
 
 function makeRequest(id: string) {
   return {
-    request: new Request(`http://localhost/api/sellers/${id}/qr`),
+    request: new Request(`http://localhost/api/sellers/${id}/qr`) as any,
     context: { params: Promise.resolve({ id }) },
   };
 }
