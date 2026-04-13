@@ -4,8 +4,8 @@ export default function LegalFooter() {
   return (
     <footer className="mt-12 pt-6 pb-4 border-t border-gray-300">
       <div className="max-w-6xl mx-auto px-4">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-gray-600">
-          <p className="text-center md:text-left">
+        <div className="flex flex-col items-center gap-3 text-sm text-gray-900">
+          <p className="text-center">
             © {new Date().getFullYear()} Kinderbasar Neukirchen
           </p>
           <nav className="flex gap-6">

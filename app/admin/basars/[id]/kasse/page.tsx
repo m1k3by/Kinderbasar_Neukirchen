@@ -40,6 +40,14 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
   // Visual scan feedback overlay
   const [scanFlash, setScanFlash] = useState<'success' | 'error' | null>(null);
   const [scanLastTitle, setScanLastTitle] = useState('');
+  const [scanFlashMessage, setScanFlashMessage] = useState('');
+
+  function showErrorFlash(msg: string, durationMs = 1200) {
+    setScanFlashMessage(msg);
+    setScanFlash('error');
+    setTimeout(() => setScanFlash(null), durationMs);
+    playScanError();
+  }
   const scannerRef = useRef<any>(null);
   const scannerDivRef = useRef<HTMLDivElement>(null);
   // Ref-based Set tracks scanned codes independently of React state batching
@@ -204,9 +212,9 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
       // Rapid re-fire from scanner (same code still in frame) → silent ignore
       const lastTime = scanTimestampsRef.current.get(qrCode) ?? 0;
       if (Date.now() - lastTime < 3000) return 0;
-      // Intentional re-scan after some time → gentle info, no error sound
-      showMessage('Bereits im Warenkorb', 'info');
-      return 0;
+      // Intentional re-scan after some time → show error flash
+      showErrorFlash('Bereits im Warenkorb');
+      return 1000;
     }
     // Reserve immediately to block concurrent scans of the same code
     scannedCodesRef.current.add(qrCode);
@@ -215,11 +223,10 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
       const data = await res.json();
       if (!res.ok) {
         scannedCodesRef.current.delete(qrCode);
-        showMessage(data.error || 'Fehler beim Laden des Artikels', 'error');
-        setScanFlash('error');
-        setTimeout(() => setScanFlash(null), 900);
-        playScanError();
-        return 0;
+        const msg = data.error || 'Fehler beim Laden des Artikels';
+        showMessage(msg, 'error');
+        showErrorFlash(msg);
+        return 1000;
       }
       setCart(prev => [...prev, { ...data, salePrice: data.price }]);
       scanTimestampsRef.current.set(qrCode, Date.now());
@@ -245,11 +252,9 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
         return 0;
       } else {
         scannedCodesRef.current.delete(qrCode);
-        setScanFlash('error');
-        setTimeout(() => setScanFlash(null), 900);
+        showErrorFlash('Netzwerkfehler beim Scannen');
         showMessage('Netzwerkfehler beim Scannen', 'error');
-        playScanError();
-        return 0;
+        return 1000;
       }
     }
   }
@@ -447,7 +452,10 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
                     <span className="text-white font-bold text-base text-center px-6 mt-2 drop-shadow">{scanLastTitle}</span>
                   </>
                 ) : (
-                  <span className="text-white font-bold" style={{ fontSize: '4rem', lineHeight: 1 }}>✕</span>
+                  <>
+                    <span className="text-white font-bold" style={{ fontSize: '3.5rem', lineHeight: 1 }}>✕</span>
+                    <span className="text-white font-bold text-sm text-center px-6 mt-2 drop-shadow">{scanFlashMessage}</span>
+                  </>
                 )}
               </div>
             )}

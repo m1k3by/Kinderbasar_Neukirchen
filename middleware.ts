@@ -25,9 +25,8 @@ export function middleware(request: NextRequest) {
 
   const payload = decodeJwtPayload(token);
 
-  // Allow cashiers through to the kasse page
-  const kassePath = /^\/admin\/basars\/[^/]+\/kasse(\/|$)/;
-  if (kassePath.test(request.nextUrl.pathname)) {
+  // Allow cashiers through to the basar list and kasse page
+  if (request.nextUrl.pathname.startsWith('/admin/basars')) {
     if (payload?.isCashier === true || payload?.role === 'admin') {
       return NextResponse.next();
     }

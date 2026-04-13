@@ -151,20 +151,20 @@ export default function SellerPage() {
 
       <main className="max-w-4xl mx-auto p-4 md:p-8">
         {/* Mein Basar */}
-        <a
-          href="/seller/basars"
-          className="block bg-yellow-400 hover:bg-yellow-500 transition-colors rounded-lg shadow-md p-6 mb-8 text-gray-900"
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold mb-1">Mein Basar</h2>
-              <p className="text-gray-700">Artikel anlegen, Etiketten drucken, Abrechnung ansehen</p>
-            </div>
-            <svg className="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
+        <div className="mb-8 bg-yellow-50 border border-yellow-200 rounded-lg shadow-sm p-6 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Mein Basar – Artikel erfassen</h2>
+            <p className="text-gray-900 mt-1 text-sm">
+              Lege Artikel für den Basar an, drucke Etiketten mit QR-Code und verfolge deine Verkäufe.
+            </p>
           </div>
-        </a>
+          <a
+            href="/seller/basars"
+            className="flex-shrink-0 px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold rounded-xl transition-colors shadow-sm"
+          >
+            Zu meinen Artikeln →
+          </a>
+        </div>
 
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <h2 className="text-2xl font-bold mb-6 text-center text-gray-900">Verkäuferstatus</h2>
