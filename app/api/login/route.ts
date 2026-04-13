@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '../../lib/prisma';
 import { createToken } from '../../lib/auth';
 import { rateLimit } from '../../lib/rateLimit';
+import { env } from '../../lib/env';
 import bcrypt from 'bcrypt';
 
 export async function POST(request: Request) {
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
     // Normalize email to lowercase for case-insensitive comparison
     email = email?.toLowerCase();
 
-    // Rate limiting: 10 login attempts per 15 minutes per IP
+    // Rate limiting: 30 login attempts per 15 minutes per IP
     const rateLimitKey = `login:${ip}`;
     
     if (!rateLimit(rateLimitKey, { maxRequests: 30, windowMs: 15 * 60 * 1000 })) {
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
     }
 
     // Check for admin login (case-insensitive)
-    if (email === process.env.ADMIN_USER?.toLowerCase() && password === process.env.ADMIN_PASS) {
+    if (email === env.ADMIN_USER.toLowerCase() && password === env.ADMIN_PASS) {
       console.log('[LOGIN] Success: Admin login', { ip });
       const token = createToken({ role: 'admin' });
       const response = NextResponse.json({ success: true, role: 'admin' });

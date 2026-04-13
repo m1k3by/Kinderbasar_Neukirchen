@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import nodemailer, { type SendMailOptions } from 'nodemailer';
 import { env } from './env';
 
 const transporter = nodemailer.createTransport({
@@ -23,7 +23,7 @@ export const sendMail = async (
     cid?: string;
   }>
 ) => {
-  const mailOptions: any = {
+  const mailOptions: SendMailOptions = {
     from: env.MAIL_FROM,
     to,
     subject,

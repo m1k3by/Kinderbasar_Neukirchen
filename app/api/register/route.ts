@@ -3,6 +3,7 @@ import { prisma } from '../../lib/prisma';
 import { generateQR, generateBarcode } from '../../lib/qr';
 import { sendMail } from '../../lib/mail';
 import { env } from '../../lib/env';
+import { parseAsGermanTime } from '../../lib/time';
 import path from 'path';
 import fs from 'fs';
 import { rateLimit } from '../../lib/rateLimit';
@@ -64,51 +65,6 @@ export async function POST(request: NextRequest) {
     settings.forEach(s => {
       settingsObj[s.key] = s.value;
     });
-
-    // Helper function to determine if a date is in DST (Daylight Saving Time) for Europe/Berlin
-    // MESZ (Sommerzeit): Last Sunday in March 2:00 to Last Sunday in October 3:00
-    // MEZ (Winterzeit): Rest of the year
-    const isDST = (date: Date): boolean => {
-      const year = date.getFullYear();
-      
-      // Find last Sunday in March
-      const marchLastDay = new Date(Date.UTC(year, 2, 31, 1, 0, 0)); // March 31 at 01:00 UTC (= 02:00 MEZ)
-      const marchLastSunday = new Date(marchLastDay);
-      marchLastSunday.setUTCDate(31 - ((marchLastDay.getUTCDay() || 7) - 1));
-      
-      // Find last Sunday in October
-      const octoberLastDay = new Date(Date.UTC(year, 9, 31, 1, 0, 0)); // October 31 at 01:00 UTC (= 02:00 MESZ)
-      const octoberLastSunday = new Date(octoberLastDay);
-      octoberLastSunday.setUTCDate(31 - ((octoberLastDay.getUTCDay() || 7) - 1));
-      
-      return date >= marchLastSunday && date < octoberLastSunday;
-    };
-
-    // Helper function to parse datetime string as Europe/Berlin timezone
-    const parseAsGermanTime = (dateTimeStr: string): Date => {
-      if (!dateTimeStr.includes('T')) {
-        // Old format: date only
-        dateTimeStr = dateTimeStr + 'T00:00:00';
-      }
-      
-      // If already has timezone, use it
-      if (dateTimeStr.includes('+') || dateTimeStr.includes('Z')) {
-        return new Date(dateTimeStr);
-      }
-      
-      // Parse without timezone first to get the date for DST check
-      const parts = dateTimeStr.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
-      if (!parts) return new Date(dateTimeStr);
-      
-      const [, year, month, day, hour, minute] = parts;
-      // Create a date in UTC to check DST
-      const testDate = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute)));
-      
-      // Determine offset: +01:00 (MEZ/Winter) or +02:00 (MESZ/Summer)
-      const offset = isDST(testDate) ? '+02:00' : '+01:00';
-      
-      return new Date(dateTimeStr + offset);
-    };
 
     const now = new Date();
 

@@ -68,19 +68,9 @@ const nextConfig: NextConfig = {
       bodySizeLimit: '2mb',
     },
   },
-  
-  // Webpack configuration for compatibility
-  webpack: (config, { isServer }) => {
-    if (isServer) {
-      // Exclude problematic Node.js modules from bundling
-      config.externals = config.externals || [];
-      config.externals.push({
-        'canvas': 'commonjs canvas',
-        'jsdom': 'commonjs jsdom',
-      });
-    }
-    return config;
-  },
+
+  // Use Turbopack (Next.js 16 default)
+  turbopack: {},
 };
 
 export default nextConfig;

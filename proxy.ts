@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { env } from './lib/env';
+import { env } from './app/lib/env';
 
 /** Decode JWT payload without signature verification (Edge Runtime compatible).
  *  Full verification is done in every API route handler. */
@@ -13,13 +13,13 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
   }
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   // Protected routes
   const protectedPaths = ['/admin', '/api/sellers', '/api/tasks', '/api/cakes'];
-  
+
   if (protectedPaths.some(path => request.nextUrl.pathname.startsWith(path))) {
     const token = request.cookies.get('token')?.value;
-    
+
     if (!token) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
@@ -35,7 +35,7 @@ export async function middleware(request: NextRequest) {
 
     // Check for admin basic auth
     const authHeader = request.headers.get('authorization');
-    
+
     if (authHeader) {
       const [type, credentials] = authHeader.split(' ');
       if (type === 'Basic') {
@@ -45,7 +45,7 @@ export async function middleware(request: NextRequest) {
         }
       }
     }
-    
+
     return new NextResponse('Unauthorized', {
       status: 401,
       headers: {
@@ -56,3 +56,12 @@ export async function middleware(request: NextRequest) {
 
   return NextResponse.next();
 }
+
+export const config = {
+  matcher: [
+    '/admin/:path*',
+    '/api/sellers/:path*',
+    '/api/tasks/:path*',
+    '/api/cakes/:path*',
+  ],
+};

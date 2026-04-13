@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../../lib/prisma';
+import { parseAsGermanTime } from '../../../lib/time';
 
 export async function PUT(request: Request) {
   const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
@@ -55,29 +56,6 @@ export async function PUT(request: Request) {
       settings.forEach((s) => {
         settingsObj[s.key] = s.value;
       });
-
-      // Helper function to parse datetime-local as German time (MEZ/MESZ)
-      const parseAsGermanTime = (dateTimeStr: string): Date => {
-        if (!dateTimeStr) return new Date(0);
-        
-        // Parse the datetime-local value (format: "YYYY-MM-DDTHH:mm")
-        const [datePart, timePart] = dateTimeStr.split('T');
-        const [year, month, day] = datePart.split('-').map(Number);
-        const [hours, minutes] = timePart.split(':').map(Number);
-        
-        // Determine UTC offset for Europe/Berlin timezone
-        // Check if date is in DST (last Sunday of March 02:00 to last Sunday of October 03:00)
-        const date = new Date(year, month - 1, day);
-        const marchLastSunday = new Date(year, 2, 31);
-        marchLastSunday.setDate(31 - (marchLastSunday.getDay() || 7) + 1);
-        const octoberLastSunday = new Date(year, 9, 31);
-        octoberLastSunday.setDate(31 - (octoberLastSunday.getDay() || 7) + 1);
-        
-        const isDST = date >= marchLastSunday && date < octoberLastSunday;
-        const offset = isDST ? '+02:00' : '+01:00';
-        
-        return new Date(dateTimeStr + offset);
-      };
 
       const now = new Date();
       const isEmployee = seller.isEmployee;

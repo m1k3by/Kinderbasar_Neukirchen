@@ -1,16 +1,7 @@
 // Simple in-memory rate limiting
-// ⚠️ WARNING: This is NOT suitable for production with multiple server instances (e.g., Vercel serverless)
+// ⚠️ WARNING: This is NOT suitable for production with multiple server instances (e.g., Vercel serverless).
 // Each instance has its own memory, so rate limits are NOT shared across instances.
-// For production, use a Redis-based solution like @upstash/ratelimit or Vercel KV
-// 
-// Example with Upstash:
-// import { Ratelimit } from '@upstash/ratelimit'
-// import { Redis } from '@upstash/redis'
-//
-// const ratelimit = new Ratelimit({
-//   redis: Redis.fromEnv(),
-//   limiter: Ratelimit.slidingWindow(10, '15 m'),
-// })
+// For production, use a Redis-based solution like @upstash/ratelimit or Vercel KV.
 
 interface RateLimitEntry {
   count: number;
@@ -55,14 +46,4 @@ export function rateLimit(identifier: string, config: RateLimitConfig): boolean 
   // Increment counter
   entry.count++;
   return true;
-}
-
-export function getRateLimitInfo(identifier: string): { remaining: number; resetTime: number } | null {
-  const entry = rateLimitMap.get(identifier);
-  if (!entry) return null;
-
-  return {
-    remaining: Math.max(0, 10 - entry.count),
-    resetTime: entry.resetTime,
-  };
 }

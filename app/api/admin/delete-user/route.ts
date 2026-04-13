@@ -1,9 +1,19 @@
-import { NextResponse } from 'next/server';
-import { prisma } from '@/app/lib/prisma';
+import { NextResponse, NextRequest } from 'next/server';
+import { prisma } from '../../../lib/prisma';
+import { verifyToken } from '../../../lib/auth';
 
-export async function POST(req: Request) {
+export async function POST(request: NextRequest) {
+  const token = request.cookies.get('token')?.value;
+  if (!token) return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 });
   try {
-    const { sellerId } = await req.json();
+    const decoded = verifyToken(token) as { role?: string };
+    if (decoded.role !== 'admin') return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 403 });
+  } catch {
+    return NextResponse.json({ error: 'Ungültiger Token' }, { status: 401 });
+  }
+
+  try {
+    const { sellerId } = await request.json();
 
     if (!sellerId) {
       return NextResponse.json(
