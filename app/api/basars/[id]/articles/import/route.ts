@@ -85,7 +85,7 @@ export async function POST(
       }, { status: 400 });
     }
 
-    // Create Article rows with fresh QR codes
+    // Create Article rows reusing the stable QR code from the archive entry
     const created = await prisma.$transaction(
       toImport.map((sa: any) =>
         prisma.article.create({
@@ -96,7 +96,9 @@ export async function POST(
             sizeLabel: sa.sizeLabel,
             gender: sa.gender ?? null,
             price: sa.price,
-            qrCode: crypto.randomUUID(),
+            // Reuse the archive QR code so already-printed labels still work.
+            // Fall back to a new UUID only for legacy articles that predate this feature.
+            qrCode: sa.qrCode ?? crypto.randomUUID(),
           },
         })
       )

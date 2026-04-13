@@ -123,7 +123,7 @@ model Article {
   sizeLabel       String?       @db.VarChar(40)
   gender          String?       @db.VarChar(10)
   price           Decimal       @db.Decimal(6, 2)
-  qrCode          String        @unique
+  qrCode          String
   status          ArticleStatus @default(AVAILABLE)
   soldAt          DateTime?
   createdAt       DateTime      @default(now())
@@ -132,6 +132,7 @@ model Article {
   sale            Sale?
 
   @@index([basarSellerId, status])
+  @@index([qrCode])
 }
 
 // Personal article archive – survives basar closures
@@ -142,6 +143,7 @@ model SellerArticle {
   sizeLabel String?   @db.VarChar(40)
   gender    String?   @db.VarChar(10)
   price     Decimal   @db.Decimal(6, 2)
+  qrCode    String?   @unique
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   seller    Seller    @relation(fields: [sellerId], references: [sellerId], onDelete: Cascade)

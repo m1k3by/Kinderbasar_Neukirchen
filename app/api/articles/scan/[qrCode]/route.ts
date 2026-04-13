@@ -23,8 +23,13 @@ export async function GET(
 
     const { qrCode } = await params;
 
-    const article = await prisma.article.findUnique({
-      where: { qrCode },
+    // Use findFirst so the same QR code can exist in multiple basars (stable codes).
+    // Among all articles with this code, find the one in an ACTIVE basar.
+    const article = await prisma.article.findFirst({
+      where: {
+        qrCode,
+        basarSeller: { basar: { status: 'ACTIVE' } },
+      },
       include: {
         basarSeller: {
           include: {
@@ -35,14 +40,10 @@ export async function GET(
       },
     });
 
-    if (!article) return NextResponse.json({ error: 'Artikel nicht gefunden' }, { status: 404 });
+    if (!article) return NextResponse.json({ error: 'Artikel nicht gefunden (kein aktiver Basar)' }, { status: 404 });
 
     if (article.status === 'SOLD') {
       return NextResponse.json({ error: 'Artikel bereits verkauft', article }, { status: 409 });
-    }
-
-    if (article.basarSeller.basar.status !== 'ACTIVE') {
-      return NextResponse.json({ error: 'Basar ist nicht aktiv' }, { status: 403 });
     }
 
     return NextResponse.json({

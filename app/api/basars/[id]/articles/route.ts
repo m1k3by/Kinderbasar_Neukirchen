@@ -109,7 +109,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Preis muss größer als 0 sein' }, { status: 400 });
     }
 
-    const genderValue = (gender === 'Junge' || gender === 'Mädchen') ? gender : null;
+    const genderValue = (gender === 'Junge' || gender === 'Mädchen' || gender === 'Unisex') ? gender : null;
+
+    // Generate one stable QR code – lives on the archive entry, reused across basars
+    const stableQrCode = crypto.randomUUID();
 
     // Auto-create a SellerArticle archive entry so it survives basar closure
     const sellerArticle = await prisma.sellerArticle.create({
@@ -119,6 +122,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         sizeLabel: sizeLabel ? sizeLabel.substring(0, 40) : null,
         gender: genderValue,
         price: parseFloat(price),
+        qrCode: stableQrCode,
       },
     });
 
@@ -130,7 +134,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         sizeLabel: sizeLabel ? sizeLabel.substring(0, 40) : null,
         gender: genderValue,
         price: parseFloat(price),
-        qrCode: crypto.randomUUID(),
+        qrCode: stableQrCode,
       },
     });
 

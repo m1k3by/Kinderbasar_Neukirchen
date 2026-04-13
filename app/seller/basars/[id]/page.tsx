@@ -529,7 +529,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
               <div className="md:col-span-3">
                 <span className="block text-xs font-medium text-gray-600 mb-1">Für wen?</span>
                 <div className="flex gap-5">
-                  {(['Junge', 'Mädchen'] as const).map(g => (
+                  {(['Junge', 'Mädchen', 'Unisex'] as const).map(g => (
                     <label key={g} className="flex items-center gap-2 cursor-pointer select-none">
                       <input
                         type="radio"

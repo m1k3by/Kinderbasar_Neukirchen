@@ -19,8 +19,8 @@ export async function GET(
 
     const { qrCode } = await params;
 
-    // Verify article exists
-    const article = await prisma.article.findUnique({ where: { qrCode } });
+    // findFirst – qrCode is no longer unique on Article (same code reused across basars)
+    const article = await prisma.article.findFirst({ where: { qrCode } });
     if (!article) return new Response('Not Found', { status: 404 });
 
     const buffer = await QRCode.toBuffer(qrCode, {

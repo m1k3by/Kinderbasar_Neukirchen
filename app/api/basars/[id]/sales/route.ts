@@ -35,7 +35,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     for (const item of items) {
       let article;
       if (item.qrCode) {
-        article = await prisma.article.findUnique({ where: { qrCode: item.qrCode } });
+        // qrCode is no longer unique on Article (same code reused across basars); narrow by basarId
+        article = await prisma.article.findFirst({ where: { qrCode: item.qrCode, basarSeller: { basarId } } });
       } else if (item.articleId) {
         article = await prisma.article.findUnique({ where: { id: item.articleId } });
       }
