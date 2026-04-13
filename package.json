@@ -16,6 +16,7 @@
     "db:push": "prisma db push"
   },
   "dependencies": {
+    "@ducanh2912/next-pwa": "^10.2.9",
     "@prisma/client": "^6.19.0",
     "bcrypt": "^6.0.0",
     "bwip-js": "^4.7.0",

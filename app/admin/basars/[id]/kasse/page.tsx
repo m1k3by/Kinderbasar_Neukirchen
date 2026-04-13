@@ -35,12 +35,18 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
   const [cashInput, setCashInput] = useState('');
   const [isOnline, setIsOnline] = useState(true);
   const [pendingCount, setPendingCount] = useState(0);
+  // Manual offline entry state
+  const [pendingManualQr, setPendingManualQr] = useState<string | null>(null);
+  const [manualTitle, setManualTitle] = useState('');
+  const [manualPrice, setManualPrice] = useState('');
   const scannerRef = useRef<any>(null);
   const scannerDivRef = useRef<HTMLDivElement>(null);
   // Ref-based Set tracks scanned codes independently of React state batching
   // This prevents duplicate scans from rapid re-fires of the scanner callback
   const scannedCodesRef = useRef<Set<string>>(new Set());
   const audioCtxRef = useRef<AudioContext | null>(null);
+  // In-memory article cache for offline scan lookups
+  const articleCacheRef = useRef<Map<string, Omit<ScannedArticle, 'salePrice'>>>(new Map());
 
   function getAudioCtx(): AudioContext {
     if (!audioCtxRef.current) {
@@ -80,10 +86,12 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
     setTimeout(() => playBeep(1320, 0.25, 'sine', 0.45), 160);
   }
 
-  // Track online status
+  // Track online status + keep article cache warm
   useEffect(() => {
     setIsOnline(navigator.onLine);
-    const handleOnline = () => { setIsOnline(true); syncPending(); };
+    loadArticleCache();
+    if (navigator.onLine) cacheBasarArticles();
+    const handleOnline = () => { setIsOnline(true); syncPending(); cacheBasarArticles(); };
     const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -99,6 +107,37 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
       const allKeys = await keys();
       const pending = allKeys.filter(k => String(k).startsWith('pending-sale-'));
       setPendingCount(pending.length);
+    } catch { /* ignore */ }
+  }
+
+  // Load cached article list from IndexedDB into memory (fast, no network)
+  async function loadArticleCache() {
+    try {
+      const { get } = await import('idb-keyval');
+      const cached = await get<Array<Omit<ScannedArticle, 'salePrice'>>>(`basar-articles-${basarId}`);
+      if (cached) articleCacheRef.current = new Map(cached.map(a => [a.qrCode, a]));
+    } catch { /* ignore */ }
+  }
+
+  // Fetch all articles for this basar and persist them in IndexedDB for offline use
+  async function cacheBasarArticles() {
+    try {
+      const res = await fetch(`/api/basars/${basarId}/articles`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const articles: Array<Omit<ScannedArticle, 'salePrice'>> = (data.articles ?? []).map((a: any) => ({
+        id: a.id,
+        title: a.title,
+        sizeLabel: a.sizeLabel ?? undefined,
+        price: Number(a.price),
+        sellerId: a.basarSeller?.seller?.sellerId ?? 0,
+        sellerName: `${a.basarSeller?.seller?.firstName ?? ''} ${a.basarSeller?.seller?.lastName ?? ''}`.trim(),
+        qrCode: a.qrCode,
+        basarId,
+      }));
+      const { set } = await import('idb-keyval');
+      await set(`basar-articles-${basarId}`, articles);
+      articleCacheRef.current = new Map(articles.map(a => [a.qrCode, a]));
     } catch { /* ignore */ }
   }
 
@@ -178,9 +217,21 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
       showMessage(`✓ "${data.title}" hinzugefügt`, 'success');
       playScanSuccess();
     } catch {
-      scannedCodesRef.current.delete(qrCode);
-      showMessage('Netzwerkfehler beim Scannen', 'error');
-      playScanError();
+      // When offline: try the local article cache first
+      const cached = articleCacheRef.current.get(qrCode);
+      if (cached) {
+        setCart(prev => [...prev, { ...cached, salePrice: cached.price }]);
+        showMessage(`✓ "${cached.title}" (offline Cache)`, 'success');
+        playScanSuccess();
+      } else if (!navigator.onLine) {
+        // Article not in cache → ask for manual input
+        setPendingManualQr(qrCode);
+        showMessage('Offline: Artikel nicht im Cache – bitte manuell eingeben', 'info');
+      } else {
+        scannedCodesRef.current.delete(qrCode);
+        showMessage('Netzwerkfehler beim Scannen', 'error');
+        playScanError();
+      }
     }
   }
 
@@ -188,6 +239,28 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
     setMessage(text);
     setMessageType(type);
     setTimeout(() => setMessage(''), 3000);
+  }
+
+  function handleManualAdd() {
+    if (!pendingManualQr || !manualTitle) return;
+    const price = parseFloat(manualPrice);
+    if (isNaN(price) || price < 0) return;
+    setCart(prev => [...prev, {
+      id: `manual-${Date.now()}`,
+      title: manualTitle,
+      price,
+      salePrice: price,
+      sellerId: 0,
+      sellerName: 'Manuell',
+      qrCode: pendingManualQr,
+      basarId,
+    }]);
+    scannedCodesRef.current.add(pendingManualQr);
+    showMessage(`✓ "${manualTitle}" manuell hinzugefügt`, 'success');
+    playScanSuccess();
+    setPendingManualQr(null);
+    setManualTitle('');
+    setManualPrice('');
   }
 
   async function handleKassieren() {
@@ -279,8 +352,10 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
       />
 
       {/* Status bar */}
-      <div className={`text-center text-sm py-1.5 font-medium ${isOnline ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
-        {isOnline ? '● Online' : '● Offline – Verkäufe werden lokal gespeichert'}
+      <div className={`text-center text-sm py-1.5 font-medium ${isOnline ? 'bg-green-500 text-white' : 'bg-orange-500 text-white'}`}>
+        {isOnline
+          ? `● Online · ${articleCacheRef.current.size > 0 ? `${articleCacheRef.current.size} Artikel gecacht` : 'Artikel werden geladen…'}`
+          : `● Offline · ${articleCacheRef.current.size > 0 ? `${articleCacheRef.current.size} Artikel im Cache verfügbar` : 'Kein Cache – manuelle Eingabe nötig'}`}
         {pendingCount > 0 && ` · ${pendingCount} ausstehende Sync(s)`}
       </div>
 
@@ -306,6 +381,43 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
           </div>
 
           {scannerError && <p className="text-red-600 text-sm mb-2">{scannerError}</p>}
+
+          {/* Offline manual entry – shown when scanned QR is not in local cache */}
+          {pendingManualQr && (
+            <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-sm font-medium text-yellow-800 mb-2">⚠ Offline: Artikel nicht im Cache – manuell eingeben:</p>
+              <input
+                type="text"
+                placeholder="Artikelbezeichnung"
+                value={manualTitle}
+                onChange={e => setManualTitle(e.target.value)}
+                className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm mb-2 focus:outline-none focus:ring-1 focus:ring-yellow-500"
+              />
+              <div className="flex gap-2 items-center">
+                <input
+                  type="number"
+                  placeholder="Preis"
+                  min="0"
+                  step="0.10"
+                  value={manualPrice}
+                  onChange={e => setManualPrice(e.target.value)}
+                  className="w-24 border border-gray-300 rounded px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-1 focus:ring-yellow-500"
+                />
+                <span className="text-sm text-gray-500">€</span>
+                <button
+                  onClick={handleManualAdd}
+                  disabled={!manualTitle || !manualPrice}
+                  className="flex-1 px-3 py-1.5 bg-yellow-500 text-white text-sm font-medium rounded hover:bg-yellow-600 disabled:opacity-50"
+                >
+                  Hinzufügen
+                </button>
+                <button
+                  onClick={() => { setPendingManualQr(null); setManualTitle(''); setManualPrice(''); scannedCodesRef.current.delete(pendingManualQr!); }}
+                  className="px-2 py-1.5 bg-gray-200 text-gray-600 text-sm rounded hover:bg-gray-300"
+                >✕</button>
+              </div>
+            </div>
+          )}
 
           <div
             id="qr-reader-container"
