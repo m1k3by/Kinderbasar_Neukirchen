@@ -8,8 +8,8 @@ vi.mock('next/headers', () => ({
 
 const prismaMock = vi.hoisted(() => ({
   basar: { findUnique: vi.fn() },
-  article: { findFirst: vi.fn(), findUnique: vi.fn() },
-  sale: { findMany: vi.fn() },
+  article: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
+  sale: { findMany: vi.fn(), create: vi.fn() },
   $transaction: vi.fn(),
 }));
 vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));

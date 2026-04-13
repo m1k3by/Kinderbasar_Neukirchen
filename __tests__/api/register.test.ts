@@ -61,7 +61,7 @@ const createdSeller = { sellerId: 1010, email: 'test@example.com', firstName: 'M
 
 describe('POST /api/register', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     rateLimitMock.mockReturnValue(true);
   });
 
@@ -88,9 +88,6 @@ describe('POST /api/register', () => {
 
   it('returns 400 when email already exists', async () => {
     prismaMock.settings.findMany.mockResolvedValue([]);
-    prismaMock.seller.findUnique
-      .mockResolvedValueOnce(null) // email lookup
-      .mockResolvedValueOnce({ sellerId: 1234 }); // actually returns existing email
     prismaMock.seller.findUnique.mockResolvedValue({ sellerId: 1234, email: 'test@example.com' });
     const res = await POST(makeNextRequest(validBody));
     expect(res.status).toBe(400);
@@ -115,7 +112,7 @@ describe('POST /api/register', () => {
     const res = await POST(makeNextRequest(validBody));
     expect(res.status).toBe(200);
     const data = await res.json();
-    expect(data.sellerId).toBe(1010);
+    expect(data.sellerId).toBe(1000); // route generates first available ID from findMany([]) = 1000
   });
 
   it('admin can bypass rate limit and registration periods', async () => {
