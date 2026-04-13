@@ -1,8 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef, use, useCallback } from 'react';
-import Link from 'next/link';
-import Header from '../../../../components/Header';
 
 interface ScannedArticle {
   id: string;
@@ -363,43 +361,35 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header
-        links={[
-          { href: '/admin', label: 'Basarliste' },
-          { href: '/admin/basars', label: 'Basare', active: true },
-          { href: '/admin/list', label: 'Helferliste' },
-          { href: '/admin/tasks', label: 'Aufgaben' },
-          { href: '/admin/settings', label: 'Datum einstellen' },
-          { href: '/', label: 'Logout' },
-        ]}
-      />
-
       {/* Status bar */}
-      <div className={`text-center text-sm py-1.5 font-medium ${isOnline ? 'bg-green-500 text-white' : 'bg-orange-500 text-white'}`}>
+      <div className={`text-center text-xs py-1 font-medium ${isOnline ? 'bg-green-500 text-white' : 'bg-orange-500 text-white'}`}>
         {isOnline
-          ? `● Online · ${articleCacheRef.current.size > 0 ? `${articleCacheRef.current.size} Artikel gecacht` : 'Artikel werden geladen…'}`
-          : `● Offline · ${articleCacheRef.current.size > 0 ? `${articleCacheRef.current.size} Artikel im Cache verfügbar` : 'Kein Cache – manuelle Eingabe nötig'}`}
-        {pendingCount > 0 && ` · ${pendingCount} ausstehende Sync(s)`}
+          ? `● Online${articleCacheRef.current.size > 0 ? ` · ${articleCacheRef.current.size} gecacht` : ''}`
+          : `● Offline · ${articleCacheRef.current.size > 0 ? `${articleCacheRef.current.size} im Cache` : 'Kein Cache'}`}
+        {pendingCount > 0 && ` · ${pendingCount} Sync ausstehend`}
       </div>
 
-      <div className="max-w-2xl mx-auto p-4">
-        <h1 className="text-2xl font-bold text-gray-800 mb-4">Kasse</h1>
-
+      <div className="max-w-2xl mx-auto p-2">
         {message && (
-          <div className={`mb-4 px-4 py-3 rounded-lg font-medium border ${msgColors[messageType]}`}>
+          <div className={`mb-2 px-3 py-2 rounded-lg text-sm font-medium border ${msgColors[messageType]}`}>
             {message}
           </div>
         )}
 
         {/* QR Scanner */}
-        <div className="bg-white rounded-xl shadow-md p-5 mb-4">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-semibold text-gray-700">QR-Code Scanner</h2>
+        <div className="bg-white rounded-xl shadow-md p-3 mb-2">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-gray-600">QR-Scanner</span>
+              {cart.length > 0 && (
+                <span className="text-sm font-bold text-green-600">{totalAmount.toFixed(2)} €</span>
+              )}
+            </div>
             <button
               onClick={scanning ? stopScanner : startScanner}
-              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${scanning ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-yellow-500 hover:bg-yellow-600 text-gray-900'}`}
+              className={`px-3 py-1 rounded-lg font-medium text-xs transition-colors ${scanning ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-yellow-500 hover:bg-yellow-600 text-gray-900'}`}
             >
-              {scanning ? '■ Scanner stoppen' : '▶ Scanner starten'}
+              {scanning ? '■ Stop' : '▶ Scannen'}
             </button>
           </div>
 
@@ -446,7 +436,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
             id="qr-reader-container"
             ref={scannerDivRef}
             className={`w-full rounded-lg overflow-hidden bg-gray-100 relative ${scanning ? 'block' : 'hidden'}`}
-            style={{ minHeight: scanning ? '300px' : '0' }}
+            style={{ aspectRatio: scanning ? '1 / 1' : undefined, maxHeight: scanning ? '55vw' : '0', minHeight: scanning ? '180px' : '0' }}
           >
             {scanFlash && (
               <div className={`absolute inset-0 z-10 flex flex-col items-center justify-center pointer-events-none
@@ -464,42 +454,40 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
           </div>
 
           {!scanning && (
-            <p className="text-gray-400 text-sm text-center py-4">Scanner stoppen und starten um Artikel zu scannen</p>
+            <p className="text-gray-400 text-xs text-center py-3">▶ Scannen drücken um Artikel zu scannen</p>
           )}
         </div>
 
         {/* Cart */}
-        <div className="bg-white rounded-xl shadow-md p-5 mb-4">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-semibold text-gray-700">Warenkorb ({cart.length})</h2>
+        <div className="bg-white rounded-xl shadow-md p-3 mb-2">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold text-gray-700">Warenkorb ({cart.length}){cart.length > 0 && <span className="ml-2 font-bold text-green-600">{totalAmount.toFixed(2)} €</span>}</h2>
             {cart.length > 0 && (
               <button onClick={() => { if (confirm('Warenkorb leeren?')) { setCart([]); scannedCodesRef.current.clear(); scanTimestampsRef.current.clear(); setCashInput(''); } }}
-                className="text-sm text-red-500 hover:underline">Leeren</button>
+                className="text-xs text-red-500 hover:underline">Leeren</button>
             )}
           </div>
 
           {cart.length === 0 ? (
-            <p className="text-gray-400 text-sm text-center py-4">Noch keine Artikel gescannt</p>
+            <p className="text-gray-400 text-xs text-center py-3">Noch keine Artikel gescannt</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {cart.map(item => (
-                <div key={item.qrCode} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                <div key={item.qrCode} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-800 truncate">{item.title}</p>
-                    <p className="text-xs text-gray-500">
-                      Verk. #{item.sellerId}{item.sizeLabel && ` · ${item.sizeLabel}`}
-                    </p>
+                    <p className="text-sm font-medium text-gray-800 truncate">{item.title}</p>
+                    <p className="text-xs text-gray-400">#{item.sellerId}{item.sizeLabel && ` · ${item.sizeLabel}`}</p>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
                     <input
                       type="number"
                       min="0"
                       step="0.10"
                       value={item.salePrice}
                       onChange={e => setCart(prev => prev.map(c => c.qrCode === item.qrCode ? { ...c, salePrice: parseFloat(e.target.value) || 0 } : c))}
-                      className="w-20 text-right border border-gray-300 rounded px-2 py-1 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-yellow-500"
+                      className="w-16 text-right border border-gray-300 rounded px-1.5 py-1 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-yellow-500"
                     />
-                    <span className="text-sm text-gray-500">€</span>
+                    <span className="text-xs text-gray-500">€</span>
                     <button type="button" onClick={() => handleStorno(item)} className="text-red-400 hover:text-red-600 transition-colors" title="Entfernen">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
@@ -512,14 +500,9 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
 
         {/* Checkout */}
         {cart.length > 0 && (
-          <div className="bg-white rounded-xl shadow-md p-5 mb-4">
-            <div className="flex justify-between items-center text-xl font-bold mb-4">
-              <span>Gesamt:</span>
-              <span className="text-green-600">{totalAmount.toFixed(2)} €</span>
-            </div>
-
+          <div className="bg-white rounded-xl shadow-md p-3 mb-2">
             {/* Change calculator */}
-            <div className="mb-4">
+            <div className="mb-3">
               <label className="block text-sm font-medium text-gray-700 mb-1">Betrag erhalten:</label>
               <div className="flex items-center gap-2">
                 <input
@@ -535,7 +518,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
               </div>
             </div>
             {change !== null && cashInput !== '' && (
-              <div className={`text-center font-bold text-lg py-2 rounded-lg mb-4 ${change >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+              <div className={`text-center font-bold text-lg py-2 rounded-lg mb-3 ${change >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                 {change >= 0 ? `Rückgeld: ${change.toFixed(2)} €` : `Zu wenig: ${Math.abs(change).toFixed(2)} €`}
               </div>
             )}
@@ -543,7 +526,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
             <button
               onClick={handleKassieren}
               disabled={kassieren}
-              className="w-full py-4 bg-green-500 hover:bg-green-600 text-white text-xl font-bold rounded-xl shadow-lg transition-all hover:scale-[1.01] disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-3 bg-green-500 hover:bg-green-600 text-white text-lg font-bold rounded-xl shadow-lg transition-all hover:scale-[1.01] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {kassieren ? 'Kassiert…' : `✓ Kassieren (${totalAmount.toFixed(2)} €)`}
             </button>
@@ -551,9 +534,9 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
         )}
 
         {pendingCount > 0 && isOnline && (
-          <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-center">
-            <p className="text-orange-700 font-medium">{pendingCount} Offline-Transaktion(en) ausstehend</p>
-            <button onClick={syncPending} className="mt-2 px-4 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-sm rounded-lg transition-colors">
+          <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 text-center">
+            <p className="text-orange-700 text-sm font-medium">{pendingCount} Offline-Transaktion(en) ausstehend</p>
+            <button onClick={syncPending} className="mt-1.5 px-4 py-1 bg-orange-500 hover:bg-orange-600 text-white text-sm rounded-lg transition-colors">
               Jetzt synchronisieren
             </button>
           </div>
