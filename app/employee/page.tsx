@@ -72,17 +72,25 @@ export default function EmployeePage() {
 
   useEffect(() => {
     loadData();
-    loadSellerInfo();
   }, []);
 
+  useEffect(() => {
+    if (sellerId) loadSellerInfo();
+  }, [sellerId]);
+
   async function loadSellerInfo() {
-    if (!sellerId) return;
+    const id = sellerId || (() => {
+      const c = document.cookie.split(';').find(c => c.trim().startsWith('sellerId='));
+      return c ? c.split('=')[1].trim() : '';
+    })();
+    if (!id) return;
+    const sellerIdNum = parseInt(id, 10);
     
     try {
       const res = await fetch(`/api/sellers`);
       if (res.ok) {
         const sellers = await res.json();
-        const currentSeller = sellers.find((s: any) => s.sellerId === parseInt(sellerId, 10));
+        const currentSeller = sellers.find((s: any) => s.sellerId === sellerIdNum);
         if (currentSeller) {
           setSellerStatusActive(currentSeller.sellerStatusActive || false);
           setSellerName(`${currentSeller.firstName} ${currentSeller.lastName}`);
