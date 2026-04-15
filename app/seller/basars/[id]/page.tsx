@@ -467,22 +467,41 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
         {/* Archive import section */}
         {canAddArticles && archiveAvailable.length > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-5">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="font-semibold text-gray-700">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-gray-800 text-base">
                 Aus früherem Basar übernehmen
                 <span className="ml-2 text-sm font-normal text-gray-500">({archiveAvailable.length} verfügbar)</span>
               </h2>
               <button
                 type="button"
                 onClick={() => setShowArchive(p => !p)}
-                className="text-sm text-amber-700 hover:underline"
+                className="text-sm text-amber-700 hover:underline flex-shrink-0 ml-3"
               >
                 {showArchive ? 'Ausblenden' : 'Anzeigen'}
               </button>
             </div>
+
+            {/* Permanent warning – always visible */}
+            <p className="text-red-700 font-bold text-sm mb-2 flex items-center gap-1.5">
+              <span>⚠️</span> Wichtige Hinweise – bitte lesen!
+            </p>
+            <div className="bg-red-50 border border-red-300 rounded-lg p-3 mb-2">
+              <p className="text-sm text-red-800">
+                <strong>Artikel müssen in diesen Basar übernommen werden</strong> – sonst verbleiben sie
+                nur im Archiv und können an der Kasse <strong>nicht gescannt und nicht verkauft</strong> werden!
+              </p>
+            </div>
+
+            <div className="bg-green-50 border border-green-300 rounded-lg p-3 mb-3">
+              <p className="text-sm text-green-800">
+                <strong>Dein QR-Code bleibt gültig</strong> – du musst keine neuen Etiketten drucken.
+                Der bestehende QR-Code funktioniert auch nach der Übernahme weiterhin.
+              </p>
+            </div>
+
             {showArchive && (
               <>
-                <p className="text-xs text-gray-500 mb-3">Wähle Artikel aus deinem Archiv aus – sie erhalten einen neuen QR-Code für diesen Basar.</p>
+                <p className="text-xs text-gray-500 mb-2">Wähle alle Artikel aus, die du in diesem Basar anbieten möchtest, und klicke auf <strong>Importieren</strong>.</p>
                 <div className="space-y-1.5 mb-3 max-h-64 overflow-y-auto pr-1">
                   {archiveAvailable.map(a => (
                     <label key={a.id} className="flex items-center gap-3 p-2.5 bg-white rounded-lg border border-amber-100 hover:border-amber-300 cursor-pointer transition-colors">
