@@ -6,6 +6,7 @@ const STOP_WORDS = new Set([
   'und', 'oder', 'aber', 'für', 'mit', 'von', 'zu', 'in', 'an', 'auf', 'ist',
   'sind', 'habe', 'hat', 'haben', 'bitte', 'gibt', 'noch', 'nicht', 'kein',
   'keine', 'darf', 'soll', 'will', 'muss', 'auch', 'beim', 'beim', 'im',
+  'als', 'so', 'ob', 'bis', 'seit', 'mal', 'nur', 'dann', 'wenn', 'hier',
 ]);
 
 function tokenize(text: string): string[] {

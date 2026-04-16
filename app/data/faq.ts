@@ -13,7 +13,7 @@ export const faqData: FaqItem[] = [
     question: 'Wie erstelle ich Artikel?',
     answer:
       'Gehe zu **Meine Basare** → wähle einen Basar → klicke auf **"Neuer Artikel"**. Gib Bezeichnung und Preis ein und speichere. Jeder Artikel bekommt automatisch einen QR-Code.',
-    keywords: ['artikel', 'erstellen', 'anlegen', 'neu', 'hinzufügen', 'anmelden', 'neuer', 'eintragen'],
+    keywords: ['artikel', 'erstellen', 'anlegen', 'neu', 'hinzufügen', 'neuer', 'eintragen', 'hochladen'],
     roles: ['seller', 'employee'],
   },
   {
@@ -29,7 +29,15 @@ export const faqData: FaqItem[] = [
     question: 'Kann ich Artikel nachträglich bearbeiten?',
     answer:
       'Ja, solange der Basar noch offen ist. Gehe zu deinem Basar, klicke auf den Artikel und wähle **"Bearbeiten"**. Nach dem Druck der Etiketten solltest du Preise nicht mehr ändern.',
-    keywords: ['bearbeiten', 'ändern', 'editieren', 'korrigieren', 'preis', 'anpassen'],
+    keywords: ['bearbeiten', 'ändern', 'editieren', 'korrigieren', 'anpassen', 'nachträglich'],
+    roles: ['seller', 'employee'],
+  },
+  {
+    id: 'seller-preis-format',
+    question: 'Welches Preisformat muss ich eingeben?',
+    answer:
+      'Preise werden mit **Komma als Dezimaltrennzeichen** eingegeben, z.B. **1,70** oder **12,50**. Gib den Preis in Euro ein – Cent-Beträge mit Komma. Negative Preise oder 0 € sind nicht erlaubt.',
+    keywords: ['preis', 'format', 'komma', 'angeben', 'eingeben', 'euro', 'cent', 'dezimal', 'betrag', '1,70', 'schreiben'],
     roles: ['seller', 'employee'],
   },
   {
@@ -61,7 +69,7 @@ export const faqData: FaqItem[] = [
     question: 'Wie viele Artikel darf ich anmelden?',
     answer:
       'Die maximale Artikelanzahl wird vom Veranstalter pro Basar festgelegt. Du siehst das Limit auf der Basar-Detailseite. Sobald du das Limit erreicht hast, kannst du keine weiteren Artikel anlegen.',
-    keywords: ['maximal', 'anzahl', 'limit', 'wie viele', 'maximum', 'viele', 'anzahl'],
+    keywords: ['maximal', 'anzahl', 'limit', 'maximum', 'viele', 'artikel', 'anmelden', 'registrieren', 'erlaubt'],
     roles: ['seller', 'employee'],
   },
   {
