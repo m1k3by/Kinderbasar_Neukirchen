@@ -1,6 +1,8 @@
 import './globals.css';
 import { Inter } from 'next/font/google';
+import { cookies } from 'next/headers';
 import LegalFooter from './components/LegalFooter';
+import ChatWidget from './components/ChatWidget';
 import type { Metadata, Viewport } from 'next';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -26,11 +28,25 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+function getRoleFromToken(token: string): string | null {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+    return payload.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('token')?.value;
+  const role = token ? getRoleFromToken(token) : null;
+  const showChat = role && role !== 'admin';
+
   return (
     <html lang="de">
       <body className={inter.className}>
@@ -38,6 +54,7 @@ export default function RootLayout({
           <main className="flex-grow">{children}</main>
           <LegalFooter />
         </div>
+        {showChat && <ChatWidget role={role} />}
       </body>
     </html>
   );
