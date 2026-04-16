@@ -10,10 +10,13 @@ interface Message {
 }
 
 function renderText(text: string) {
-  const parts = text.split(/\*\*(.*?)\*\*/g);
-  return parts.map((part, i) =>
-    i % 2 === 1 ? <strong key={i}>{part}</strong> : <span key={i}>{part}</span>
-  );
+  return text.split('\n').map((line, lineIdx) => {
+    const parts = line.split(/\*\*(.*?)\*\*/g);
+    const rendered = parts.map((part, i) =>
+      i % 2 === 1 ? <strong key={i}>{part}</strong> : <span key={i}>{part}</span>
+    );
+    return lineIdx === 0 ? rendered : [<br key={`br-${lineIdx}`} />, ...rendered];
+  });
 }
 
 const WELCOME = 'Hallo! Ich bin dein Hilfe-Assistent für den Kinderbasar. Wie kann ich dir helfen?';

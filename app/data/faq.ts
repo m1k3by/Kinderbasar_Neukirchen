@@ -186,8 +186,8 @@ export const faqData: FaqItem[] = [
     id: 'general-passwort',
     question: 'Wie ändere ich mein Passwort?',
     answer:
-      'Das Passwort kann aktuell nur durch den **Administrator** zurückgesetzt werden. Wende dich mit deiner E-Mail-Adresse an den Basar-Veranstalter.',
-    keywords: ['passwort', 'ändern', 'zurücksetzen', 'reset', 'vergessen', 'kennwort', 'neu'],
+      'Es gibt zwei Möglichkeiten:\n\n**Eingeloggt (Verkäufer):** Gehe zu deiner Startseite unter **"Mein Konto"** → **"Passwort ändern"** → neues Passwort eingeben und bestätigen.\n\n**Passwort vergessen:** Auf der **Login-Seite** auf **"Passwort vergessen?"** klicken → E-Mail-Adresse eingeben → du erhältst einen Reset-Link per E-Mail.',
+    keywords: ['passwort', 'ändern', 'zurücksetzen', 'reset', 'vergessen', 'kennwort', 'neu', 'resetten'],
     roles: ['seller', 'employee', 'cashier'],
   },
   {
