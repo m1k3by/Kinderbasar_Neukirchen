@@ -19,24 +19,34 @@ export async function GET(request: Request) {
     const sellerArticles = await prisma.sellerArticle.findMany({
       where: { sellerId },
       orderBy: { createdAt: 'desc' },
-      include: basarId
-        ? {
-            articles: {
-              where: { basarSeller: { basarId } },
-              select: { id: true },
-            },
-          }
-        : undefined,
+      include: {
+        articles: {
+          select: {
+            id: true,
+            status: true,
+            basarSeller: { select: { basarId: true } },
+          },
+        },
+      },
     });
 
-    const result = sellerArticles.map((sa: any) => ({
-      id: sa.id,
-      title: sa.title,
-      sizeLabel: sa.sizeLabel,
-      price: Number(sa.price),
-      createdAt: sa.createdAt,
-      alreadyInBasar: basarId ? (sa.articles?.length ?? 0) > 0 : false,
-    }));
+    const result = sellerArticles.map((sa: any) => {
+      const articlesInCurrentBasar = basarId
+        ? sa.articles.filter((a: any) => a.basarSeller.basarId === basarId)
+        : [];
+      const soldPreviously = sa.articles.some(
+        (a: any) => (!basarId || a.basarSeller.basarId !== basarId) && a.status === 'SOLD'
+      );
+      return {
+        id: sa.id,
+        title: sa.title,
+        sizeLabel: sa.sizeLabel,
+        price: Number(sa.price),
+        createdAt: sa.createdAt,
+        alreadyInBasar: articlesInCurrentBasar.length > 0,
+        soldPreviously,
+      };
+    });
 
     return NextResponse.json({ sellerArticles: result });
   } catch (error) {

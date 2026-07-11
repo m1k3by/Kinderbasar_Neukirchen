@@ -47,6 +47,7 @@ interface SellerArchiveEntry {
   sizeLabel?: string;
   price: number;
   alreadyInBasar: boolean;
+  soldPreviously: boolean;
 }
 
 const fmt = (n: number) => n.toFixed(2).replace('.', ',');
@@ -106,11 +107,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
       let basarData: BasarDetail | null = null;
       if (basarRes.ok) { basarData = await basarRes.json(); setBasar(basarData); }
 
-      // Sellers may not view closed basars
-      if (basarData?.status === 'CLOSED') {
-        router.replace('/seller/basars');
-        return;
-      }
+      // CLOSED basars are viewable (read-only settlement/archive) – no redirect
 
       if (articlesRes.ok) {
         const data = await articlesRes.json();
@@ -424,7 +421,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   const soldRevenue = articles.filter(a => a.status === 'SOLD').reduce((s, a) => s + Number(a.price), 0);
   const canAddArticles = basar.status === 'OPEN' && activeSellerStatus;
   const isReadOnly = basar.status === 'ACTIVE' || basar.status === 'CLOSED';
-  const archiveAvailable = archiveItems.filter(a => !a.alreadyInBasar);
+  const archiveAvailable = archiveItems.filter(a => !a.alreadyInBasar && !a.soldPreviously);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -456,6 +453,13 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
             </div>
           )}
         </div>
+
+        {/* Closed basar notice */}
+        {basar.status === 'CLOSED' && (
+          <div className="bg-gray-100 border border-gray-200 rounded-xl p-4 mb-5 text-gray-600 text-sm">
+            Dieser Basar ist beendet. Du siehst hier deine Abrechnung und eine Übersicht deiner Artikel (schreibgeschützt).
+          </div>
+        )}
 
         {/* Not active warning */}
         {basar.status === 'OPEN' && !activeSellerStatus && (
