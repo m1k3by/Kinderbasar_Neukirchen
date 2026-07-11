@@ -15,6 +15,7 @@ interface Basar {
   commissionPercent: number;
   entryFee: number;
   status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
+  isArchived: boolean;
   _count?: { basarSellers: number };
 }
 
@@ -97,12 +98,30 @@ export default function AdminBasarsPage() {
     }
   }
 
+  async function handleArchive(basar: Basar) {
+    if (!confirm(`"${basar.title}" archivieren? Der Basar verschwindet aus der Liste und ist nur noch im Archiv sichtbar.`)) return;
+    const res = await fetch(`/api/basars/${basar.id}/archive`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archived: true }),
+    });
+    if (res.ok) {
+      setMessage(`"${basar.title}" wurde archiviert`);
+      loadBasars();
+    } else {
+      const data = await res.json();
+      setMessage(data.error || 'Fehler');
+    }
+    setTimeout(() => setMessage(''), 4000);
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header
         links={[
           { href: '/admin', label: 'Basarliste' },
           { href: '/admin/basars', label: 'Basare', active: true },
+          { href: '/admin/basars/archiv', label: 'Archiv' },
           { href: '/admin/list', label: 'Helferliste' },
           { href: '/admin/tasks', label: 'Aufgaben' },
           { href: '/admin/settings', label: 'Einstellungen' },
@@ -225,6 +244,12 @@ export default function AdminBasarsPage() {
                       <button onClick={() => handleAdvanceStatus(basar)}
                         className="px-3 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-gray-900 text-sm font-medium rounded-lg transition-colors">
                         {NEXT_STATUS_LABEL[basar.status]}
+                      </button>
+                    )}
+                    {basar.status === 'CLOSED' && (
+                      <button onClick={() => handleArchive(basar)}
+                        className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-600 text-sm font-medium rounded-lg transition-colors">
+                        Archivieren
                       </button>
                     )}
                   </div>

@@ -354,7 +354,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
     if (cart.length === 0) return;
     setKassieren(true);
     const items = cart.map(i => ({ qrCode: i.qrCode, salePrice: i.salePrice }));
-    const clientTxId = (crypto as any)?.randomUUID ? crypto.randomUUID() : `live-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const clientTxId = crypto.randomUUID();
     try {
       const res = await fetch(`/api/basars/${basarId}/sales`, {
         method: 'POST',

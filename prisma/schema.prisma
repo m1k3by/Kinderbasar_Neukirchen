@@ -94,6 +94,7 @@ model Basar {
   commissionPercent    Decimal     @db.Decimal(5, 2) @default(20)
   entryFee             Decimal     @db.Decimal(6, 2) @default(0)
   status               BasarStatus @default(DRAFT)
+  isArchived           Boolean     @default(false)
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
   basarSellers         BasarSeller[]

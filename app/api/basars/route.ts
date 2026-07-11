@@ -13,14 +13,18 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '50');
     const skip = (page - 1) * limit;
 
+    const archived = searchParams.get('archived') === 'true';
+    const where = { isArchived: archived };
+
     const [basars, total] = await Promise.all([
       prisma.basar.findMany({
+        where,
         skip,
         take: limit,
         orderBy: { eventDate: 'desc' },
         include: { _count: { select: { basarSellers: true } } },
       }),
-      prisma.basar.count(),
+      prisma.basar.count({ where }),
     ]);
 
     return NextResponse.json({ basars, total, page, limit });
