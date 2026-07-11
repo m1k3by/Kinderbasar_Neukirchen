@@ -526,84 +526,116 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
 
         {/* Archive import section */}
         {canAddArticles && archiveAvailable.length > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-5">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold text-gray-800 text-base">
-                Aus früherem Basar übernehmen
-                <span className="ml-2 text-sm font-normal text-gray-500">({archiveAvailable.length} verfügbar)</span>
-              </h2>
-              <button
-                type="button"
-                onClick={() => setShowArchive(p => !p)}
-                className="text-sm text-amber-700 hover:underline flex-shrink-0 ml-3"
-              >
-                {showArchive ? 'Ausblenden' : 'Anzeigen'}
-              </button>
-            </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-xl mb-5 overflow-hidden">
 
-            {/* Permanent warning – always visible */}
-            <p className="text-red-700 font-bold text-sm mb-2 flex items-center gap-1.5">
-              <span>⚠️</span> Wichtige Hinweise – bitte lesen!
-            </p>
-            <div className="bg-red-50 border border-red-300 rounded-lg p-3 mb-2">
-              <p className="text-sm text-red-800">
-                <strong>Artikel müssen in diesen Basar übernommen werden</strong> – sonst verbleiben sie
-                nur im Archiv und können an der Kasse <strong>nicht gescannt und nicht verkauft</strong> werden!
-              </p>
-            </div>
-
-            <div className="bg-green-50 border border-green-300 rounded-lg p-3 mb-3">
-              <p className="text-sm text-green-800">
-                <strong>Dein QR-Code bleibt gültig</strong> – du musst keine neuen Etiketten drucken.
-                Der bestehende QR-Code funktioniert auch nach der Übernahme weiterhin.
-              </p>
-            </div>
-
-            {showArchive && (
-              <>
-                <p className="text-xs text-gray-500 mb-2">Wähle alle Artikel aus, die du in diesem Basar anbieten möchtest, und klicke auf <strong>Importieren</strong>.</p>
-                <div className="space-y-1.5 mb-3 max-h-64 overflow-y-auto pr-1">
-                  {archiveAvailable.map(a => (
-                    <label key={a.id} className="flex items-center gap-3 p-2.5 bg-white rounded-lg border border-amber-100 hover:border-amber-300 cursor-pointer transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={selectedArchiveIds.has(a.id)}
-                        onChange={() => {
-                          setSelectedArchiveIds(prev => {
-                            const next = new Set(prev);
-                            next.has(a.id) ? next.delete(a.id) : next.add(a.id);
-                            return next;
-                          });
-                        }}
-                        className="w-4 h-4 accent-yellow-500 flex-shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <span className="font-medium text-sm text-gray-800 truncate block">{a.title}</span>
-                        {a.sizeLabel && <span className="text-xs text-gray-500">{a.sizeLabel}</span>}
-                      </div>
-                      <span className="text-sm font-bold text-gray-700 flex-shrink-0">{fmt(a.price)} €</span>
-                    </label>
-                  ))}
+            {/* Clickable header – entire row toggles the section */}
+            <button
+              type="button"
+              onClick={() => setShowArchive(p => !p)}
+              className="w-full flex items-center justify-between px-5 py-4 hover:bg-amber-100 active:bg-amber-200 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="text-2xl flex-shrink-0">📦</span>
+                <div className="min-w-0">
+                  <h2 className="font-bold text-gray-800 text-base leading-snug">
+                    Artikel aus früherem Basar übernehmen
+                  </h2>
+                  <p className="text-xs text-amber-700 mt-0.5 font-medium">
+                    {archiveAvailable.length} Artikel zum Import bereit
+                  </p>
                 </div>
-                <div className="flex items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedArchiveIds(new Set(archiveAvailable.map(a => a.id)))}
-                    className="text-xs text-amber-700 hover:underline"
-                  >
-                    Alle auswählen
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleImportFromArchive}
-                    disabled={selectedArchiveIds.size === 0}
-                    className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold text-sm rounded-lg transition-colors disabled:opacity-50"
-                  >
-                    {`${selectedArchiveIds.size > 0 ? selectedArchiveIds.size + ' ' : ''}Importieren`}
-                  </button>
-                </div>
-              </>
-            )}
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                <span className="px-2.5 py-1 bg-amber-400 text-amber-950 text-xs font-bold rounded-full leading-none">
+                  {archiveAvailable.length}
+                </span>
+                <span className="text-sm font-semibold text-amber-700 hidden sm:inline">
+                  {showArchive ? 'Ausblenden' : 'Anzeigen'}
+                </span>
+                <svg
+                  className={`w-5 h-5 text-amber-600 transition-transform duration-200 ${showArchive ? 'rotate-180' : ''}`}
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </button>
+
+            {/* Body – always visible */}
+            <div className="px-5 pb-5">
+              <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-2">
+                <p className="text-sm text-red-800 flex items-start gap-2">
+                  <span className="flex-shrink-0 mt-0.5">⚠️</span>
+                  <span>
+                    <strong>Artikel müssen in diesen Basar übernommen werden</strong> – sonst können sie
+                    an der Kasse <strong>nicht gescannt und nicht verkauft</strong> werden!
+                  </span>
+                </p>
+              </div>
+              <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 mb-4">
+                <p className="text-sm text-green-800 flex items-start gap-2">
+                  <span className="flex-shrink-0 mt-0.5">✓</span>
+                  <span>
+                    <strong>Dein QR-Code bleibt gültig</strong> – nach der Übernahme
+                    sind keine neuen Etiketten nötig.
+                  </span>
+                </p>
+              </div>
+
+              {showArchive ? (
+                <>
+                  <p className="text-xs text-gray-500 mb-2">Artikel auswählen und auf <strong>Importieren</strong> klicken.</p>
+                  <div className="space-y-1.5 mb-3 max-h-64 overflow-y-auto pr-1">
+                    {archiveAvailable.map(a => (
+                      <label key={a.id} className="flex items-center gap-3 p-2.5 bg-white rounded-lg border border-amber-100 hover:border-amber-300 cursor-pointer transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={selectedArchiveIds.has(a.id)}
+                          onChange={() => {
+                            setSelectedArchiveIds(prev => {
+                              const next = new Set(prev);
+                              next.has(a.id) ? next.delete(a.id) : next.add(a.id);
+                              return next;
+                            });
+                          }}
+                          className="w-4 h-4 accent-yellow-500 flex-shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="font-medium text-sm text-gray-800 truncate block">{a.title}</span>
+                          {a.sizeLabel && <span className="text-xs text-gray-500">{a.sizeLabel}</span>}
+                        </div>
+                        <span className="text-sm font-bold text-gray-700 flex-shrink-0">{fmt(a.price)} €</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedArchiveIds(new Set(archiveAvailable.map(a => a.id)))}
+                      className="text-xs text-amber-700 hover:underline font-medium"
+                    >
+                      Alle auswählen
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleImportFromArchive}
+                      disabled={selectedArchiveIds.size === 0}
+                      className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold text-sm rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {selectedArchiveIds.size > 0 ? `${selectedArchiveIds.size} Importieren` : 'Importieren'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowArchive(true)}
+                  className="w-full py-2.5 border-2 border-dashed border-amber-300 rounded-lg text-sm font-semibold text-amber-700 hover:bg-amber-100 hover:border-amber-400 transition-colors"
+                >
+                  Artikel anzeigen & auswählen →
+                </button>
+              )}
+            </div>
           </div>
         )}
 
