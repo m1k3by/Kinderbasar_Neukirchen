@@ -1,21 +1,16 @@
 ﻿import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import jwt from 'jsonwebtoken';
 import { prisma } from '../../lib/prisma';
-
-const JWT_SECRET = process.env.JWT_SECRET!;
+import { requireAuth } from '../../lib/apiAuth';
 
 // GET /api/seller-articles?basarId=xxx
 // Returns the caller's personal article archive.
 // If basarId is provided, each entry also includes `alreadyInBasar` boolean.
 export async function GET(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
-
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
-    const sellerId: number = decoded.sellerId;
+    const authResult = await requireAuth();
+    if (authResult.response) return authResult.response;
+    const { auth } = authResult;
+    const sellerId: number | undefined = auth.sellerId;
     if (!sellerId) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
 
     const { searchParams } = new URL(request.url);
@@ -54,12 +49,10 @@ export async function GET(request: Request) {
 // Remove an entry from the personal archive (does NOT delete already-created basar articles)
 export async function DELETE(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
-
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
-    const sellerId: number = decoded.sellerId;
+    const authResult = await requireAuth();
+    if (authResult.response) return authResult.response;
+    const { auth } = authResult;
+    const sellerId: number | undefined = auth.sellerId;
     if (!sellerId) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
 
     const { id } = await request.json();

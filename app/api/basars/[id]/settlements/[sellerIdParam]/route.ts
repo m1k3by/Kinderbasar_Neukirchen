@@ -1,9 +1,6 @@
 ﻿import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import jwt from 'jsonwebtoken';
 import { prisma } from '../../../../../lib/prisma';
-
-const JWT_SECRET = process.env.JWT_SECRET!;
+import { requireAuth } from '../../../../../lib/apiAuth';
 
 // GET /api/basars/:id/settlements/:sellerIdParam
 export async function GET(
@@ -11,16 +8,15 @@ export async function GET(
   { params }: { params: Promise<{ id: string; sellerIdParam: string }> }
 ) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
+    const authResult = await requireAuth();
+    if (authResult.response) return authResult.response;
+    const { auth } = authResult;
 
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
     const { id: basarId, sellerIdParam } = await params;
     const sellerId = parseInt(sellerIdParam, 10);
 
     // Sellers can only see their own
-    if (decoded.role !== 'admin' && decoded.sellerId !== sellerId) {
+    if (auth.role !== 'admin' && auth.sellerId !== sellerId) {
       return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 403 });
     }
 
@@ -30,7 +26,7 @@ export async function GET(
         settlement: true,
         seller: { select: { firstName: true, lastName: true, sellerId: true, email: true } },
         articles: {
-          include: { sale: { select: { salePrice: true, soldAt: true, isCancelled: true } } },
+          include: { sales: { select: { salePrice: true, soldAt: true, isCancelled: true } } },
           orderBy: { status: 'asc' },
         },
       },

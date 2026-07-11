@@ -105,7 +105,7 @@ export default function AdminBasarsPage() {
           { href: '/admin/basars', label: 'Basare', active: true },
           { href: '/admin/list', label: 'Helferliste' },
           { href: '/admin/tasks', label: 'Aufgaben' },
-          { href: '/admin/settings', label: 'Datum einstellen' },
+          { href: '/admin/settings', label: 'Einstellungen' },
           { href: '/', label: 'Logout' },
         ]}
       />

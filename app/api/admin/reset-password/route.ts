@@ -1,18 +1,13 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '../../../lib/prisma';
 import { sendMail } from '../../../lib/mail';
-import { verifyToken } from '../../../lib/auth';
+import { requireAdmin } from '../../../lib/apiAuth';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
-  const token = request.cookies.get('token')?.value;
-  if (!token) return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 });
-  try {
-    const decoded = verifyToken(token) as { role?: string };
-    if (decoded.role !== 'admin') return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 403 });
-  } catch {
-    return NextResponse.json({ error: 'Ungültiger Token' }, { status: 401 });
-  }
+  const authResult = await requireAdmin();
+  if (authResult.response) return authResult.response;
 
   try {
     const { sellerId } = await request.json();
@@ -36,8 +31,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate new temporary password
-    const tempPassword = Math.random().toString(36).substring(2, 10);
+    // Generate new temporary password (crypto-secure)
+    const tempPassword = crypto.randomBytes(9).toString('base64url').slice(0, 12);
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
     // Update password in database

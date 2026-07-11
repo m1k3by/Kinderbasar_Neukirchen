@@ -20,6 +20,12 @@ interface PendingTransaction {
   basarId: string;
   items: ScannedArticle[];
   timestamp: number;
+  // Set when a sync attempt got a response from the server but some items could not be
+  // resolved (e.g. "Artikel nicht gefunden" for a manually-entered offline QR code, or
+  // "Ungültiger Preis"). These items are kept so the cash is not silently lost, but they
+  // will never resolve automatically — a human has to record the sale manually and then
+  // delete the entry.
+  needsReview?: boolean;
 }
 
 export default function KassePage({ params }: { params: Promise<{ id: string }> }) {
@@ -33,6 +39,10 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
   const [cashInput, setCashInput] = useState('');
   const [isOnline, setIsOnline] = useState(true);
   const [pendingCount, setPendingCount] = useState(0);
+  // Pending transactions that got a server response but still contain unresolved items
+  // (e.g. a manually-entered offline QR code that doesn't exist server-side). These
+  // require a human to record the sale manually and then delete the entry.
+  const [pendingReview, setPendingReview] = useState<{ key: string; tx: PendingTransaction }[]>([]);
   // Manual offline entry state
   const [pendingManualQr, setPendingManualQr] = useState<string | null>(null);
   const [manualTitle, setManualTitle] = useState('');
@@ -109,15 +119,43 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
     return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); };
   }, []);
 
-  // Load pending count from IndexedDB on mount
-  useEffect(() => { loadPendingCount(); }, []);
+  // Load pending count + review list from IndexedDB on mount
+  useEffect(() => { loadPendingCount(); loadPendingReview(); }, []);
 
   async function loadPendingCount() {
     try {
-      const { keys } = await import('idb-keyval');
+      const { keys, get } = await import('idb-keyval');
       const allKeys = await keys();
-      const pending = allKeys.filter(k => String(k).startsWith('pending-sale-'));
-      setPendingCount(pending.length);
+      const pendingKeys = allKeys.filter(k => String(k).startsWith('pending-sale-'));
+      let count = 0;
+      for (const key of pendingKeys) {
+        const tx = await get<PendingTransaction>(key);
+        if (tx && !tx.needsReview) count++;
+      }
+      setPendingCount(count);
+    } catch { /* ignore */ }
+  }
+
+  async function loadPendingReview() {
+    try {
+      const { keys, get } = await import('idb-keyval');
+      const allKeys = await keys();
+      const pendingKeys = allKeys.filter(k => String(k).startsWith('pending-sale-'));
+      const reviews: { key: string; tx: PendingTransaction }[] = [];
+      for (const key of pendingKeys) {
+        const tx = await get<PendingTransaction>(key);
+        if (tx?.needsReview) reviews.push({ key: String(key), tx });
+      }
+      setPendingReview(reviews);
+    } catch { /* ignore */ }
+  }
+
+  async function handleDeletePendingReview(key: string) {
+    if (!confirm('Eintrag wirklich löschen? Stelle sicher, dass der Verkauf manuell nachgetragen wurde.')) return;
+    try {
+      const { del } = await import('idb-keyval');
+      await del(key);
+      loadPendingReview();
     } catch { /* ignore */ }
   }
 
@@ -154,22 +192,47 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
 
   const syncPending = useCallback(async () => {
     try {
-      const { keys, get, del } = await import('idb-keyval');
+      const { keys, get, set, del } = await import('idb-keyval');
       const allKeys = await keys();
       const pendingKeys = allKeys.filter(k => String(k).startsWith('pending-sale-'));
       for (const key of pendingKeys) {
         const tx = await get<PendingTransaction>(key);
-        if (!tx) continue;
+        // needsReview entries require manual handling – never auto-retried
+        if (!tx || tx.needsReview) continue;
         try {
+          const clientTxId = String(key);
           const res = await fetch(`/api/basars/${tx.basarId}/sales`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items: tx.items.map(i => ({ qrCode: i.qrCode, salePrice: i.salePrice })) }),
+            body: JSON.stringify({ items: tx.items.map(i => ({ qrCode: i.qrCode, salePrice: i.salePrice })), clientTxId }),
           });
-          if (res.ok) { await del(key); setPendingCount(p => Math.max(0, p - 1)); }
+          if (res.ok) {
+            const data = await res.json().catch(() => ({ results: [] }));
+            const results: { success?: boolean; error?: string }[] = data.results ?? [];
+            // Items that succeeded, or failed because they were already sold (someone
+            // else recorded it first), are resolved. Anything else – especially
+            // "Artikel nicht gefunden" (client-generated offline QR code that doesn't
+            // exist server-side) or "Ungültiger Preis" – means the cash was collected
+            // but never recorded, so it must be kept for manual follow-up.
+            const unresolved: ScannedArticle[] = [];
+            results.forEach((r, idx) => {
+              const resolved = r.success === true || /bereits verkauft/i.test(r.error ?? '');
+              if (!resolved) unresolved.push(tx.items[idx]);
+            });
+
+            if (unresolved.length === 0) {
+              await del(key);
+            } else {
+              await set(key, { ...tx, items: unresolved, needsReview: true } as PendingTransaction);
+            }
+          }
+          // non-ok response → keep the pending record untouched for the next sync attempt
         } catch { /* keep for next sync */ }
       }
-    } catch { /* ignore */ }
+    } catch { /* ignore */ } finally {
+      loadPendingCount();
+      loadPendingReview();
+    }
   }, []);
 
   async function startScanner() {
@@ -291,11 +354,12 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
     if (cart.length === 0) return;
     setKassieren(true);
     const items = cart.map(i => ({ qrCode: i.qrCode, salePrice: i.salePrice }));
+    const clientTxId = (crypto as any)?.randomUUID ? crypto.randomUUID() : `live-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     try {
       const res = await fetch(`/api/basars/${basarId}/sales`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ items, clientTxId }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -310,14 +374,19 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
         scanTimestampsRef.current.clear();
         setCashInput('');
         }
-      } else if (!navigator.onLine || res.status >= 500) {
+      } else if (!navigator.onLine) {
+        // Genuinely offline → queue for later sync
         await saveOffline(items);
       } else {
-        const data = await res.json();
-        showMessage(data.error || 'Fehler beim Kassieren', 'error');
+        // Online but the server rejected/failed the request (4xx or 5xx). Do NOT queue
+        // this offline – a 5xx while online is retryable and queuing it could poison an
+        // offline transaction forever. Show the error and keep the cart so the cashier
+        // can just press "Kassieren" again.
+        const data = await res.json().catch(() => ({}));
+        showMessage(data.error || `Fehler beim Kassieren (${res.status})`, 'error');
       }
     } catch {
-      // Network error → save offline
+      // Network error (fetch threw) → save offline
       await saveOffline(items);
     } finally {
       setKassieren(false);
@@ -547,6 +616,38 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
             <button onClick={syncPending} className="mt-1.5 px-4 py-1 bg-orange-500 hover:bg-orange-600 text-white text-sm rounded-lg transition-colors">
               Jetzt synchronisieren
             </button>
+          </div>
+        )}
+
+        {/* Pending-review: items whose cash was collected but could not be recorded server-side */}
+        {pendingReview.length > 0 && (
+          <div className="bg-red-50 border border-red-300 rounded-xl p-3 mt-2">
+            <p className="text-red-700 text-sm font-bold mb-1">⚠ Manuelle Prüfung erforderlich</p>
+            <p className="text-red-600 text-xs mb-2">
+              Diese Verkäufe konnten nicht automatisch übertragen werden (z. B. unbekannter QR-Code). Das Geld wurde bereits eingenommen – bitte manuell nachtragen und den Eintrag danach löschen.
+            </p>
+            <div className="space-y-2">
+              {pendingReview.map(({ key, tx }) => (
+                <div key={key} className="bg-white border border-red-200 rounded-lg p-2">
+                  <div className="space-y-1 mb-2">
+                    {tx.items.map((item, idx) => (
+                      <div key={`${key}-${idx}`} className="flex items-center justify-between gap-2 text-sm">
+                        <span className="text-gray-800 truncate">{item.title || '(ohne Titel)'}</span>
+                        <span className="text-gray-500 text-xs font-mono truncate max-w-[40%]">{item.qrCode}</span>
+                        <span className="font-semibold text-gray-800 flex-shrink-0">{item.salePrice.toFixed(2)} €</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-red-500 mb-2">Manuell nachtragen und Eintrag löschen</p>
+                  <button
+                    onClick={() => handleDeletePendingReview(key)}
+                    className="w-full px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-medium rounded-lg transition-colors"
+                  >
+                    Eintrag löschen
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

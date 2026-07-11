@@ -1,19 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { generateBarcode } from '@/app/lib/qr';
+import { requireAuth } from '@/app/lib/apiAuth';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const authResult = await requireAuth();
+    if (authResult.response) return authResult.response;
+    const { auth } = authResult;
+
     const { id } = await params;
     const sellerId = parseInt(id, 10);
-    
+
     if (isNaN(sellerId)) {
       return NextResponse.json({ error: 'Invalid seller ID' }, { status: 400 });
     }
-    
+
+    if (auth.role !== 'admin' && auth.sellerId !== sellerId) {
+      return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 403 });
+    }
+
     const seller = await prisma.seller.findUnique({
       where: { sellerId }
     });

@@ -2,49 +2,43 @@ import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '../../lib/prisma';
 import { generateQR, generateBarcode } from '../../lib/qr';
 import { sendMail } from '../../lib/mail';
-import { env } from '../../lib/env';
 import { parseAsGermanTime } from '../../lib/time';
 import path from 'path';
 import fs from 'fs';
 import { rateLimit } from '../../lib/rateLimit';
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
+import { getAuth } from '../../lib/apiAuth';
 
 export async function POST(request: NextRequest) {
   const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
   const userAgent = request.headers.get('user-agent') || 'unknown';
   let email: string | undefined;
-  
+
   try {
     const body = await request.json();
-    let { email: emailInput, firstName, lastName, isEmployee } = body;
+    const { email: emailInput, firstName, lastName, isEmployee: isEmployeeInput } = body;
     email = emailInput;
-    
+    // Strict boolean coercion – nothing else in the body may influence privileges
+    // (isCashier in particular is never settable through registration).
+    const isEmployee = isEmployeeInput === true;
+
     console.log('[REGISTER] Attempt:', {
       email: email ? email.substring(0, 3) + '***' : 'undefined',
       firstName: firstName ? firstName.substring(0, 1) + '***' : 'undefined',
       lastName: lastName ? lastName.substring(0, 1) + '***' : 'undefined',
-      isEmployee: !!isEmployee,
+      isEmployee,
       ip,
       userAgent: userAgent.substring(0, 50),
       timestamp: new Date().toISOString()
     });
-    
+
     // Normalize email to lowercase for case-insensitive comparison
     email = email?.toLowerCase();
 
     // Check if request is from admin (skip validations)
-    const token = request.cookies.get('token')?.value;
-    
-    let isAdmin = false;
-    if (token) {
-      try {
-        const decoded: any = jwt.verify(token, env.JWT_SECRET);
-        isAdmin = decoded.role === 'admin';
-      } catch (e) {
-        // Invalid token, continue as non-admin
-      }
-    }
+    const auth = await getAuth();
+    const isAdmin = auth?.role === 'admin';
 
     // Rate limiting: 5 registration attempts per 15 minutes per IP (skip for admin)
     if (!isAdmin) {
@@ -153,68 +147,95 @@ export async function POST(request: NextRequest) {
     // Note: We don't block registration based on active sellers anymore
     // Users can register, but won't be able to activate their seller status if limit is reached
 
-    // Generate seller ID in range 1000-9999
-    // Get all existing seller IDs in this range
-    const existingSellers = await prisma.seller.findMany({
-      where: {
-        sellerId: {
-          gte: 1000,
-          lte: 9999
-        }
-      },
-      select: { sellerId: true },
-      orderBy: { sellerId: 'asc' }
-    });
+    // Generate password for everyone (crypto-secure temp password)
+    const tempPassword = crypto.randomBytes(9).toString('base64url').slice(0, 12);
+    const password = await bcrypt.hash(tempPassword, 10);
 
-    const existingIds = new Set(existingSellers.map(s => s.sellerId));
-    
-    let sellerId = null;
-    
     // First, try 10er numbers (ending in 0): 1010, 1020, 1030, ..., 9990
     // Then fill in ones place: 1011, 1021, 1031, etc.
     // Priority order: first all ending in 0, then 1, then 2, etc.
-    for (let lastDigit = 0; lastDigit <= 9; lastDigit++) {
-      for (let base = 100; base <= 999; base++) {
-        const id = base * 10 + lastDigit;
-        if (id >= 1000 && id <= 9999 && !existingIds.has(id)) {
-          sellerId = id;
-          break;
+    function computeNextSellerId(existingIds: Set<number>): number | null {
+      for (let lastDigit = 0; lastDigit <= 9; lastDigit++) {
+        for (let base = 100; base <= 999; base++) {
+          const id = base * 10 + lastDigit;
+          if (id >= 1000 && id <= 9999 && !existingIds.has(id)) {
+            return id;
+          }
         }
       }
-      if (sellerId !== null) break;
+      return null;
     }
-    
-    // If no ID available (all 9000 IDs are used)
-    if (sellerId === null) {
-      console.log('[REGISTER] Failed: All IDs used', { totalExisting: existingIds.size, ip });
+
+    let seller: Awaited<ReturnType<typeof prisma.seller.create>> | undefined;
+    let sellerId: number | null = null;
+    const MAX_ATTEMPTS = 3;
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      // Get all existing seller IDs in this range (re-read each attempt so a concurrent
+      // registration that just took our candidate ID is reflected on retry)
+      const existingSellers = await prisma.seller.findMany({
+        where: { sellerId: { gte: 1000, lte: 9999 } },
+        select: { sellerId: true },
+        orderBy: { sellerId: 'asc' },
+      });
+      const existingIds = new Set(existingSellers.map(s => s.sellerId));
+      sellerId = computeNextSellerId(existingIds);
+
+      // If no ID available (all 9000 IDs are used)
+      if (sellerId === null) {
+        console.log('[REGISTER] Failed: All IDs used', { totalExisting: existingIds.size, ip });
+        return NextResponse.json(
+          { error: 'Alle Verkäufer-IDs sind vergeben (1000-9999). Keine weiteren Registrierungen möglich.' },
+          { status: 400 }
+        );
+      }
+
+      // Generate QR code and Barcode with format: sellerId_lastName_firstName
+      const qrData = `${sellerId}_${lastName}_${firstName}`;
+      const qrCode = await generateQR(qrData);
+      const barcode = await generateBarcode(qrData);
+
+      try {
+        seller = await prisma.seller.create({
+          data: {
+            sellerId,
+            email,
+            firstName,
+            lastName,
+            isEmployee,
+            password,
+            qrCode,
+            barcode,
+          },
+        });
+        break; // success
+      } catch (createError: unknown) {
+        const err = createError as { code?: string; meta?: { target?: string[] | string } };
+        if (err.code === 'P2002') {
+          const target = err.meta?.target;
+          const targetStr = Array.isArray(target) ? target.join(',') : String(target ?? '');
+          if (targetStr.includes('email')) {
+            return NextResponse.json(
+              { error: 'Diese E-Mail Adresse ist bereits registriert' },
+              { status: 400 }
+            );
+          }
+          // sellerId collision (race with a concurrent registration) → retry with a freshly recomputed ID
+          if (attempt < MAX_ATTEMPTS) {
+            console.log('[REGISTER] sellerId collision, retrying', { sellerId, attempt, ip });
+            continue;
+          }
+        }
+        throw createError;
+      }
+    }
+
+    if (!seller) {
       return NextResponse.json(
-        { error: 'Alle Verkäufer-IDs sind vergeben (1000-9999). Keine weiteren Registrierungen möglich.' },
-        { status: 400 }
+        { error: 'Registrierung fehlgeschlagen. Bitte versuchen Sie es später erneut.' },
+        { status: 500 }
       );
     }
-    
-    // Generate password for everyone
-    const tempPassword = Math.random().toString(36).substring(2, 10);
-    const password = await bcrypt.hash(tempPassword, 10);
-
-    // Generate QR code and Barcode with format: sellerId_lastName_firstName
-    const qrData = `${sellerId}_${lastName}_${firstName}`;
-    const qrCode = await generateQR(qrData);
-    const barcode = await generateBarcode(qrData);
-
-    // Create seller with codes stored
-    const seller = await prisma.seller.create({
-      data: {
-        sellerId,
-        email,
-        firstName,
-        lastName,
-        isEmployee,
-        password,
-        qrCode,
-        barcode,
-      },
-    });
 
     // Use settings already loaded at the beginning for email
     const formatDateTime = (dateTimeString: string | undefined) => {

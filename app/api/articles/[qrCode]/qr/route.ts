@@ -1,10 +1,6 @@
-﻿import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import jwt from 'jsonwebtoken';
-import QRCode from 'qrcode';
+﻿import QRCode from 'qrcode';
 import { prisma } from '../../../../lib/prisma';
-
-const JWT_SECRET = process.env.JWT_SECRET!;
+import { getAuth } from '../../../../lib/apiAuth';
 
 // GET /api/articles/:qrCode/qr – returns QR code as PNG
 export async function GET(
@@ -12,10 +8,8 @@ export async function GET(
   { params }: { params: Promise<{ qrCode: string }> }
 ) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
-    if (!token) return new Response('Unauthorized', { status: 401 });
-    jwt.verify(token, JWT_SECRET);
+    const auth = await getAuth();
+    if (!auth) return new Response('Unauthorized', { status: 401 });
 
     const { qrCode } = await params;
 

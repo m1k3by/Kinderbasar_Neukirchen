@@ -1,30 +1,25 @@
 ﻿import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import jwt from 'jsonwebtoken';
 import { prisma } from '../../../../lib/prisma';
-
-const JWT_SECRET = process.env.JWT_SECRET!;
+import { requireAuth } from '../../../../lib/apiAuth';
 
 // GET /api/basars/:id/articles – get articles for calling seller in this basar
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
-
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const authResult = await requireAuth();
+    if (authResult.response) return authResult.response;
+    const { auth } = authResult;
     const { id: basarId } = await params;
 
     // Admin sees all articles; seller/employee sees only their own
     let articles;
-    if (decoded.role === 'admin') {
+    if (auth.role === 'admin') {
       articles = await prisma.article.findMany({
         where: { basarSeller: { basarId } },
         include: { basarSeller: { include: { seller: { select: { firstName: true, lastName: true, sellerId: true } } } } },
         orderBy: { createdAt: 'asc' },
       });
     } else {
-      const sellerId = decoded.sellerId;
+      const sellerId = auth.sellerId;
       if (!sellerId) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
 
       const basarSeller = await prisma.basarSeller.findUnique({
@@ -50,16 +45,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 // POST /api/basars/:id/articles – create article for calling seller
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
-
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
-    if (decoded.role === 'admin') {
+    const authResult = await requireAuth();
+    if (authResult.response) return authResult.response;
+    const { auth } = authResult;
+    if (auth.role === 'admin') {
       return NextResponse.json({ error: 'Admins legen keine Artikel an' }, { status: 403 });
     }
 
-    const sellerId: number = decoded.sellerId;
+    const sellerId: number = auth.sellerId!;
     const { id: basarId } = await params;
 
     // Check seller is active

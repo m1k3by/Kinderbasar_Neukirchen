@@ -76,12 +76,67 @@ describe('PATCH /api/basars/[id]/status', () => {
     expect((await res.json()).status).toBe('ACTIVE');
   });
 
-  it('sets explicit status from body', async () => {
+  it('sets explicit status from body when it matches the valid next transition', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.basar.findUnique.mockResolvedValue({ id: 'b1', status: 'DRAFT' });
+    prismaMock.basar.update.mockResolvedValue({ id: 'b1', status: 'OPEN' });
+    const res = await PATCH(makePatchRequest({ status: 'OPEN' }), makeContext());
+    expect(res.status).toBe(200);
+  });
+
+  it('rejects an explicit status that skips the state machine (DRAFT → CLOSED)', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.basar.findUnique.mockResolvedValue({ id: 'b1', status: 'DRAFT' });
+    const res = await PATCH(makePatchRequest({ status: 'CLOSED' }), makeContext());
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/Ungültiger Statusübergang/);
+    expect(prismaMock.basar.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects an explicit status that skips ahead (DRAFT → ACTIVE)', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.basar.findUnique.mockResolvedValue({ id: 'b1', status: 'DRAFT' });
+    const res = await PATCH(makePatchRequest({ status: 'ACTIVE' }), makeContext());
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a garbage status value', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.basar.findUnique.mockResolvedValue({ id: 'b1', status: 'DRAFT' });
+    const res = await PATCH(makePatchRequest({ status: 'NOT_A_STATUS' }), makeContext());
+    expect(res.status).toBe(400);
+  });
+
+  it('allows a one-step rollback (OPEN → DRAFT)', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.basar.findUnique.mockResolvedValue({ id: 'b1', status: 'OPEN' });
+    prismaMock.basar.update.mockResolvedValue({ id: 'b1', status: 'DRAFT' });
+    const res = await PATCH(makePatchRequest({ status: 'DRAFT' }), makeContext());
+    expect(res.status).toBe(200);
+    expect((await res.json()).status).toBe('DRAFT');
+  });
+
+  it('allows a one-step rollback (ACTIVE → OPEN)', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.basar.findUnique.mockResolvedValue({ id: 'b1', status: 'ACTIVE' });
+    prismaMock.basar.update.mockResolvedValue({ id: 'b1', status: 'OPEN' });
+    const res = await PATCH(makePatchRequest({ status: 'OPEN' }), makeContext());
+    expect(res.status).toBe(200);
+  });
+
+  it('allows a one-step rollback (CLOSED → ACTIVE)', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.basar.findUnique.mockResolvedValue({ id: 'b1', status: 'CLOSED' });
     prismaMock.basar.update.mockResolvedValue({ id: 'b1', status: 'ACTIVE' });
     const res = await PATCH(makePatchRequest({ status: 'ACTIVE' }), makeContext());
     expect(res.status).toBe(200);
+  });
+
+  it('rejects two-step rollback (CLOSED → OPEN)', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.basar.findUnique.mockResolvedValue({ id: 'b1', status: 'CLOSED' });
+    const res = await PATCH(makePatchRequest({ status: 'OPEN' }), makeContext());
+    expect(res.status).toBe(400);
   });
 
   it('returns 500 on DB error', async () => {

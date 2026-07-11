@@ -1,9 +1,6 @@
 ﻿import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import jwt from 'jsonwebtoken';
 import { prisma } from '../../../../lib/prisma';
-
-const JWT_SECRET = process.env.JWT_SECRET!;
+import { requireCashier } from '../../../../lib/apiAuth';
 
 // GET /api/articles/scan/:qrCode – returns article info for the kasse scanner
 export async function GET(
@@ -11,15 +8,8 @@ export async function GET(
   { params }: { params: Promise<{ qrCode: string }> }
 ) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
-
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
-    const isAuthorized = decoded.role === 'admin' || decoded.isCashier === true;
-    if (!isAuthorized) {
-      return NextResponse.json({ error: 'Nur Kassierer oder Admins dürfen scannen' }, { status: 403 });
-    }
+    const authResult = await requireCashier();
+    if (authResult.response) return authResult.response;
 
     const { qrCode } = await params;
 

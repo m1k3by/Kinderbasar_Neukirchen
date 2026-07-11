@@ -416,7 +416,7 @@ export default function AdminListPage() {
           { href: '/admin/basars', label: 'Basare' },
           { href: '/admin/list', label: 'Helferliste', active: true },
           { href: '/admin/tasks', label: 'Aufgaben' },
-          { href: '/admin/settings', label: 'Datum einstellen' },
+          { href: '/admin/settings', label: 'Einstellungen' },
           { href: '/', label: 'Logout' },
         ]}
       />

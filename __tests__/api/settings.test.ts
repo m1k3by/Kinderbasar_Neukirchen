@@ -1,4 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { adminToken, sellerToken } from '../helpers/tokens';
+
+// ─── next/headers mock ────────────────────────────────────────────────────────
+const cookiesGetMock = vi.hoisted(() => vi.fn());
+vi.mock('next/headers', () => ({
+  cookies: vi.fn(() => Promise.resolve({ get: cookiesGetMock })),
+}));
 
 // ─── Prisma mock ──────────────────────────────────────────────────────────────
 const prismaMock = vi.hoisted(() => ({
@@ -56,7 +63,20 @@ describe('GET /api/settings', () => {
 describe('PUT /api/settings', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it('returns 401 when no token', async () => {
+    cookiesGetMock.mockReturnValue(undefined);
+    const res = await PUT(makePutRequest({ anyKey: 'anyValue' }));
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for non-admin', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    const res = await PUT(makePutRequest({ anyKey: 'anyValue' }));
+    expect(res.status).toBe(403);
+  });
+
   it('upserts each setting and returns success → 200', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.settings.upsert.mockResolvedValue({});
     const body = { registration_seller_start: '2025-03-01T08:00', max_sellers: '150' };
     const res = await PUT(makePutRequest(body));
@@ -74,6 +94,7 @@ describe('PUT /api/settings', () => {
   });
 
   it('returns 500 on DB error', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.settings.upsert.mockRejectedValue(new Error('DB error'));
     const res = await PUT(makePutRequest({ anyKey: 'anyValue' }));
     expect(res.status).toBe(500);

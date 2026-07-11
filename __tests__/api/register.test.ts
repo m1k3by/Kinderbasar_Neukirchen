@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { adminToken } from '../helpers/tokens';
 
+// ─── next/headers mock (getAuth reads the token via next/headers cookies()) ──
+const cookiesGetMock = vi.hoisted(() => vi.fn());
+vi.mock('next/headers', () => ({
+  cookies: vi.fn(() => Promise.resolve({ get: cookiesGetMock })),
+}));
+
 // ─── Mock rateLimit ───────────────────────────────────────────────────────────
 const rateLimitMock = vi.hoisted(() => vi.fn().mockReturnValue(true));
 vi.mock('@/app/lib/rateLimit', () => ({ rateLimit: rateLimitMock }));
@@ -63,6 +69,7 @@ describe('POST /api/register', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     rateLimitMock.mockReturnValue(true);
+    cookiesGetMock.mockReturnValue(undefined);
   });
 
   it('returns 400 when fields are missing', async () => {
@@ -126,6 +133,7 @@ describe('POST /api/register', () => {
     prismaMock.seller.findUnique.mockResolvedValue(null);
     prismaMock.seller.findMany.mockResolvedValue([]);
     prismaMock.seller.create.mockResolvedValue(createdSeller);
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
     const res = await POST(makeNextRequest(validBody, adminToken()));
     expect(res.status).toBe(200);
   });
@@ -134,5 +142,42 @@ describe('POST /api/register', () => {
     prismaMock.settings.findMany.mockRejectedValue(new Error('DB error'));
     const res = await POST(makeNextRequest(validBody));
     expect(res.status).toBe(500);
+  });
+
+  it('retries with a fresh sellerId on a sellerId collision (P2002, not email)', async () => {
+    prismaMock.settings.findMany.mockResolvedValue([]);
+    prismaMock.seller.findUnique.mockResolvedValue(null); // email not found
+    prismaMock.seller.findMany.mockResolvedValue([]); // always "no existing ids" so it keeps picking 1000
+    prismaMock.seller.create
+      .mockRejectedValueOnce({ code: 'P2002', meta: { target: ['sellerId'] } })
+      .mockResolvedValueOnce(createdSeller);
+    const res = await POST(makeNextRequest(validBody));
+    expect(res.status).toBe(200);
+    expect(prismaMock.seller.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns 400 when P2002 collision is on the email field', async () => {
+    prismaMock.settings.findMany.mockResolvedValue([]);
+    prismaMock.seller.findUnique.mockResolvedValue(null);
+    prismaMock.seller.findMany.mockResolvedValue([]);
+    prismaMock.seller.create.mockRejectedValue({ code: 'P2002', meta: { target: ['email'] } });
+    const res = await POST(makeNextRequest(validBody));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/bereits registriert/i);
+  });
+
+  it('isEmployee is strictly coerced to boolean (truthy non-true values rejected)', async () => {
+    prismaMock.settings.findMany.mockResolvedValue([]);
+    prismaMock.seller.findUnique.mockResolvedValue(null);
+    prismaMock.seller.findMany.mockResolvedValue([]);
+    prismaMock.seller.create.mockResolvedValue(createdSeller);
+    const res = await POST(makeNextRequest({ ...validBody, isEmployee: 'yes', isCashier: true }));
+    expect(res.status).toBe(200);
+    expect(prismaMock.seller.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ isEmployee: false }) })
+    );
+    // isCashier must never be settable through registration
+    const createCallData = prismaMock.seller.create.mock.calls[0][0].data;
+    expect(createCallData.isCashier).toBeUndefined();
   });
 });

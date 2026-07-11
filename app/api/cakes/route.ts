@@ -1,18 +1,32 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../lib/prisma';
+import { requireAuth } from '../../lib/apiAuth';
 
+function parseSellerId(value: unknown): number | null {
+  const num = typeof value === 'string' ? parseInt(value, 10) : (value as number);
+  return typeof num === 'number' && !isNaN(num) ? num : null;
+}
+
+// GET /api/cakes – list all cake entries so sellers/employees can see which cake types
+// already exist (without seeing who is bringing them). Admins get full seller details.
 export async function GET(request: Request) {
   try {
+    const authResult = await requireAuth();
+    if (authResult.response) return authResult.response;
+    const { auth } = authResult;
+
     const cakes = await prisma.cake.findMany({
-      include: {
-        seller: {
-          select: {
-            firstName: true,
-            lastName: true,
-            email: true,
-          },
-        },
-      },
+      include: auth.role === 'admin'
+        ? {
+            seller: {
+              select: {
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
+          }
+        : undefined,
     });
 
     return NextResponse.json(cakes);
@@ -27,25 +41,33 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const authResult = await requireAuth();
+    if (authResult.response) return authResult.response;
+    const { auth } = authResult;
+
     const body = await request.json();
-    
+
     if (!body.cakeName || !body.sellerId) {
       return NextResponse.json(
         { error: 'Fehlende Pflichtfelder: cakeName, sellerId' },
         { status: 400 }
       );
     }
-    
-    // Parse sellerId to integer
-    const sellerIdInt = typeof body.sellerId === 'string' ? parseInt(body.sellerId, 10) : body.sellerId;
-    
-    if (isNaN(sellerIdInt)) {
+
+    const sellerIdInt = parseSellerId(body.sellerId);
+
+    if (sellerIdInt === null) {
       return NextResponse.json(
         { error: 'Ungültige Verkäufer-ID' },
         { status: 400 }
       );
     }
-    
+
+    // Non-admins may only create cakes for themselves
+    if (auth.role !== 'admin' && sellerIdInt !== auth.sellerId) {
+      return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 403 });
+    }
+
     const cake = await prisma.cake.create({
       data: {
         cakeName: body.cakeName,
@@ -74,6 +96,10 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    const authResult = await requireAuth();
+    if (authResult.response) return authResult.response;
+    const { auth } = authResult;
+
     const body = await request.json();
     const { id, cakeName } = body;
 
@@ -82,6 +108,13 @@ export async function PUT(request: Request) {
         { error: 'ID und Kuchenname sind erforderlich' },
         { status: 400 }
       );
+    }
+
+    if (auth.role !== 'admin') {
+      const existing = await prisma.cake.findUnique({ where: { id } });
+      if (!existing || existing.sellerId !== auth.sellerId) {
+        return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 403 });
+      }
     }
 
     const cake = await prisma.cake.update({
@@ -101,6 +134,10 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const authResult = await requireAuth();
+    if (authResult.response) return authResult.response;
+    const { auth } = authResult;
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
@@ -111,9 +148,14 @@ export async function DELETE(request: Request) {
       );
     }
 
-    await prisma.cake.delete({
-      where: { id },
-    });
+    if (auth.role !== 'admin') {
+      const existing = await prisma.cake.findUnique({ where: { id } });
+      if (!existing || existing.sellerId !== auth.sellerId) {
+        return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 403 });
+      }
+    }
+
+    await prisma.cake.delete({ where: { id } });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

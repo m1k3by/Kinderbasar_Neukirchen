@@ -1,9 +1,6 @@
 ﻿import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import jwt from 'jsonwebtoken';
 import { prisma } from '../../../lib/prisma';
-
-const JWT_SECRET = process.env.JWT_SECRET!;
+import { requireCashier } from '../../../lib/apiAuth';
 
 // DELETE /api/sales/:id – Storno (Admin only, within 10 minutes)
 export async function DELETE(
@@ -11,13 +8,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
-
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
-    const isAuthorized = decoded.role === 'admin' || decoded.isCashier === true;
-    if (!isAuthorized) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 403 });
+    const authResult = await requireCashier();
+    if (authResult.response) return authResult.response;
 
     const { id } = await params;
     const sale = await prisma.sale.findUnique({ where: { id } });

@@ -1,17 +1,12 @@
 ﻿import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import jwt from 'jsonwebtoken';
 import { prisma } from '../../lib/prisma';
-
-const JWT_SECRET = process.env.JWT_SECRET!;
+import { requireAuth, requireAdmin } from '../../lib/apiAuth';
 
 // GET /api/basars – list all basars (any logged-in user)
 export async function GET(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
-    jwt.verify(token, JWT_SECRET);
+    const authResult = await requireAuth();
+    if (authResult.response) return authResult.response;
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
@@ -38,14 +33,8 @@ export async function GET(request: Request) {
 // POST /api/basars – create basar (admin only)
 export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
-
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
-    if (decoded.role !== 'admin') {
-      return NextResponse.json({ error: 'Nur Admins dürfen Basare anlegen' }, { status: 403 });
-    }
+    const authResult = await requireAdmin();
+    if (authResult.response) return authResult.response;
 
     const body = await request.json();
     const { title, description, eventDate, location, maxSellers, maxArticlesPerSeller, commissionPercent, entryFee } = body;

@@ -1,10 +1,7 @@
-﻿import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import jwt from 'jsonwebtoken';
+import { NextResponse } from 'next/server';
 import { prisma } from '../../../../lib/prisma';
+import { requireAdmin } from '../../../../lib/apiAuth';
 import { BasarStatus } from '@prisma/client';
-
-const JWT_SECRET = process.env.JWT_SECRET!;
 
 // Valid state machine transitions
 const TRANSITIONS: Record<BasarStatus, BasarStatus | null> = {
@@ -14,17 +11,21 @@ const TRANSITIONS: Record<BasarStatus, BasarStatus | null> = {
   CLOSED: null,
 };
 
+// Allow rolling back exactly one step (the inverse of TRANSITIONS)
+const PREVIOUS: Record<BasarStatus, BasarStatus | null> = {
+  DRAFT: null,
+  OPEN: 'DRAFT',
+  ACTIVE: 'OPEN',
+  CLOSED: 'ACTIVE',
+};
+
+const VALID_STATUSES: BasarStatus[] = ['DRAFT', 'OPEN', 'ACTIVE', 'CLOSED'];
+
 // PATCH /api/basars/:id/status – advance to next status (admin only)
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
-
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
-    if (decoded.role !== 'admin') {
-      return NextResponse.json({ error: 'Nur Admins dürfen den Status ändern' }, { status: 403 });
-    }
+    const authResult = await requireAdmin();
+    if (authResult.response) return authResult.response;
 
     const { id } = await params;
     const basar = await prisma.basar.findUnique({ where: { id } });
@@ -36,6 +37,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     let newStatus: BasarStatus | null;
     if (targetStatus) {
+      if (!VALID_STATUSES.includes(targetStatus)) {
+        return NextResponse.json({ error: 'Ungültiger Statusübergang' }, { status: 400 });
+      }
+      const nextAllowed = TRANSITIONS[basar.status];
+      const prevAllowed = PREVIOUS[basar.status];
+      if (targetStatus !== nextAllowed && targetStatus !== prevAllowed) {
+        return NextResponse.json({ error: 'Ungültiger Statusübergang' }, { status: 400 });
+      }
       newStatus = targetStatus;
     } else {
       newStatus = TRANSITIONS[basar.status];

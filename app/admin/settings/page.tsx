@@ -4,6 +4,12 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Header from '../../components/Header';
 
+const DEFAULT_SIZES =
+  'XXS,XS,S,M,L,XL,XXL,3XL,4XL,5XL,' +
+  '50,56,62,68,74,80,86,92,98,104,110,116,122,128,134,140,146,152,158,164,170,176,' +
+  'W24,W25,W26,W27,W28,W29,W30,W31,W32,W33,W34,W36,W38,W40,W42,W44,' +
+  '18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49';
+
 interface Settings {
   date_freitag?: string;
   date_samstag?: string;
@@ -24,6 +30,7 @@ interface Settings {
   pickup_end?: string;
   pickup_start2?: string;
   pickup_end2?: string;
+  allowed_sizes?: string;
 }
 
 export default function SettingsPage() {
@@ -32,6 +39,10 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [enabledSizes, setEnabledSizes] = useState<Set<string>>(
+    new Set(DEFAULT_SIZES.split(','))
+  );
+  const [sizesOpen, setSizesOpen] = useState(false);
 
   useEffect(() => {
     fetchSettings();
@@ -43,6 +54,8 @@ export default function SettingsPage() {
       if (!response.ok) throw new Error('Failed to fetch settings');
       const data = await response.json();
       setSettings(data);
+      const raw: string = data.allowed_sizes || DEFAULT_SIZES;
+      setEnabledSizes(new Set(raw.split(',').map((s: string) => s.trim()).filter(Boolean)));
     } catch (err) {
       setError('Fehler beim Laden der Einstellungen');
       console.error(err);
@@ -58,10 +71,11 @@ export default function SettingsPage() {
     setError('');
 
     try {
+      const sizesValue = [...enabledSizes].join(',');
       const response = await fetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
+        body: JSON.stringify({ ...settings, allowed_sizes: sizesValue }),
       });
 
       if (!response.ok) throw new Error('Failed to save settings');
@@ -83,7 +97,7 @@ export default function SettingsPage() {
           { href: '/admin/basars', label: 'Basare' },
           { href: '/admin/list', label: 'Helferliste' },
           { href: '/admin/tasks', label: 'Aufgaben' },
-          { href: '/admin/settings', label: 'Datum einstellen', active: true },
+          { href: '/admin/settings', label: 'Einstellungen', active: true },
           { href: '/', label: 'Logout' },
         ]}
       />
@@ -458,6 +472,83 @@ export default function SettingsPage() {
                   Diese Zeiten werden in der Bestätigungs-E-Mail an die Verkäufer gesendet.
                 </p>
               </div>
+            </div>
+
+            {/* Allowed Sizes */}
+            <div className="mt-8 pt-8 border-t border-gray-300">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-800">Erlaubte Größen</h2>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    {enabledSizes.size} von {DEFAULT_SIZES.split(',').length} Größen aktiv · Gilt für alle Basare
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSizesOpen(o => !o)}
+                  className="text-sm text-blue-600 hover:underline flex-shrink-0 ml-4"
+                >
+                  {sizesOpen ? 'Ausblenden' : 'Bearbeiten'}
+                </button>
+              </div>
+
+              {sizesOpen && (() => {
+                const allSizes = DEFAULT_SIZES.split(',');
+                const groups = [
+                  { label: 'Kleidung – Buchstaben', sizes: allSizes.filter(s => /^(XXS|XS|S|M|L|XL|XXL|3XL|4XL|5XL)$/.test(s)) },
+                  { label: 'Kleidung – Größentabelle (cm)', sizes: allSizes.filter(s => /^\d+$/.test(s) && +s >= 50 && +s <= 176) },
+                  { label: 'Hosen (W-Größen)', sizes: allSizes.filter(s => /^W\d+$/.test(s)) },
+                  { label: 'Schuhe', sizes: allSizes.filter(s => /^\d+$/.test(s) && +s >= 18 && +s <= 49) },
+                ];
+                return (
+                  <div className="mt-3 space-y-5">
+                    <p className="text-xs text-gray-500">
+                      Aktivierte Größen (grün) sind im Artikel-Formular gültig. Klicken zum An-/Abwählen.
+                    </p>
+                    {groups.map(group => (
+                      <div key={group.label}>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{group.label}</p>
+                          <div className="flex gap-3">
+                            <button type="button" onClick={() => setEnabledSizes(prev => { const next = new Set(prev); group.sizes.forEach(s => next.add(s)); return next; })} className="text-xs text-green-700 hover:underline">Alle an</button>
+                            <button type="button" onClick={() => setEnabledSizes(prev => { const next = new Set(prev); group.sizes.forEach(s => next.delete(s)); return next; })} className="text-xs text-red-600 hover:underline">Alle ab</button>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {group.sizes.map(s => {
+                            const active = enabledSizes.has(s);
+                            return (
+                              <button
+                                key={s}
+                                type="button"
+                                onClick={() => setEnabledSizes(prev => {
+                                  const next = new Set(prev);
+                                  active ? next.delete(s) : next.add(s);
+                                  return next;
+                                })}
+                                className={`px-2.5 py-1 rounded-lg border text-xs font-mono font-bold transition-colors ${
+                                  active
+                                    ? 'bg-green-100 border-green-400 text-green-900 hover:bg-green-200'
+                                    : 'bg-gray-100 border-gray-300 text-gray-400 hover:bg-gray-200'
+                                }`}
+                              >
+                                {s}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setEnabledSizes(new Set(DEFAULT_SIZES.split(',')))}
+                      className="text-xs text-gray-500 hover:text-gray-700 underline"
+                    >
+                      ↺ Alle Größen auf Standard zurücksetzen
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Save Button */}

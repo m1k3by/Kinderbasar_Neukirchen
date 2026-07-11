@@ -1,9 +1,6 @@
 ﻿import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import jwt from 'jsonwebtoken';
 import { prisma } from '../../../../../lib/prisma';
-
-const JWT_SECRET = process.env.JWT_SECRET!;
+import { requireAuth } from '../../../../../lib/apiAuth';
 
 // POST /api/basars/:id/articles/import
 // Body: { sellerArticleIds: string[] }
@@ -13,16 +10,14 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
-
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
-    if (decoded.role === 'admin') {
+    const authResult = await requireAuth();
+    if (authResult.response) return authResult.response;
+    const { auth } = authResult;
+    if (auth.role === 'admin') {
       return NextResponse.json({ error: 'Admins legen keine Artikel an' }, { status: 403 });
     }
 
-    const sellerId: number = decoded.sellerId;
+    const sellerId: number = auth.sellerId!;
     const { id: basarId } = await params;
 
     // Verify seller is active

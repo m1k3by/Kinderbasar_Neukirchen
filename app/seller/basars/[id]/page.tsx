@@ -69,6 +69,9 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   const [showArchive, setShowArchive] = useState(false);
   const [selectedArchiveIds, setSelectedArchiveIds] = useState<Set<string>>(new Set());
   const [isEmployee, setIsEmployee] = useState(false);
+  const [allowedSizes, setAllowedSizes] = useState<string[]>([]);
+  const [sizeError, setSizeError] = useState('');
+  const [showSizeTooltip, setShowSizeTooltip] = useState(false);
 
   useEffect(() => {
     const cookies = document.cookie.split(';');
@@ -86,11 +89,19 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   async function loadAll() {
     setLoading(true);
     try {
-      const [basarRes, articlesRes, sellersRes] = await Promise.all([
+      const [basarRes, articlesRes, sellersRes, settingsRes] = await Promise.all([
         fetch(`/api/basars/${basarId}`),
         fetch(`/api/basars/${basarId}/articles`),
         fetch('/api/sellers'),
+        fetch('/api/settings'),
       ]);
+
+      if (settingsRes.ok) {
+        const sData = await settingsRes.json();
+        const raw: string = sData.allowed_sizes ||
+          'XXS,XS,S,M,L,XL,XXL,3XL,4XL,5XL,50,56,62,68,74,80,86,92,98,104,110,116,122,128,134,140,146,152,158,164,170,176,W24,W25,W26,W27,W28,W29,W30,W31,W32,W33,W34,W36,W38,W40,W42,W44,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50';
+        setAllowedSizes(raw.split(',').map(s => s.trim()).filter(Boolean));
+      }
 
       let basarData: BasarDetail | null = null;
       if (basarRes.ok) { basarData = await basarRes.json(); setBasar(basarData); }
@@ -171,6 +182,20 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
     e.preventDefault();
     if (!form.title || !form.price) return;
 
+    // Validate price step
+    const priceVal = parseFloat(form.price);
+    if (isNaN(priceVal) || Math.round(priceVal * 100) % 50 !== 0 || priceVal < 0.5) {
+      showMsg('Der Preis muss ein Vielfaches von 0,50 € sein (z.B. 0,50 – 1,00 – 1,50 …)', false);
+      return;
+    }
+
+    // Validate size
+    const trimmedSize = form.sizeLabel.trim();
+    if (trimmedSize && allowedSizes.length > 0 && !allowedSizes.includes(trimmedSize)) {
+      setSizeError(`"${trimmedSize}" ist keine gültige Größe. Bitte ⓘ klicken für alle Optionen.`);
+      return;
+    }
+
     // Optimistic: reset form + add temp article immediately
     const tempId = `temp-${Date.now()}`;
     const tempArticle: Article = {
@@ -185,6 +210,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
     };
     setArticles(prev => [...prev, tempArticle]);
     setForm({ title: '', sizeLabel: '', gender: '', price: '' });
+    setSizeError('');
 
     try {
       const res = await fetch(`/api/basars/${basarId}/articles`, {
@@ -237,72 +263,102 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
     if (articles.length === 0) return;
     const win = window.open('', '_blank');
     if (!win) return;
-    const rows = articles.map(a => `
+    // Etikettenbogen: A4, 24 Etiketten à 70 x 36 mm (3 Spalten x 8 Reihen, z. B. Avery 3475)
+    const LABELS_PER_SHEET = 24;
+    const labelHtml = (a: Article) => `
       <div class="label">
-        <img src="/api/articles/${a.qrCode}/qr" alt="QR" class="qr" />
+        <div class="left">
+          <img src="/api/articles/${a.qrCode}/qr" alt="QR" class="qr" />
+          <div class="vknr">${basarSeller?.seller?.sellerId ?? basarSeller?.sellerId ?? '?'}</div>
+        </div>
         <div class="info">
-          <div class="top">
-            <div class="cell vknr"><span class="lbl">Verkäufernummer</span>${basarSeller?.seller?.sellerId ?? basarSeller?.sellerId ?? '?'}</div>
-            <div class="cell title"><span class="lbl">Bezeichnung</span>${escapeHtml(a.title)}</div>
-          </div>
-          <div class="bottom">
+          <div class="cell title"><span class="lbl">Bezeichnung</span>${escapeHtml(a.title)}</div>
+          <div class="row">
             <div class="cell size"><span class="lbl">Größe</span>${a.sizeLabel ? escapeHtml(a.sizeLabel) : '–'}${a.gender ? `<span class="gender-badge">${escapeHtml(a.gender)}</span>` : ''}</div>
             <div class="cell price"><span class="lbl">Preis</span>${fmt(Number(a.price))} €</div>
           </div>
         </div>
-      </div>`).join('');
+      </div>`;
+    const sheets: string[] = [];
+    for (let i = 0; i < articles.length; i += LABELS_PER_SHEET) {
+      const chunk = articles.slice(i, i + LABELS_PER_SHEET);
+      sheets.push(`<div class="sheet">${chunk.map(labelHtml).join('')}</div>`);
+    }
     win.document.write(`<!DOCTYPE html><html><head><title>Etiketten</title>
     <style>
-      @page { size: A4; margin: 10mm; }
-      body { font-family: Arial, sans-serif; margin: 0; }
-      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
+      @page { size: A4; margin: 0; }
+      * { box-sizing: border-box; }
+      body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+      .sheet {
+        width: 210mm;
+        padding: 4.5mm 0;
+        display: grid;
+        grid-template-columns: repeat(3, 70mm);
+        grid-auto-rows: 36mm;
+        page-break-after: always;
+      }
+      .sheet:last-child { page-break-after: auto; }
       .label {
+        width: 70mm;
+        height: 36mm;
         display: flex;
         flex-direction: row;
-        align-items: stretch;
-        gap: 3mm;
-        border: 1px solid #bbb;
-        padding: 3mm;
-        border-radius: 2mm;
+        align-items: flex-start;
+        gap: 2mm;
+        padding: 2.5mm;
+        overflow: hidden;
         page-break-inside: avoid;
-        height: 28mm;
-        box-sizing: border-box;
+      }
+      .left {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex-shrink: 0;
+        width: 17mm;
       }
       .qr {
-        width: 22mm;
-        height: 22mm;
-        flex-shrink: 0;
-        align-self: center;
+        width: 17mm;
+        height: 17mm;
+      }
+      .vknr {
+        font-size: 9pt;
+        color: #333;
+        font-weight: bold;
+        white-space: nowrap;
+        margin-top: 1mm;
       }
       .info {
         flex: 1;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-        overflow: hidden;
+        align-self: stretch;
         min-width: 0;
+        overflow: hidden;
       }
-      .top, .bottom {
-        display: flex;
-        gap: 3mm;
-        align-items: flex-start;
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        column-gap: 2mm;
+        align-items: end;
       }
       .cell {
         display: flex;
         flex-direction: column;
-        overflow: hidden;
         min-width: 0;
+        overflow: hidden;
       }
-      .lbl { font-size: 7pt; color: #999; display: block; margin-bottom: 0.5mm; }
-      .vknr { font-size: 11pt; color: #333; font-weight: bold; flex-shrink: 0; }
-      .title { font-size: 11pt; font-weight: bold; word-break: break-word; flex: 1; }
-      .size { font-size: 11pt; color: #333; flex-shrink: 0; }
-      .price { font-size: 16pt; font-weight: bold; color: #000; flex: 1; }
-      .gender-badge { font-size: 8pt; font-weight: bold; color: #1d4ed8; margin-top: 0.5mm; }
-      @media print { button { display: none; } }
+      .lbl { font-size: 5pt; color: #aaa; display: block; margin-bottom: 0.3mm; white-space: nowrap; }
+      .title { font-size: 8pt; font-weight: bold; word-break: break-word; line-height: 1.2; max-height: 15mm; overflow: hidden; }
+      .size { font-size: 8pt; color: #333; white-space: nowrap; overflow: hidden; }
+      .price { font-size: 12pt; font-weight: bold; color: #000; white-space: nowrap; }
+      .gender-badge { font-size: 6pt; font-weight: bold; color: #1d4ed8; }
+      .hint { margin: 4mm; font-size: 11px; color: #666; }
+      @media print { button, .hint { display: none; } }
     </style></head><body>
     <button onclick="window.print()" style="margin:4mm;padding:6px 16px;font-size:13px;cursor:pointer;">🖨 Drucken</button>
-    <div class="grid">${rows}</div>
+    <div class="hint">Etikettenbögen 70 × 36 mm, 24 pro Blatt (z. B. Avery 3475). Beim Drucken „Tatsächliche Größe" / 100 % wählen – nicht „An Seite anpassen".</div>
+    ${sheets.join('')}
     </body></html>`);
     win.document.close();
   }
@@ -556,15 +612,15 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
             </h2>
             <form onSubmit={handleAddArticle} className="grid md:grid-cols-3 gap-3">
               <div className="md:col-span-3">
-                <label className="block text-xs font-medium text-gray-600 mb-1">Beschreibung * (max. 120 Zeichen)</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Beschreibung * (max. 30 Zeichen)</label>
                 <input
-                  required maxLength={120}
+                  required maxLength={30}
                   value={form.title}
                   onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                  placeholder="z.B. Jeans Gr. 110, Winterjacke blau…"
+                  placeholder="z.B. Jeans blau, Winterjacke…"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
                 />
-                <div className="text-right text-xs text-gray-400 mt-0.5">{form.title.length}/120</div>
+                <div className={`text-right text-xs mt-0.5 ${form.title.length >= 28 ? 'text-orange-500 font-medium' : 'text-gray-400'}`}>{form.title.length}/30</div>
               </div>
               <div className="md:col-span-3">
                 <span className="block text-xs font-medium text-gray-600 mb-1">Für wen?</span>
@@ -594,19 +650,84 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Größe / Bezeichnung</label>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <label className="block text-xs font-medium text-gray-600">Größe</label>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowSizeTooltip(o => !o)}
+                      className="w-4 h-4 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 text-xs flex items-center justify-center leading-none"
+                      title="Unterstützte Größen anzeigen"
+                    >
+                      i
+                    </button>
+                    {showSizeTooltip && (
+                      <div className="absolute left-0 top-6 z-50 bg-white border border-gray-200 rounded-xl shadow-xl p-4 w-72">
+                        <div className="flex justify-between items-center mb-3">
+                          <span className="font-semibold text-sm text-gray-800">Unterstützte Größen</span>
+                          <button type="button" onClick={() => setShowSizeTooltip(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
+                        </div>
+                        {[
+                          { label: 'Kleidung (Buchstaben)', filter: (s: string) => /^(XXS|XS|S|M|L|XL|XXL|3XL|4XL|5XL)$/.test(s) },
+                          { label: 'Kleidung (cm)', filter: (s: string) => /^\d+$/.test(s) && parseInt(s) >= 50 && parseInt(s) <= 176 },
+                          { label: 'Hosen (W-Größen)', filter: (s: string) => /^W\d+$/.test(s) },
+                          { label: 'Schuhe', filter: (s: string) => /^\d+$/.test(s) && parseInt(s) >= 18 && parseInt(s) <= 49 },
+                        ].map(group => {
+                          const items = allowedSizes.filter(group.filter);
+                          if (!items.length) return null;
+                          return (
+                            <div key={group.label} className="mb-2 last:mb-0">
+                              <p className="text-xs text-gray-700 font-semibold mb-1">{group.label}</p>
+                              <div className="flex flex-wrap gap-1">
+                                {items.map(s => (
+                                  <button
+                                    key={s}
+                                    type="button"
+                                    onClick={() => { setForm(f => ({ ...f, sizeLabel: s })); setSizeError(''); setShowSizeTooltip(false); }}
+                                    className="px-1.5 py-0.5 bg-gray-100 hover:bg-yellow-100 border border-gray-200 rounded text-xs font-mono font-bold text-gray-900 cursor-pointer"
+                                  >
+                                    {s}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                        <p className="text-xs text-gray-500 mt-2 border-t pt-2">Auf eine Größe klicken, um sie direkt einzufügen.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
                 <input
+                  list="size-options"
                   maxLength={40}
                   value={form.sizeLabel}
-                  onChange={e => setForm(f => ({ ...f, sizeLabel: e.target.value }))}
-                  placeholder="z.B. 110, M, 38/32…"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                  onChange={e => {
+                    setForm(f => ({ ...f, sizeLabel: e.target.value }));
+                    setSizeError('');
+                  }}
+                  onBlur={e => {
+                    const v = e.target.value.trim();
+                    if (v && allowedSizes.length > 0 && !allowedSizes.includes(v)) {
+                      setSizeError(`"${v}" ist keine gültige Größe. Bitte ⓘ klicken für alle Optionen.`);
+                    } else {
+                      setSizeError('');
+                    }
+                  }}
+                  placeholder="z.B. 110, M, W32…"
+                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 ${
+                    sizeError ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                  }`}
                 />
+                <datalist id="size-options">
+                  {allowedSizes.map(s => <option key={s} value={s} />)}
+                </datalist>
+                {sizeError && <p className="text-xs text-red-600 mt-1">{sizeError}</p>}
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Preis (€) *</label>
                 <input
-                  required type="number" min="0.10" step="0.10"
+                  required type="number" min="0.50" step="0.50"
                   value={form.price}
                   onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
                   placeholder="0,50"

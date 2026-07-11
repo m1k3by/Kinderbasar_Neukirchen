@@ -1,17 +1,12 @@
 ﻿import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import jwt from 'jsonwebtoken';
 import { prisma } from '../../../lib/prisma';
-
-const JWT_SECRET = process.env.JWT_SECRET!;
+import { requireAuth, requireAdmin } from '../../../lib/apiAuth';
 
 // GET /api/basars/:id
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
-    jwt.verify(token, JWT_SECRET);
+    const authResult = await requireAuth();
+    if (authResult.response) return authResult.response;
 
     const { id } = await params;
     const basar = await prisma.basar.findUnique({
@@ -39,14 +34,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 // PUT /api/basars/:id – update basar (admin only, only if not ACTIVE or CLOSED)
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
-
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
-    if (decoded.role !== 'admin') {
-      return NextResponse.json({ error: 'Nur Admins dürfen Basare bearbeiten' }, { status: 403 });
-    }
+    const authResult = await requireAdmin();
+    if (authResult.response) return authResult.response;
 
     const { id } = await params;
     const basar = await prisma.basar.findUnique({ where: { id } });

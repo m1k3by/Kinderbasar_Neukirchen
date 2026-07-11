@@ -1,16 +1,10 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '../../../lib/prisma';
-import { verifyToken } from '../../../lib/auth';
+import { requireAdmin } from '../../../lib/apiAuth';
 
-export async function POST(request: NextRequest) {
-  const token = request.cookies.get('token')?.value;
-  if (!token) return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 });
-  try {
-    const decoded = verifyToken(token) as { role?: string };
-    if (decoded.role !== 'admin') return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 403 });
-  } catch {
-    return NextResponse.json({ error: 'Ungültiger Token' }, { status: 401 });
-  }
+export async function POST(_request: NextRequest) {
+  const authResult = await requireAdmin();
+  if (authResult.response) return authResult.response;
 
   try {
     // Delete all cakes

@@ -129,7 +129,7 @@ model Article {
   createdAt       DateTime      @default(now())
   basarSeller     BasarSeller    @relation(fields: [basarSellerId], references: [id], onDelete: Cascade)
   sellerArticle   SellerArticle? @relation(fields: [sellerArticleId], references: [id])
-  sale            Sale?
+  sales           Sale[]
 
   @@index([basarSellerId, status])
   @@index([qrCode])
@@ -153,17 +153,18 @@ model SellerArticle {
 model Sale {
   id          String   @id @default(cuid())
   basarId     String
-  articleId   String   @unique
-  cashierId   Int
+  articleId   String
+  cashierId   Int?
   salePrice   Decimal  @db.Decimal(6, 2)
   soldAt      DateTime @default(now())
   syncedAt    DateTime?
   isCancelled Boolean  @default(false)
   basar       Basar    @relation(fields: [basarId], references: [id])
   article     Article  @relation(fields: [articleId], references: [id])
-  cashier     Seller   @relation("CashierSales", fields: [cashierId], references: [sellerId])
+  cashier     Seller?  @relation("CashierSales", fields: [cashierId], references: [sellerId])
 
   @@index([basarId, soldAt])
+  @@index([articleId])
 }
 
 model Settlement {

@@ -121,7 +121,7 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
         { href: '/admin/basars', label: 'Basare', active: true },
         { href: '/admin/list', label: 'Helferliste' },
         { href: '/admin/tasks', label: 'Aufgaben' },
-        { href: '/admin/settings', label: 'Datum einstellen' },
+        { href: '/admin/settings', label: 'Einstellungen' },
         { href: '/', label: 'Logout' },
       ]} />
       <div className="text-center py-20 text-gray-500">Laden…</div>
@@ -135,7 +135,7 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
         { href: '/admin/basars', label: 'Basare', active: true },
         { href: '/admin/list', label: 'Helferliste' },
         { href: '/admin/tasks', label: 'Aufgaben' },
-        { href: '/admin/settings', label: 'Datum einstellen' },
+        { href: '/admin/settings', label: 'Einstellungen' },
         { href: '/', label: 'Logout' },
       ]} />
       <div className="text-center py-20 text-red-500">Basar nicht gefunden</div>
@@ -150,7 +150,7 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
           { href: '/admin/basars', label: 'Basare', active: true },
           { href: '/admin/list', label: 'Helferliste' },
           { href: '/admin/tasks', label: 'Aufgaben' },
-          { href: '/admin/settings', label: 'Datum einstellen' },
+          { href: '/admin/settings', label: 'Einstellungen' },
           { href: '/', label: 'Logout' },
         ]}
       />

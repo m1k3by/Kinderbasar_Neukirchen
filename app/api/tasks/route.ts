@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../lib/prisma';
+import { requireAuth, requireAdmin } from '../../lib/apiAuth';
 
 export async function GET(request: Request) {
   try {
+    const authResult = await requireAuth();
+    if (authResult.response) return authResult.response;
+    const { auth } = authResult;
+
     const tasks = await prisma.task.findMany({
       include: {
         _count: {
@@ -14,7 +19,8 @@ export async function GET(request: Request) {
               select: {
                 firstName: true,
                 lastName: true,
-                email: true,
+                // Only admins may see which email address a signup belongs to
+                ...(auth.role === 'admin' ? { email: true } : {}),
               },
             },
           },
@@ -37,6 +43,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const authResult = await requireAdmin();
+    if (authResult.response) return authResult.response;
+
     const body = await request.json();
 
     // Validate required fields
@@ -78,6 +87,9 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    const authResult = await requireAdmin();
+    if (authResult.response) return authResult.response;
+
     const body = await request.json();
     const { id, title, day, timeFrom, timeTo, capacity } = body;
 
@@ -127,6 +139,9 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const authResult = await requireAdmin();
+    if (authResult.response) return authResult.response;
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 

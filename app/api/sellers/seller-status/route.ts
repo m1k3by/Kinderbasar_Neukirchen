@@ -1,11 +1,16 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../../lib/prisma';
 import { parseAsGermanTime } from '../../../lib/time';
+import { requireAuth } from '../../../lib/apiAuth';
 
 export async function PUT(request: Request) {
   const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
-  
+
   try {
+    const authResult = await requireAuth();
+    if (authResult.response) return authResult.response;
+    const { auth } = authResult;
+
     const body = await request.json();
     const { sellerId, sellerStatusActive } = body;
 
@@ -32,6 +37,15 @@ export async function PUT(request: Request) {
       return NextResponse.json(
         { error: 'Ungültige Verkäufer-ID' },
         { status: 400 }
+      );
+    }
+
+    // Self-or-admin: non-admins may only change their own status
+    if (auth.role !== 'admin' && auth.sellerId !== sellerIdInt) {
+      console.log('[SELLER-STATUS] Failed: sellerId mismatch', { sellerId: sellerIdInt, callerSellerId: auth.sellerId, ip });
+      return NextResponse.json(
+        { error: 'Nicht autorisiert' },
+        { status: 403 }
       );
     }
 

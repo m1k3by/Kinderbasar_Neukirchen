@@ -1,9 +1,6 @@
 ﻿import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import jwt from 'jsonwebtoken';
 import { prisma } from '../../../../../lib/prisma';
-
-const JWT_SECRET = process.env.JWT_SECRET!;
+import { requireAuth } from '../../../../../lib/apiAuth';
 
 // DELETE /api/basars/:id/articles/:artId
 export async function DELETE(
@@ -11,11 +8,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; artId: string }> }
 ) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
-
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const authResult = await requireAuth();
+    if (authResult.response) return authResult.response;
+    const { auth } = authResult;
     const { id: basarId, artId } = await params;
 
     const basar = await prisma.basar.findUnique({ where: { id: basarId } });
@@ -32,7 +27,7 @@ export async function DELETE(
     if (!article) return NextResponse.json({ error: 'Artikel nicht gefunden' }, { status: 404 });
 
     // Non-admin must own the article
-    if (decoded.role !== 'admin' && article.basarSeller.sellerId !== decoded.sellerId) {
+    if (auth.role !== 'admin' && article.basarSeller.sellerId !== auth.sellerId) {
       return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 403 });
     }
 

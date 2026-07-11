@@ -116,8 +116,8 @@ describe('POST /api/basars/[id]/settlements', () => {
       {
         id: 'bs-1', commissionOverride: null,
         articles: [
-          { status: 'SOLD', sale: { isCancelled: false, salePrice: 5.0 } },
-          { status: 'AVAILABLE', sale: null },
+          { status: 'SOLD', sales: [{ isCancelled: false, salePrice: 5.0 }] },
+          { status: 'AVAILABLE', sales: [] },
         ],
       },
     ]);
@@ -126,6 +126,40 @@ describe('POST /api/basars/[id]/settlements', () => {
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.created).toBe(1);
+    expect(prismaMock.settlement.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({ grossRevenue: 5.0, commissionAmount: 1.0, netPayout: 4.0 }),
+      })
+    );
+  });
+
+  it('ignores a cancelled sale on a SOLD article when computing settlement (storno-then-resell)', async () => {
+    // An article can end up with multiple Sale rows after storno + resell; only the
+    // non-cancelled one should count toward the seller's gross revenue.
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.basar.findUnique.mockResolvedValue(closedBasar);
+    prismaMock.basarSeller.findMany.mockResolvedValue([
+      {
+        id: 'bs-1', commissionOverride: null,
+        articles: [
+          {
+            status: 'SOLD',
+            sales: [
+              { isCancelled: true, salePrice: 5.0 },
+              { isCancelled: false, salePrice: 7.0 },
+            ],
+          },
+        ],
+      },
+    ]);
+    prismaMock.settlement.upsert.mockResolvedValue({ id: 'set-1', netPayout: 5.6 });
+    const res = await POST(makePostRequest(), makeContext());
+    expect(res.status).toBe(200);
+    expect(prismaMock.settlement.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({ grossRevenue: 7.0 }),
+      })
+    );
   });
 
   it('returns 500 on DB error', async () => {

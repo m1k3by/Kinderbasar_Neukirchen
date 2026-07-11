@@ -1,19 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '../../lib/prisma';
+import { requireAuth } from '../../lib/apiAuth';
+
+function parseSellerId(value: unknown): number | null {
+  const num = typeof value === 'string' ? parseInt(value, 10) : (value as number);
+  return typeof num === 'number' && !isNaN(num) ? num : null;
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const { taskId, sellerId } = await req.json();
+    const authResult = await requireAuth();
+    if (authResult.response) return authResult.response;
+    const { auth } = authResult;
 
-    if (!taskId || !sellerId) {
+    const { taskId, sellerId: bodySellerId } = await req.json();
+
+    // Non-admins may only sign up themselves. Admins may sign up any seller.
+    let sellerIdInt: number | null;
+    if (auth.role === 'admin') {
+      sellerIdInt = bodySellerId !== undefined && bodySellerId !== null ? parseSellerId(bodySellerId) : null;
+    } else {
+      if (!auth.sellerId) {
+        return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
+      }
+      if (bodySellerId !== undefined && bodySellerId !== null) {
+        const requestedSellerId = parseSellerId(bodySellerId);
+        if (requestedSellerId !== auth.sellerId) {
+          return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 403 });
+        }
+      }
+      sellerIdInt = auth.sellerId;
+    }
+
+    if (!taskId || !sellerIdInt) {
       return NextResponse.json(
         { error: 'taskId und sellerId sind erforderlich' },
         { status: 400 }
       );
     }
-
-    // Parse sellerId to integer
-    const sellerIdInt = typeof sellerId === 'string' ? parseInt(sellerId, 10) : sellerId;
 
     // Prüfen ob bereits angemeldet
     const existing = await prisma.taskSignup.findUnique({
@@ -55,20 +79,20 @@ export async function POST(req: NextRequest) {
       // Prüfe jede Aufgabe auf Überschneidung
       for (const signup of userSignups) {
         const existingTask = signup.task;
-        
+
         // Prüfen: Gleicher Tag?
         if (existingTask.day === targetTask.day) {
           // Prüfen: Zeitüberschneidung?
           if (existingTask.timeFrom && existingTask.timeTo) {
             // Zwei Zeiträume überschneiden sich wenn: start1 < end2 UND start2 < end1
-            const hasOverlap = 
-              targetTask.timeFrom < existingTask.timeTo && 
+            const hasOverlap =
+              targetTask.timeFrom < existingTask.timeTo &&
               existingTask.timeFrom < targetTask.timeTo;
 
             if (hasOverlap) {
               return NextResponse.json(
-                { 
-                  error: `Eintragung nicht möglich! Du hast dich bereits für "${existingTask.title}" (${existingTask.timeFrom} - ${existingTask.timeTo}) am ${existingTask.day} eingetragen.` 
+                {
+                  error: `Eintragung nicht möglich! Du hast dich bereits für "${existingTask.title}" (${existingTask.timeFrom} - ${existingTask.timeTo}) am ${existingTask.day} eingetragen.`
                 },
                 { status: 400 }
               );
@@ -103,19 +127,37 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    const authResult = await requireAuth();
+    if (authResult.response) return authResult.response;
+    const { auth } = authResult;
+
     const { searchParams } = new URL(req.url);
     const taskId = searchParams.get('taskId');
-    const sellerId = searchParams.get('sellerId');
+    const bodySellerId = searchParams.get('sellerId');
 
-    if (!taskId || !sellerId) {
+    // Non-admins may only remove themselves. Admins may remove any seller.
+    let sellerIdInt: number | null;
+    if (auth.role === 'admin') {
+      sellerIdInt = bodySellerId ? parseSellerId(bodySellerId) : null;
+    } else {
+      if (!auth.sellerId) {
+        return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
+      }
+      if (bodySellerId !== null && bodySellerId !== '') {
+        const requestedSellerId = parseSellerId(bodySellerId);
+        if (requestedSellerId !== auth.sellerId) {
+          return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 403 });
+        }
+      }
+      sellerIdInt = auth.sellerId;
+    }
+
+    if (!taskId || !sellerIdInt) {
       return NextResponse.json(
         { error: 'taskId und sellerId sind erforderlich' },
         { status: 400 }
       );
     }
-
-    // Parse sellerId to integer
-    const sellerIdInt = parseInt(sellerId, 10);
 
     await prisma.taskSignup.delete({
       where: {

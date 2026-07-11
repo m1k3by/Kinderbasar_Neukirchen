@@ -39,7 +39,13 @@ export async function POST(request: Request) {
       console.log('[LOGIN] Success: Admin login', { ip });
       const token = createToken({ role: 'admin' });
       const response = NextResponse.json({ success: true, role: 'admin' });
-      response.cookies.set('token', token, { httpOnly: true });
+      response.cookies.set('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24,
+        path: '/',
+      });
       return response;
     }
 
@@ -92,8 +98,20 @@ export async function POST(request: Request) {
     });
 
     const response = NextResponse.json({ success: true, role: role, sellerId: seller.sellerId });
-    response.cookies.set('token', token, { httpOnly: true });
-    response.cookies.set('sellerId', seller.sellerId.toString(), { httpOnly: false }); // Make sellerId available to client
+    response.cookies.set('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24,
+      path: '/',
+    });
+    response.cookies.set('sellerId', seller.sellerId.toString(), {
+      httpOnly: false, // Make sellerId available to client
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24,
+      path: '/',
+    });
     return response;
 
   } catch (error: any) {

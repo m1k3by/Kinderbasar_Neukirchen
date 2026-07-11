@@ -1,23 +1,18 @@
 ﻿import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import jwt from 'jsonwebtoken';
 import { prisma } from '../../../../lib/prisma';
-
-const JWT_SECRET = process.env.JWT_SECRET!;
+import { requireAuth, requireAdmin } from '../../../../lib/apiAuth';
 
 // GET /api/basars/:id/settlements – list all settlements for this basar
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
-
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const authResult = await requireAuth();
+    if (authResult.response) return authResult.response;
+    const { auth } = authResult;
     const { id: basarId } = await params;
 
     // Sellers can only see their own settlement
-    if (decoded.role !== 'admin') {
-      const sellerId: number = decoded.sellerId;
+    if (auth.role !== 'admin') {
+      const sellerId: number = auth.sellerId!;
       const basarSeller = await prisma.basarSeller.findUnique({
         where: { basarId_sellerId: { basarId, sellerId } },
         include: { settlement: true },
@@ -48,14 +43,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 // POST /api/basars/:id/settlements – generate settlements for all sellers (admin only)
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
-
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
-    if (decoded.role !== 'admin') {
-      return NextResponse.json({ error: 'Nur Admins dürfen Abrechnungen erstellen' }, { status: 403 });
-    }
+    const authResult = await requireAdmin();
+    if (authResult.response) return authResult.response;
 
     const { id: basarId } = await params;
     const basar = await prisma.basar.findUnique({ where: { id: basarId } });
@@ -68,7 +57,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       where: { basarId },
       include: {
         articles: {
-          include: { sale: true },
+          include: { sales: true },
         },
       },
     });
@@ -79,8 +68,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const entryFeeAmt = Number(basar.entryFee);
 
       const grossRevenue = bs.articles
-        .filter(a => a.status === 'SOLD' && a.sale && !a.sale.isCancelled)
-        .reduce((sum, a) => sum + Number(a.sale!.salePrice), 0);
+        .filter(a => a.status === 'SOLD')
+        .map(a => a.sales?.find(s => !s.isCancelled))
+        .filter((s): s is NonNullable<typeof s> => !!s)
+        .reduce((sum, s) => sum + Number(s.salePrice), 0);
 
       const commissionAmount = Math.round(grossRevenue * commissionRate * 100) / 100;
       const netPayout = Math.max(0, grossRevenue - commissionAmount - entryFeeAmt);

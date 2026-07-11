@@ -38,7 +38,7 @@ describe('POST /api/admin/toggle-seller-status', () => {
   it('returns 401 for invalid token', async () => {
     cookiesGetMock.mockReturnValue({ value: 'garbage-token' });
     const res = await POST(makeRequest({ sellerId: 1234 }));
-    expect(res.status).toBe(500); // jwt.verify throws → caught by outer catch
+    expect(res.status).toBe(401);
   });
 
   it('returns 403 for non-admin token', async () => {

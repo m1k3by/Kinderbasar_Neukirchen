@@ -1,8 +1,16 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../lib/prisma';
+import { requireAuth } from '../../lib/apiAuth';
 
+// NOTE: this endpoint is used by several non-admin pages (employee/seller dashboards,
+// the seller basar view) to look up the calling user's own record among the full list,
+// so it is intentionally requireAuth (any authenticated role) rather than requireAdmin –
+// see task write-up for details. It was previously fully unauthenticated.
 export async function GET(request: Request) {
   try {
+    const authResult = await requireAuth();
+    if (authResult.response) return authResult.response;
+
     const sellers = await prisma.seller.findMany({
       select: {
         sellerId: true,
