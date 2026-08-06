@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { prisma } from './lib/prisma';
-import { isRegistrationOpen } from './lib/basarWindows';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -27,8 +26,6 @@ export default async function Home() {
     },
   });
 
-  const now = new Date();
-
   const cards = basars.map(basar => ({
     basar,
     days: [
@@ -38,8 +35,6 @@ export default async function Home() {
     ].filter((d): d is string => d !== null),
     activeSellers: basar._count.basarSellers,
     isFull: basar._count.basarSellers >= basar.maxSellers,
-    sellerOpen: isRegistrationOpen(basar, false, now),
-    employeeOpen: isRegistrationOpen(basar, true, now),
   }));
 
   return (
@@ -65,12 +60,12 @@ export default async function Home() {
           <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-8 text-center">
             <p className="text-lg font-semibold text-gray-800">Aktuell ist kein Basar geöffnet</p>
             <p className="mt-2 text-sm text-gray-600">
-              Sobald der nächste Basar ansteht, erscheint er hier mit den Anmeldezeiten.
+              Sobald der nächste Basar ansteht, erscheint er hier mit den Terminen.
             </p>
           </div>
         ) : (
           <div className="space-y-6">
-            {cards.map(({ basar, days, activeSellers, isFull, sellerOpen, employeeOpen }) => (
+            {cards.map(({ basar, days, activeSellers, isFull }) => (
               <div key={basar.id} className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6">
                 <div className="md:flex md:items-start md:justify-between md:gap-6">
                   <div>
@@ -101,29 +96,13 @@ export default async function Home() {
                         <div className="mt-1">Keine weiteren Anmeldungen möglich.</div>
                       </div>
                     ) : (
-                      <>
-                        {sellerOpen && (
-                          <Link
-                            href={{ pathname: '/register/seller', query: { basarId: basar.id, basarTitle: basar.title } }}
-                            className="inline-flex items-center justify-center rounded-md bg-yellow-500 hover:bg-yellow-600 text-gray-800 px-4 py-3 text-sm font-medium transition-colors shadow"
-                          >
-                            Verkäufer Registrierung (A)
-                          </Link>
-                        )}
-                        {employeeOpen && (
-                          <Link
-                            href={{ pathname: '/register/employee', query: { basarId: basar.id, basarTitle: basar.title } }}
-                            className="inline-flex items-center justify-center rounded-md bg-teal-700 hover:bg-teal-800 text-white px-4 py-3 text-sm font-medium transition-colors shadow"
-                          >
-                            Mitarbeiter registrieren (B)
-                          </Link>
-                        )}
-                        {!sellerOpen && !employeeOpen && (
-                          <div className="bg-gray-100 border border-gray-300 text-gray-600 px-4 py-3 rounded-md text-sm text-center">
-                            Registrierungen für diesen Basar sind aktuell geschlossen
-                          </div>
-                        )}
-                      </>
+                      <div className="bg-gray-100 border border-gray-300 text-gray-600 px-4 py-3 rounded-md text-sm text-center">
+                        Für die Teilnahme an diesem Basar bitte{' '}
+                        <Link href="/login" className="text-blue-700 hover:underline font-medium">
+                          einloggen
+                        </Link>
+                        .
+                      </div>
                     )}
                   </div>
                 </div>
@@ -132,23 +111,47 @@ export default async function Home() {
           </div>
         )}
 
+        {/* Registration */}
+        <div className="mt-6 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6">
+          <h2 className="text-xl font-semibold text-gray-800">Neu hier?</h2>
+          <p className="mt-2 text-sm text-gray-700">
+            Ein Konto anlegen geht jederzeit, unabhängig von einem konkreten Basar. Die Teilnahme
+            an einem bestimmten Basar meldest du danach im Verkäufer- bzw. Mitarbeiterbereich an.
+          </p>
+          <div className="mt-4 flex flex-col sm:flex-row gap-3">
+            <Link
+              href="/register/seller"
+              className="inline-flex items-center justify-center rounded-md bg-yellow-500 hover:bg-yellow-600 text-gray-800 px-4 py-3 text-sm font-medium transition-colors shadow"
+            >
+              Verkäufer Registrierung (A)
+            </Link>
+            <Link
+              href="/register/employee"
+              className="inline-flex items-center justify-center rounded-md bg-teal-700 hover:bg-teal-800 text-white px-4 py-3 text-sm font-medium transition-colors shadow"
+            >
+              Mitarbeiter registrieren (B)
+            </Link>
+          </div>
+        </div>
+
         {/* Information */}
         <div className="mt-6 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-3">Hinweise</h2>
           <div className="mt-3 space-y-4 text-sm text-gray-700">
             <div>
               <strong>A:</strong> Für alle, die sich nur als Verkäufer registrieren wollen.
-              Nach Anlage wird eine E-Mail mit Verkäufer-ID an die angegebene E-Mail Adresse versendet.
+              Die Registrierung ist jederzeit möglich und basarunabhängig. Nach Anlage wird eine
+              E-Mail mit Verkäufer-ID an die angegebene E-Mail Adresse versendet.
             </div>
             <div>
-              <strong>B:</strong> Für alle die sich aktiv am Basar beteiligen wollen
+              <strong>B:</strong> Für alle die sich aktiv an einem Basar beteiligen wollen
               (Vorsortieren, Kuchenverkauf etc.). Es wird auch direkt eine Verkäufer-ID erstellt.
               Alle Info wie Login werden ebenfalls per E-Mail an die angegebene E-Mail Adresse versendet.
             </div>
             <div className="pt-3 mt-3 border-t border-gray-300">
-              Wer bereits ein Konto hat, meldet seine Teilnahme nach dem{' '}
-              <Link href="/login" className="text-blue-700 hover:underline">Login</Link>{' '}
-              direkt beim gewünschten Basar an.
+              Nach dem Anlegen des Kontos kannst du dich{' '}
+              <Link href="/login" className="text-blue-700 hover:underline">einloggen</Link>{' '}
+              und dort separat deine Teilnahme am gewünschten Basar aktivieren.
             </div>
           </div>
         </div>

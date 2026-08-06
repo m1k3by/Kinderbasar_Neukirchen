@@ -26,10 +26,6 @@ export interface BasarFormState {
   dateFriday: string;
   dateSaturday: string;
   dateSunday: string;
-  registrationSellerStart: string;
-  registrationSellerEnd: string;
-  registrationEmployeeStart: string;
-  registrationEmployeeEnd: string;
   activationSellerStart: string;
   activationSellerEnd: string;
   activationEmployeeStart: string;
@@ -50,8 +46,6 @@ export const EMPTY_BASAR_FORM: BasarFormState = {
   maxSellers: '100', maxArticlesPerSeller: '50',
   commissionPercent: '20', entryFee: '0',
   dateFriday: '', dateSaturday: '', dateSunday: '',
-  registrationSellerStart: '', registrationSellerEnd: '',
-  registrationEmployeeStart: '', registrationEmployeeEnd: '',
   activationSellerStart: '', activationSellerEnd: '',
   activationEmployeeStart: '', activationEmployeeEnd: '',
   deliveryStart: '', deliveryEnd: '', deliveryStart2: '', deliveryEnd2: '',
@@ -60,8 +54,6 @@ export const EMPTY_BASAR_FORM: BasarFormState = {
 };
 
 const DATETIME_KEYS = [
-  'registrationSellerStart', 'registrationSellerEnd',
-  'registrationEmployeeStart', 'registrationEmployeeEnd',
   'activationSellerStart', 'activationSellerEnd',
   'activationEmployeeStart', 'activationEmployeeEnd',
   'deliveryStart', 'deliveryEnd', 'deliveryStart2', 'deliveryEnd2',
@@ -170,18 +162,10 @@ export default function BasarFormFields({ form, setForm, economicsLocked = false
       <div />
 
       <div className={sectionClass}>
-        <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Registrierung</h3>
-        <p className="text-xs text-gray-500 mt-0.5">
-          Leer lassen = jederzeit möglich. Steuert die Buttons auf der Startseite.
-        </p>
-      </div>
-      {windowPair('registrationSellerStart', 'registrationSellerEnd', 'Verkäufer')}
-      {windowPair('registrationEmployeeStart', 'registrationEmployeeEnd', 'Mitarbeiter')}
-
-      <div className={sectionClass}>
-        <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Aktivierung</h3>
+        <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Teilnahme-Aktivierung</h3>
         <p className="text-xs text-gray-500 mt-0.5">
           Zeitraum, in dem bestehende Konten ihre Teilnahme an diesem Basar an- und abmelden können.
+          Leer lassen = jederzeit möglich. Die Kontoregistrierung selbst hat kein Zeitfenster.
         </p>
       </div>
       {windowPair('activationSellerStart', 'activationSellerEnd', 'Verkäufer')}

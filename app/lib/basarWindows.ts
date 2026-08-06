@@ -30,24 +30,17 @@ export function isWindowOpen(start: WindowBound, end: WindowBound, now: Date = n
 }
 
 export interface BasarWindows {
-  registrationSellerStart?: WindowBound;
-  registrationSellerEnd?: WindowBound;
-  registrationEmployeeStart?: WindowBound;
-  registrationEmployeeEnd?: WindowBound;
   activationSellerStart?: WindowBound;
   activationSellerEnd?: WindowBound;
   activationEmployeeStart?: WindowBound;
   activationEmployeeEnd?: WindowBound;
 }
 
-/** Darf sich jemand für diesen Basar registrieren? */
-export function isRegistrationOpen(basar: BasarWindows, isEmployee: boolean, now?: Date): boolean {
-  return isEmployee
-    ? isWindowOpen(basar.registrationEmployeeStart, basar.registrationEmployeeEnd, now)
-    : isWindowOpen(basar.registrationSellerStart, basar.registrationSellerEnd, now);
-}
-
-/** Darf jemand seine Teilnahme an diesem Basar aktivieren? */
+/**
+ * Darf jemand seine Teilnahme an diesem Basar aktivieren? Die Kontoregistrierung
+ * selbst hat kein Zeitfenster – nur die Teilnahme an einem konkreten Basar ist
+ * zeitlich begrenzt.
+ */
 export function isActivationOpen(basar: BasarWindows, isEmployee: boolean, now?: Date): boolean {
   return isEmployee
     ? isWindowOpen(basar.activationEmployeeStart, basar.activationEmployeeEnd, now)

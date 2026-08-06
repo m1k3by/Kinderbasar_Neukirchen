@@ -96,17 +96,15 @@ model Basar {
   dateSaturday              DateTime?
   dateSunday                DateTime?
 
-  // Zeitfenster. Nicht gesetzt = keine Einschränkung (siehe isWindowOpen).
-  registrationSellerStart   DateTime?
-  registrationSellerEnd     DateTime?
-  registrationEmployeeStart DateTime?
-  registrationEmployeeEnd   DateTime?
+  // Zeitfenster für die Teilnahme-Aktivierung (app/api/basars/[id]/participation).
+  // Die Kontoregistrierung selbst ist basar-unabhängig und kennt kein Zeitfenster.
+  // Nicht gesetzt = keine Einschränkung (siehe isWindowOpen).
   activationSellerStart     DateTime?
   activationSellerEnd       DateTime?
   activationEmployeeStart   DateTime?
   activationEmployeeEnd     DateTime?
 
-  // Logistik – fließt in die Registrierungs-Bestätigungsmail ein.
+  // Logistik – fließt in die Teilnahme-Bestätigungsmail ein (bei Aktivierung, nicht bei Registrierung).
   deliveryStart             DateTime?
   deliveryEnd               DateTime?
   deliveryStart2            DateTime?

@@ -1,7 +1,6 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '../../lib/prisma';
 import { generateQR, generateBarcode } from '../../lib/qr';
-import { isRegistrationOpen } from '../../lib/basarWindows';
 import path from 'path';
 import fs from 'fs';
 import { rateLimit } from '../../lib/rateLimit';
@@ -35,7 +34,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { email: emailInput, firstName, lastName, isEmployee: isEmployeeInput, basarId } = body;
+    const { email: emailInput, firstName, lastName, isEmployee: isEmployeeInput } = body;
     email = emailInput;
     // Strict boolean coercion – nothing else in the body may influence privileges
     // (isCashier in particular is never settable through registration).
@@ -76,66 +75,6 @@ export async function POST(request: NextRequest) {
           { error: 'Zu viele Registrierungsversuche. Bitte versuchen Sie es später erneut.' },
           { status: 429 }
         );
-      }
-    }
-
-    // Registrierung ist an einen Basar gebunden – ein Konto entsteht, aber die
-    // Teilnahme (BasarSeller) gehört zu genau diesem Basar. Admins dürfen weiterhin
-    // ein reines Konto ohne Basarbezug anlegen (z.B. Helferlisten-Verwaltung).
-    if (!isAdmin && !basarId) {
-      return NextResponse.json({ error: 'Basar ist ein Pflichtfeld' }, { status: 400 });
-    }
-
-    const basar = basarId
-      ? await prisma.basar.findUnique({ where: { id: basarId } })
-      : null;
-
-    if (basarId && !basar) {
-      return NextResponse.json({ error: 'Basar nicht gefunden' }, { status: 404 });
-    }
-
-    const now = new Date();
-
-    if (!isAdmin && basar) {
-      if (basar.isArchived || basar.status === 'CLOSED' || basar.status === 'DRAFT') {
-        return NextResponse.json(
-          { error: 'Für diesen Basar ist derzeit keine Registrierung möglich.' },
-          { status: 403 }
-        );
-      }
-
-      if (!isRegistrationOpen(basar, isEmployee, now)) {
-        console.log('[REGISTER] Failed: Registration period closed', {
-          basarId: basar.id,
-          isEmployee,
-          now: now.toISOString(),
-          ip,
-        });
-        return NextResponse.json(
-          {
-            error: isEmployee
-              ? 'Die Mitarbeiter-Registrierung ist derzeit geschlossen.'
-              : 'Die Verkäufer-Registrierung ist derzeit geschlossen.',
-          },
-          { status: 403 }
-        );
-      }
-
-      // Kapazität nur für Verkäufer geprüft – Mitarbeiter zählen nicht gegen
-      // maxSellers, analog zur bisherigen globalen Zählung.
-      if (!isEmployee) {
-        const activeSellers = await prisma.basarSeller.count({
-          where: { basarId: basar.id, isActive: true, seller: { isEmployee: false } },
-        });
-        if (activeSellers >= basar.maxSellers) {
-          console.log('[REGISTER] Failed: Basar capacity reached', {
-            basarId: basar.id, activeSellers, maxSellers: basar.maxSellers, ip,
-          });
-          return NextResponse.json(
-            { error: `Die maximale Anzahl von ${basar.maxSellers} Verkäufern für diesen Basar ist bereits erreicht.` },
-            { status: 400 }
-          );
-        }
       }
     }
 
@@ -251,106 +190,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Teilnahme an diesem Basar direkt anlegen. Das lazy Anlegen beim ersten
-    // Artikel (app/api/basars/[id]/articles/route.ts) bleibt als Fallback für
-    // Alt-Basare bzw. admin-erstellte Konten ohne Basarbezug bestehen.
-    if (basar) {
-      await prisma.basarSeller.create({
-        data: { basarId: basar.id, sellerId: seller.sellerId, isActive: true, activatedAt: new Date() },
-      });
-    }
-
-    const formatDateTime = (dateTimeValue: Date | null | undefined) => {
-      if (!dateTimeValue) return null;
-      try {
-        const date = dateTimeValue instanceof Date ? dateTimeValue : new Date(dateTimeValue);
-        return date.toLocaleString('de-DE', {
-          weekday: 'long',
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          timeZone: 'Europe/Berlin',
-        });
-      } catch {
-        return null;
-      }
-    };
-
-    const deliveryStart = formatDateTime(basar?.deliveryStart);
-    const deliveryEnd = formatDateTime(basar?.deliveryEnd);
-    const deliveryStart2 = formatDateTime(basar?.deliveryStart2);
-    const deliveryEnd2 = formatDateTime(basar?.deliveryEnd2);
-    const pickupStart = formatDateTime(basar?.pickupStart);
-    const pickupEnd = formatDateTime(basar?.pickupEnd);
-    const pickupStart2 = formatDateTime(basar?.pickupStart2);
-    const pickupEnd2 = formatDateTime(basar?.pickupEnd2);
-
-    let deliveryInfo = '';
-    if (deliveryStart && deliveryEnd) {
-      deliveryInfo = `
-        <div style="margin-top: 20px; padding: 15px; background-color: #f0f9ff; border-left: 4px solid #3b82f6; border-radius: 4px;">
-          <h3 style="margin: 0 0 10px 0; color: #1e40af;">Anlieferung der Ware</h3>
-          <p style="margin: 0;"><strong>Zeitfenster 1 - Von:</strong> ${deliveryStart}</p>
-          <p style="margin: 5px 0 0 0;"><strong>Bis:</strong> ${deliveryEnd}</p>
-          ${deliveryStart2 && deliveryEnd2 ? `
-            <p style="margin: 10px 0 0 0;"><strong>Zeitfenster 2 - Von:</strong> ${deliveryStart2}</p>
-            <p style="margin: 5px 0 0 0;"><strong>Bis:</strong> ${deliveryEnd2}</p>
-          ` : ''}
-        </div>
-      `;
-    }
-
-    let pickupInfo = '';
-    if (pickupStart && pickupEnd) {
-      pickupInfo = `
-        <div style="margin-top: 15px; padding: 15px; background-color: #f0fdf4; border-left: 4px solid #10b981; border-radius: 4px;">
-          <h3 style="margin: 0 0 10px 0; color: #065f46;">Abholung der Ware</h3>
-          <p style="margin: 0;"><strong>Zeitfenster 1 - Von:</strong> ${pickupStart}</p>
-          <p style="margin: 5px 0 0 0;"><strong>Bis:</strong> ${pickupEnd}</p>
-          ${pickupStart2 && pickupEnd2 ? `
-            <p style="margin: 10px 0 0 0;"><strong>Zeitfenster 2 - Von:</strong> ${pickupStart2}</p>
-            <p style="margin: 5px 0 0 0;"><strong>Bis:</strong> ${pickupEnd2}</p>
-          ` : ''}
-        </div>
-      `;
-    }
-
     try {
-      // Prepare unified styling for delivery and pickup
-      const deliverySection = deliveryStart && deliveryEnd
-        ? `<div style="margin-top:20px;padding:14px;border-radius:8px;background:#f3f4f6;border:1px solid #e5e7eb;">
-             <strong>Anlieferung</strong><br/>
-             <span style="font-size:0.95em;">Zeitfenster 1:</span><br/>
-             <span>${deliveryStart}</span><br/><span>${deliveryEnd}</span>
-             ${deliveryStart2 && deliveryEnd2 ? `
-               <br/><br/><span style="font-size:0.95em;">Zeitfenster 2:</span><br/>
-               <span>${deliveryStart2}</span><br/><span>${deliveryEnd2}</span>
-             ` : ''}
-           </div>`
-        : '';
-
-      const pickupSection = pickupStart && pickupEnd
-        ? `<div style="margin-top:12px;padding:14px;border-radius:8px;background:#f3f4f6;border:1px solid #e5e7eb;">
-             <strong>Abholung</strong><br/>
-             <span style="font-size:0.95em;">Zeitfenster 1:</span><br/>
-             <span>${pickupStart}</span><br/><span>${pickupEnd}</span>
-             ${pickupStart2 && pickupEnd2 ? `
-               <br/><br/><span style="font-size:0.95em;">Zeitfenster 2:</span><br/>
-               <span>${pickupStart2}</span><br/><span>${pickupEnd2}</span>
-             ` : ''}
-           </div>`
-        : '';
-
-      // Combine sections into a consistent info box
-      const datesBox = (deliverySection || pickupSection)
-        ? `<div style="margin-top:20px;display:flex;flex-direction:column;gap:10px;">
-             ${deliverySection}
-             ${pickupSection}
-           </div>`
-        : '';
-
       // Attachments: add general info JPEG from project root if present
       const attachments: any[] = [];
       const generalInfoPath = path.join(process.cwd(), 'Generelle_Verkäuferinformationen.jpeg');
@@ -377,7 +217,6 @@ export async function POST(request: NextRequest) {
           <p>Vielen Dank für Ihre Registrierung!</p>
           <p>Ihre Verkäufer-Nummer: <strong>${sellerId}</strong></p>
           ${passwordSection}
-          ${datesBox}
           ${attachmentNotice}
           <p style="margin-top:18px;">Bewahren Sie diese Informationen gut auf!</p>
           <p style="margin-top:18px;">Mit freundlichen Grüßen,<br/><strong>Dein Basar-Team</strong></p>

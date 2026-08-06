@@ -14,10 +14,6 @@ import { DEFAULT_SIZES } from './sizes';
 export const BASAR_DAY_FIELDS = ['dateFriday', 'dateSaturday', 'dateSunday'] as const;
 
 export const BASAR_WINDOW_FIELDS = [
-  'registrationSellerStart',
-  'registrationSellerEnd',
-  'registrationEmployeeStart',
-  'registrationEmployeeEnd',
   'activationSellerStart',
   'activationSellerEnd',
   'activationEmployeeStart',

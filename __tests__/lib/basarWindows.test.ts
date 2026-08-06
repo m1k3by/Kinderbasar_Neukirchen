@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   isWindowOpen,
-  isRegistrationOpen,
   isActivationOpen,
   deriveEventDate,
   dateForWeekday,
@@ -43,32 +42,34 @@ describe('isWindowOpen', () => {
   });
 });
 
-describe('isRegistrationOpen / isActivationOpen', () => {
+describe('isActivationOpen', () => {
+  // Registration itself has no window at all (account creation is basar-independent and
+  // always open) – only participation activation for a specific basar is time-gated.
   const now = new Date('2025-06-15T12:00:00Z');
 
   it('reads the seller window for non-employees', () => {
     const basar = {
-      registrationSellerStart: '2025-01-01T00:00:00Z',
-      registrationSellerEnd: '2025-01-02T00:00:00Z', // closed by "now"
-      registrationEmployeeStart: null,
-      registrationEmployeeEnd: null,
+      activationSellerStart: '2025-01-01T00:00:00Z',
+      activationSellerEnd: '2025-01-02T00:00:00Z', // closed by "now"
+      activationEmployeeStart: null,
+      activationEmployeeEnd: null,
     };
-    expect(isRegistrationOpen(basar, false, now)).toBe(false);
-    expect(isRegistrationOpen(basar, true, now)).toBe(true); // employee window unset → open
+    expect(isActivationOpen(basar, false, now)).toBe(false);
+    expect(isActivationOpen(basar, true, now)).toBe(true); // employee window unset → open
   });
 
   it('reads the employee window for employees', () => {
     const basar = {
-      registrationSellerStart: null,
-      registrationSellerEnd: null,
-      registrationEmployeeStart: '2025-01-01T00:00:00Z',
-      registrationEmployeeEnd: '2025-01-02T00:00:00Z',
+      activationSellerStart: null,
+      activationSellerEnd: null,
+      activationEmployeeStart: '2025-01-01T00:00:00Z',
+      activationEmployeeEnd: '2025-01-02T00:00:00Z',
     };
-    expect(isRegistrationOpen(basar, true, now)).toBe(false);
-    expect(isRegistrationOpen(basar, false, now)).toBe(true);
+    expect(isActivationOpen(basar, true, now)).toBe(false);
+    expect(isActivationOpen(basar, false, now)).toBe(true);
   });
 
-  it('isActivationOpen mirrors the same seller/employee split', () => {
+  it('mirrors the same seller/employee split with both windows set', () => {
     const basar = {
       activationSellerStart: '2025-06-01T00:00:00Z',
       activationSellerEnd: '2025-06-30T00:00:00Z',

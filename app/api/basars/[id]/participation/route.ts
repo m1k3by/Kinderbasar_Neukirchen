@@ -95,6 +95,82 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       create: { basarId, sellerId, isActive, activatedAt: isActive ? new Date() : null },
     });
 
+    // War dies eine (Re-)Aktivierung, die vorher nicht aktiv war? Dann jetzt genau in diesem
+    // Moment die Anlieferungs-/Abholzeiten per Mail bestätigen – das ist der Zeitpunkt, an dem
+    // diese Info für den Verkäufer relevant wird (Registrierung selbst ist basar-unabhängig
+    // und verschickt keine Logistik-Infos mehr).
+    if (isActive && !(existing?.isActive)) {
+      try {
+        const formatDateTime = (value: Date | null | undefined) => {
+          if (!value) return null;
+          try {
+            const date = value instanceof Date ? value : new Date(value);
+            return date.toLocaleString('de-DE', {
+              weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric',
+              hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin',
+            });
+          } catch { return null; }
+        };
+
+        const deliveryStart = formatDateTime(basar.deliveryStart);
+        const deliveryEnd = formatDateTime(basar.deliveryEnd);
+        const deliveryStart2 = formatDateTime(basar.deliveryStart2);
+        const deliveryEnd2 = formatDateTime(basar.deliveryEnd2);
+        const pickupStart = formatDateTime(basar.pickupStart);
+        const pickupEnd = formatDateTime(basar.pickupEnd);
+        const pickupStart2 = formatDateTime(basar.pickupStart2);
+        const pickupEnd2 = formatDateTime(basar.pickupEnd2);
+
+        const deliverySection = deliveryStart && deliveryEnd
+          ? `<div style="margin-top:20px;padding:14px;border-radius:8px;background:#f3f4f6;border:1px solid #e5e7eb;">
+               <strong>Anlieferung</strong><br/>
+               <span style="font-size:0.95em;">Zeitfenster 1:</span><br/>
+               <span>${deliveryStart}</span><br/><span>${deliveryEnd}</span>
+               ${deliveryStart2 && deliveryEnd2 ? `
+                 <br/><br/><span style="font-size:0.95em;">Zeitfenster 2:</span><br/>
+                 <span>${deliveryStart2}</span><br/><span>${deliveryEnd2}</span>
+               ` : ''}
+             </div>`
+          : '';
+
+        const pickupSection = pickupStart && pickupEnd
+          ? `<div style="margin-top:12px;padding:14px;border-radius:8px;background:#f3f4f6;border:1px solid #e5e7eb;">
+               <strong>Abholung</strong><br/>
+               <span style="font-size:0.95em;">Zeitfenster 1:</span><br/>
+               <span>${pickupStart}</span><br/><span>${pickupEnd}</span>
+               ${pickupStart2 && pickupEnd2 ? `
+                 <br/><br/><span style="font-size:0.95em;">Zeitfenster 2:</span><br/>
+                 <span>${pickupStart2}</span><br/><span>${pickupEnd2}</span>
+               ` : ''}
+             </div>`
+          : '';
+
+        const datesBox = (deliverySection || pickupSection)
+          ? `<div style="margin-top:20px;display:flex;flex-direction:column;gap:10px;">${deliverySection}${pickupSection}</div>`
+          : '';
+
+        const emailHtml = `
+          <div style="font-family:system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; color:#111827;">
+            <h1 style="color:#0f172a;">Teilnahme bestätigt: ${basar.title}</h1>
+            <p>Hallo ${seller.firstName}, deine Teilnahme am Basar <strong>${basar.title}</strong> ist jetzt aktiv.</p>
+            ${datesBox}
+            <p style="margin-top:18px;">Mit freundlichen Grüßen,<br/><strong>Dein Basar-Team</strong></p>
+          </div>
+        `;
+
+        await prisma.mailQueue.create({
+          data: {
+            to: seller.email,
+            subject: `Teilnahme bestätigt: ${basar.title}`,
+            html: emailHtml,
+          },
+        });
+      } catch (emailError) {
+        console.error('[PARTICIPATION] Failed to enqueue confirmation email:', { basarId, sellerId, error: emailError, ip });
+        // Teilnahme-Aktivierung selbst darf durch einen Mail-Fehler nicht scheitern.
+      }
+    }
+
     console.log('[PARTICIPATION] Success:', { basarId, sellerId, newActive: basarSeller.isActive, ip });
 
     return NextResponse.json({ success: true, isActive: basarSeller.isActive });
