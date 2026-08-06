@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Header from '../../components/Header';
+import { getNavLinks } from '../../lib/navLinks';
 
 interface Basar {
   id: string;
@@ -34,6 +35,7 @@ export default function SellerBasarsPage() {
   const [sellerName, setSellerName] = useState('');
   const [sellerNumber, setSellerNumber] = useState(0);
   const [isEmployee, setIsEmployee] = useState(false);
+  const [isCashier, setIsCashier] = useState(false);
 
   useEffect(() => {
     // Auth check
@@ -69,6 +71,7 @@ export default function SellerBasarsPage() {
           setSellerName(`${me.firstName} ${me.lastName}`);
           setSellerNumber(me.sellerId);
           setIsEmployee(me.isEmployee || false);
+          setIsCashier(me.isCashier || false);
         }
       }
     } finally {
@@ -79,12 +82,7 @@ export default function SellerBasarsPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Header
-        links={[
-          ...(isEmployee ? [{ href: '/employee', label: 'Mitarbeiterbereich' }] : []),
-          { href: '/seller', label: 'Verkäuferbereich' },
-          { href: '/seller/basars', label: 'Basare', active: true },
-          { href: '/', label: 'Logout' },
-        ]}
+        links={getNavLinks({ role: isEmployee ? 'employee' : 'seller', isEmployee, isCashier }, 'basare')}
         sellerInfo={sellerName && sellerNumber ? { name: sellerName, sellerId: sellerNumber } : null}
       />
       <div className="max-w-3xl mx-auto p-6">

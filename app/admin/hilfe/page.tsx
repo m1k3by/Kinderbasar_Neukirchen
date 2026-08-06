@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Header from '../../components/Header';
+import { getNavLinks } from '../../lib/navLinks';
 
 interface ChatLogRow {
   id: string;
@@ -68,14 +69,7 @@ export default function HilfeStatistikPage() {
   return (
     <div className="min-h-screen bg-gray-100">
       <Header
-        links={[
-          { href: '/admin', label: 'Basarliste' },
-          { href: '/admin/basars', label: 'Basare' },
-          { href: '/admin/list', label: 'Helferliste' },
-          { href: '/admin/tasks', label: 'Aufgaben' },
-          { href: '/admin/hilfe', label: 'Hilfe-Statistik', active: true },
-          { href: '/', label: 'Logout' },
-        ]}
+        links={getNavLinks({ role: 'admin' }, 'hilfe')}
       />
 
       <div className="max-w-6xl mx-auto p-8">

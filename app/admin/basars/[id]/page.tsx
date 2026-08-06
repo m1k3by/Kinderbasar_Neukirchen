@@ -3,6 +3,7 @@
 import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import Header from '../../../components/Header';
+import { getNavLinks, type NavUser } from '../../../lib/navLinks';
 import BasarFormFields, { EMPTY_BASAR_FORM, basarFormFromApi, type BasarFormState } from '../BasarFormFields';
 
 interface Basar {
@@ -49,8 +50,24 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
   const [editMode, setEditMode] = useState(false);
   const [form, setForm] = useState<BasarFormState>(EMPTY_BASAR_FORM);
   const [saving, setSaving] = useState(false);
+  // Default to admin nav until /api/me resolves – see app/admin/basars/page.tsx for why
+  // this matters (cashiers can also reach /admin/basars/**).
+  const [navUser, setNavUser] = useState<NavUser>({ role: 'admin' });
 
-  useEffect(() => { loadBasar(); }, [id]);
+  useEffect(() => { loadBasar(); loadMe(); }, [id]);
+
+  async function loadMe() {
+    try {
+      const res = await fetch('/api/me');
+      if (!res.ok) return;
+      const me = await res.json();
+      if (me.role === 'admin') {
+        setNavUser({ role: 'admin' });
+      } else {
+        setNavUser({ role: me.isEmployee ? 'employee' : 'seller', isEmployee: me.isEmployee, isCashier: me.isCashier });
+      }
+    } catch { /* ignore – keep admin default */ }
+  }
 
   async function loadBasar() {
     setLoading(true);
@@ -114,41 +131,21 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
 
   if (loading) return (
     <div className="min-h-screen bg-gray-50">
-      <Header links={[
-        { href: '/admin', label: 'Basarliste' },
-        { href: '/admin/basars', label: 'Basare', active: true },
-        { href: '/admin/list', label: 'Helferliste' },
-        { href: '/admin/tasks', label: 'Aufgaben' },
-        { href: '/', label: 'Logout' },
-      ]} />
+      <Header links={getNavLinks(navUser, 'basare')} />
       <div className="text-center py-20 text-gray-500">Laden…</div>
     </div>
   );
 
   if (!basar) return (
     <div className="min-h-screen bg-gray-50">
-      <Header links={[
-        { href: '/admin', label: 'Basarliste' },
-        { href: '/admin/basars', label: 'Basare', active: true },
-        { href: '/admin/list', label: 'Helferliste' },
-        { href: '/admin/tasks', label: 'Aufgaben' },
-        { href: '/', label: 'Logout' },
-      ]} />
+      <Header links={getNavLinks(navUser, 'basare')} />
       <div className="text-center py-20 text-red-500">Basar nicht gefunden</div>
     </div>
   );
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header
-        links={[
-          { href: '/admin', label: 'Basarliste' },
-          { href: '/admin/basars', label: 'Basare', active: true },
-          { href: '/admin/list', label: 'Helferliste' },
-          { href: '/admin/tasks', label: 'Aufgaben' },
-          { href: '/', label: 'Logout' },
-        ]}
-      />
+      <Header links={getNavLinks(navUser, 'basare')} />
       <div className="max-w-5xl mx-auto p-6">
         {message && (
           <div className={`mb-4 px-4 py-3 rounded-lg font-medium ${message.includes('Fehler') || message.includes('error') ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
@@ -171,13 +168,13 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
             </p>
           </div>
           <div className="flex gap-2 flex-shrink-0">
-            {!editMode && basar.status !== 'CLOSED' && (
+            {navUser.role === 'admin' && !editMode && basar.status !== 'CLOSED' && (
               <button onClick={() => setEditMode(true)}
                 className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm rounded-lg transition-colors">
                 Bearbeiten
               </button>
             )}
-            {NEXT_STATUS_LABEL[basar.status] && (
+            {navUser.role === 'admin' && NEXT_STATUS_LABEL[basar.status] && (
               <button onClick={handleAdvanceStatus}
                 className="px-3 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-gray-900 text-sm font-medium rounded-lg transition-colors">
                 {NEXT_STATUS_LABEL[basar.status]}
@@ -187,7 +184,7 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
         </div>
 
         {/* Edit form */}
-        {editMode && (
+        {editMode && navUser.role === 'admin' && (
           <div className="bg-white rounded-xl shadow-md p-6 mb-6">
             <form onSubmit={handleSave} className="grid md:grid-cols-2 gap-4">
               <BasarFormFields form={form} setForm={setForm} economicsLocked={basar.status === 'ACTIVE'} />
@@ -201,9 +198,10 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
           </div>
         )}
 
-        {/* Tabs */}
+        {/* Tabs – "Verkäufer" nur für Admins: GET /api/basars/[id] liefert die Verkäuferliste
+            (Namen, E-Mails) nur an role==='admin', für alle anderen wäre der Tab immer leer. */}
         <div className="flex gap-1 mb-4 bg-gray-100 rounded-xl p-1 w-fit">
-          {(['overview', 'sellers'] as const).map(t => (
+          {(navUser.role === 'admin' ? (['overview', 'sellers'] as const) : (['overview'] as const)).map(t => (
             <button key={t} onClick={() => setTab(t)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
               {t === 'overview' ? 'Übersicht' : `Verkäufer (${basar._count?.basarSellers ?? 0})`}
@@ -226,7 +224,7 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
           </div>
         )}
 
-        {tab === 'sellers' && (
+        {tab === 'sellers' && navUser.role === 'admin' && (
           <div>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Suche nach Name, E-Mail oder Nummer…"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-yellow-500" />

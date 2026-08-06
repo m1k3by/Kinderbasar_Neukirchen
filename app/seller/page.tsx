@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '../components/Header';
+import { getNavLinks } from '../lib/navLinks';
 
 interface Basar {
   id: string;
@@ -22,6 +23,8 @@ export default function SellerPage() {
   const router = useRouter();
   const [sellerId, setSellerId] = useState('');
   const [sellerName, setSellerName] = useState('');
+  const [isEmployee, setIsEmployee] = useState(false);
+  const [isCashier, setIsCashier] = useState(false);
   const [loading, setLoading] = useState(true);
   const [basars, setBasars] = useState<Basar[]>([]);
   const [togglingBasarId, setTogglingBasarId] = useState<string | null>(null);
@@ -63,6 +66,8 @@ export default function SellerPage() {
         const me = await meRes.json();
         if (me.role !== 'admin') {
           setSellerName(`${me.firstName} ${me.lastName}`);
+          setIsEmployee(me.isEmployee || false);
+          setIsCashier(me.isCashier || false);
         }
       }
       if (basarsRes.ok) {
@@ -165,12 +170,8 @@ export default function SellerPage() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <Header 
-        links={[
-          { href: '/seller', label: 'Verkäuferbereich', active: true },
-          { href: '/seller/basars', label: 'Basare' },
-          { href: '/', label: 'Logout' },
-        ]} 
+      <Header
+        links={getNavLinks({ role: isEmployee ? 'employee' : 'seller', isEmployee, isCashier }, 'verkaeufer')}
         sellerInfo={{ name: sellerName, sellerId: parseInt(sellerId, 10) }}
       />
 

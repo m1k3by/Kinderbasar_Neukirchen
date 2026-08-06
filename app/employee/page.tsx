@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '../components/Header';
 import { dateForWeekday } from '../lib/basarWindows';
+import { getNavLinks } from '../lib/navLinks';
 
 interface Task {
   id: string;
@@ -466,15 +467,19 @@ export default function EmployeePage() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <Header 
-        links={[
-          { href: '/employee', label: 'Mitarbeiterbereich', active: true },
-          { href: '/seller/basars', label: 'Basare' },
-          ...(isCashier && activeBasars.length > 0
-            ? activeBasars.map(b => ({ href: `/admin/basars/${b.id}/kasse`, label: 'Kasse' }))
-            : isCashier ? [{ href: '/admin/basars', label: 'Kasse' }] : []),
-          { href: '/', label: 'Logout' },
-        ]}
+      <Header
+        links={getNavLinks(
+          { role: 'employee', isEmployee: true, isCashier },
+          'mitarbeiter',
+          {
+            // getNavLinks only supports a single "Kasse" link. Bei genau einem aktiven
+            // Basar verlinken wir direkt auf dessen Kasse (bisheriger Komfort-Shortcut).
+            // Bei 0 oder mehreren aktiven Basaren verlinken wir stattdessen auf die
+            // allgemeine Basar-Auswahl (/admin/basars), statt willkürlich den ersten
+            // von mehreren aktiven Basaren zu bevorzugen.
+            kasseHref: activeBasars.length === 1 ? `/admin/basars/${activeBasars[0].id}/kasse` : '/admin/basars',
+          }
+        )}
         sellerInfo={sellerName && sellerNumber ? { name: sellerName, sellerId: sellerNumber } : null}
       />
 

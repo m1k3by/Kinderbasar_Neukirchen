@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Header from '../../components/Header';
+import { getNavLinks } from '../../lib/navLinks';
 
 interface Task {
   id: string;
@@ -204,14 +205,8 @@ export default function TasksManagementPage() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <Header 
-        links={[
-          { href: '/admin', label: 'Basarliste' },
-          { href: '/admin/basars', label: 'Basare' },
-          { href: '/admin/list', label: 'Helferliste' },
-          { href: '/admin/tasks', label: 'Aufgaben', active: true },
-          { href: '/', label: 'Logout' },
-        ]}
+      <Header
+        links={getNavLinks({ role: 'admin' }, 'aufgaben')}
       />
 
       {/* Main Content */}

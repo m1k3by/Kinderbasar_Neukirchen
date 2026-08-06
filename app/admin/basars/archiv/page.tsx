@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Header from '../../../components/Header';
+import { getNavLinks, type NavUser } from '../../../lib/navLinks';
 
 interface Basar {
   id: string;
@@ -22,8 +23,24 @@ export default function BasarArchivPage() {
   const [basars, setBasars] = useState<Basar[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
+  // Default to admin nav until /api/me resolves – see app/admin/basars/page.tsx for why
+  // this matters (cashiers can also reach /admin/basars/**).
+  const [navUser, setNavUser] = useState<NavUser>({ role: 'admin' });
 
-  useEffect(() => { loadArchive(); }, []);
+  useEffect(() => { loadArchive(); loadMe(); }, []);
+
+  async function loadMe() {
+    try {
+      const res = await fetch('/api/me');
+      if (!res.ok) return;
+      const me = await res.json();
+      if (me.role === 'admin') {
+        setNavUser({ role: 'admin' });
+      } else {
+        setNavUser({ role: me.isEmployee ? 'employee' : 'seller', isEmployee: me.isEmployee, isCashier: me.isCashier });
+      }
+    } catch { /* ignore – keep admin default */ }
+  }
 
   async function loadArchive() {
     setLoading(true);
@@ -57,16 +74,7 @@ export default function BasarArchivPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header
-        links={[
-          { href: '/admin', label: 'Basarliste' },
-          { href: '/admin/basars', label: 'Basare' },
-          { href: '/admin/basars/archiv', label: 'Archiv', active: true },
-          { href: '/admin/list', label: 'Helferliste' },
-          { href: '/admin/tasks', label: 'Aufgaben' },
-          { href: '/', label: 'Logout' },
-        ]}
-      />
+      <Header links={getNavLinks(navUser, 'archiv')} />
       <div className="max-w-5xl mx-auto p-6">
         <div className="flex items-center justify-between mb-6">
           <div>

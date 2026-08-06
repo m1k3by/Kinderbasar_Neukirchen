@@ -3,6 +3,7 @@
 import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import Header from '../../../../components/Header';
+import { getNavLinks, type NavUser } from '../../../../lib/navLinks';
 
 interface Settlement {
   id: string;
@@ -34,8 +35,24 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [message, setMessage] = useState('');
+  // Default to admin nav until /api/me resolves – see app/admin/basars/page.tsx for why
+  // this matters (cashiers can also reach /admin/basars/**).
+  const [navUser, setNavUser] = useState<NavUser>({ role: 'admin' });
 
-  useEffect(() => { loadData(); }, [basarId]);
+  useEffect(() => { loadData(); loadMe(); }, [basarId]);
+
+  async function loadMe() {
+    try {
+      const res = await fetch('/api/me');
+      if (!res.ok) return;
+      const me = await res.json();
+      if (me.role === 'admin') {
+        setNavUser({ role: 'admin' });
+      } else {
+        setNavUser({ role: me.isEmployee ? 'employee' : 'seller', isEmployee: me.isEmployee, isCashier: me.isCashier });
+      }
+    } catch { /* ignore – keep admin default */ }
+  }
 
   async function loadData() {
     setLoading(true);
@@ -115,33 +132,21 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
 
   if (loading) return (
     <div className="min-h-screen bg-gray-50">
-      <Header links={[
-        { href: '/admin', label: 'Basarliste' },
-        { href: '/admin/basars', label: 'Basare', active: true },
-        { href: '/admin/list', label: 'Helferliste' },
-        { href: '/admin/tasks', label: 'Aufgaben' },
-        { href: '/', label: 'Logout' },
-      ]} />
+      <Header links={getNavLinks(navUser, 'basare')} />
       <div className="text-center py-20 text-gray-500">Laden…</div>
     </div>
   );
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header links={[
-        { href: '/admin', label: 'Basarliste' },
-        { href: '/admin/basars', label: 'Basare', active: true },
-        { href: '/admin/list', label: 'Helferliste' },
-        { href: '/admin/tasks', label: 'Aufgaben' },
-        { href: '/', label: 'Logout' },
-      ]} />
+      <Header links={getNavLinks(navUser, 'basare')} />
       <div className="max-w-5xl mx-auto p-6">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Abrechnung</h1>
             {basar && <p className="text-gray-500">{basar.title}</p>}
           </div>
-          {basar?.status === 'CLOSED' && (
+          {navUser.role === 'admin' && basar?.status === 'CLOSED' && (
             <button onClick={handleGenerate} disabled={generating}
               className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold rounded-lg transition-colors disabled:opacity-50">
               {generating ? 'Erstelle…' : settlements.length > 0 ? '↻ Neu berechnen' : 'Abrechnung erstellen'}
@@ -223,7 +228,9 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
 
         {settlements.length === 0 && basar?.status === 'CLOSED' && (
           <div className="text-center py-12 text-gray-400">
-            Noch keine Abrechnung generiert. Klicke auf „Abrechnung erstellen".
+            {navUser.role === 'admin'
+              ? 'Noch keine Abrechnung generiert. Klicke auf „Abrechnung erstellen".'
+              : 'Noch keine Abrechnung generiert.'}
           </div>
         )}
       </div>

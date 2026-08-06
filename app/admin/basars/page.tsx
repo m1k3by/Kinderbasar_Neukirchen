@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Header from '../../components/Header';
+import { getNavLinks, type NavUser } from '../../lib/navLinks';
 import BasarFormFields, { EMPTY_BASAR_FORM, type BasarFormState } from './BasarFormFields';
 
 interface Basar {
@@ -40,8 +41,25 @@ export default function AdminBasarsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [form, setForm] = useState<BasarFormState>(EMPTY_BASAR_FORM);
+  // Default to admin nav until /api/me resolves – this page is admin-focused, but
+  // /admin/basars/** is also reachable by cashiers (see middleware.ts), so a cashier's
+  // nav must be corrected as soon as we know who's asking.
+  const [navUser, setNavUser] = useState<NavUser>({ role: 'admin' });
 
-  useEffect(() => { loadBasars(); }, []);
+  useEffect(() => { loadBasars(); loadMe(); }, []);
+
+  async function loadMe() {
+    try {
+      const res = await fetch('/api/me');
+      if (!res.ok) return;
+      const me = await res.json();
+      if (me.role === 'admin') {
+        setNavUser({ role: 'admin' });
+      } else {
+        setNavUser({ role: me.isEmployee ? 'employee' : 'seller', isEmployee: me.isEmployee, isCashier: me.isCashier });
+      }
+    } catch { /* ignore – keep admin default */ }
+  }
 
   async function loadBasars() {
     setLoading(true);
@@ -114,25 +132,18 @@ export default function AdminBasarsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header
-        links={[
-          { href: '/admin', label: 'Basarliste' },
-          { href: '/admin/basars', label: 'Basare', active: true },
-          { href: '/admin/basars/archiv', label: 'Archiv' },
-          { href: '/admin/list', label: 'Helferliste' },
-          { href: '/admin/tasks', label: 'Aufgaben' },
-          { href: '/', label: 'Logout' },
-        ]}
-      />
+      <Header links={getNavLinks(navUser, 'basare')} />
       <div className="max-w-5xl mx-auto p-6">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold text-gray-800">Basare verwalten</h1>
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold rounded-lg transition-colors"
-          >
-            {showForm ? 'Abbrechen' : '+ Neuer Basar'}
-          </button>
+          {navUser.role === 'admin' && (
+            <button
+              onClick={() => setShowForm(!showForm)}
+              className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold rounded-lg transition-colors"
+            >
+              {showForm ? 'Abbrechen' : '+ Neuer Basar'}
+            </button>
+          )}
         </div>
 
         {message && (
@@ -141,7 +152,7 @@ export default function AdminBasarsPage() {
           </div>
         )}
 
-        {showForm && (
+        {showForm && navUser.role === 'admin' && (
           <div className="bg-white rounded-xl shadow-md p-6 mb-6">
             <h2 className="text-xl font-bold mb-4">Neuer Basar</h2>
             <form onSubmit={handleCreate} className="grid md:grid-cols-2 gap-4">
@@ -197,13 +208,13 @@ export default function AdminBasarsPage() {
                         Abrechnung
                       </Link>
                     )}
-                    {NEXT_STATUS_LABEL[basar.status] && (
+                    {navUser.role === 'admin' && NEXT_STATUS_LABEL[basar.status] && (
                       <button onClick={() => handleAdvanceStatus(basar)}
                         className="px-3 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-gray-900 text-sm font-medium rounded-lg transition-colors">
                         {NEXT_STATUS_LABEL[basar.status]}
                       </button>
                     )}
-                    {basar.status === 'CLOSED' && (
+                    {navUser.role === 'admin' && basar.status === 'CLOSED' && (
                       <button onClick={() => handleArchive(basar)}
                         className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-600 text-sm font-medium rounded-lg transition-colors">
                         Archivieren

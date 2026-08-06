@@ -4,6 +4,7 @@ import { useState, useEffect, use, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '../../../components/Header';
 import { parseSizes } from '../../../lib/sizes';
+import { getNavLinks } from '../../../lib/navLinks';
 
 interface Article {
   id: string;
@@ -73,6 +74,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   const [showArchive, setShowArchive] = useState(false);
   const [selectedArchiveIds, setSelectedArchiveIds] = useState<Set<string>>(new Set());
   const [isEmployee, setIsEmployee] = useState(false);
+  const [isCashier, setIsCashier] = useState(false);
   const [allowedSizes, setAllowedSizes] = useState<string[]>([]);
   const [sizeError, setSizeError] = useState('');
   const [showSizeTooltip, setShowSizeTooltip] = useState(false);
@@ -120,6 +122,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
         if (me.role !== 'admin') {
           setSellerName(`${me.firstName} ${me.lastName}`);
           setIsEmployee(me.isEmployee || false);
+          setIsCashier(me.isCashier || false);
           // Load archive for OPEN basars where user is an active participant
           if (isActiveParticipant && basarData?.status === 'OPEN') {
             const archRes = await fetch(`/api/seller-articles?basarId=${basarId}`);
@@ -504,24 +507,14 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
 
   if (loading) return (
     <div className="min-h-screen bg-gray-50">
-      <Header links={[
-        ...(isEmployee ? [{ href: '/employee', label: 'Mitarbeiterbereich' }] : []),
-        { href: '/seller', label: 'Verkäuferbereich' },
-        { href: '/seller/basars', label: 'Basare', active: true },
-        { href: '/', label: 'Logout' },
-      ]} />
+      <Header links={getNavLinks({ role: isEmployee ? 'employee' : 'seller', isEmployee, isCashier }, 'basare')} />
       <div className="text-center py-20 text-gray-500">Laden…</div>
     </div>
   );
 
   if (!basar) return (
     <div className="min-h-screen bg-gray-50">
-      <Header links={[
-        ...(isEmployee ? [{ href: '/employee', label: 'Mitarbeiterbereich' }] : []),
-        { href: '/seller', label: 'Verkäuferbereich' },
-        { href: '/seller/basars', label: 'Basare', active: true },
-        { href: '/', label: 'Logout' },
-      ]} />
+      <Header links={getNavLinks({ role: isEmployee ? 'employee' : 'seller', isEmployee, isCashier }, 'basare')} />
       <div className="text-center py-20 text-red-500">Basar nicht gefunden</div>
     </div>
   );
@@ -536,12 +529,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   return (
     <div className="min-h-screen bg-gray-50">
       <Header
-        links={[
-          ...(isEmployee ? [{ href: '/employee', label: 'Mitarbeiterbereich' }] : []),
-          { href: '/seller', label: 'Verkäuferbereich' },
-          { href: '/seller/basars', label: 'Basare', active: true },
-          { href: '/', label: 'Logout' },
-        ]}
+        links={getNavLinks({ role: isEmployee ? 'employee' : 'seller', isEmployee, isCashier }, 'basare')}
         sellerInfo={sellerName && sellerId ? { name: sellerName, sellerId } : null}
       />
       <div className="max-w-3xl mx-auto p-4 md:p-6">

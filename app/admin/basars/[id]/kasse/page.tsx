@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef, use, useCallback } from 'react';
+import Header from '../../../../components/Header';
+import { getNavLinks, type NavUser } from '../../../../lib/navLinks';
 
 interface ScannedArticle {
   id: string;
@@ -52,6 +54,21 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
   const [scanFlash, setScanFlash] = useState<'success' | 'error' | null>(null);
   const [scanLastTitle, setScanLastTitle] = useState('');
   const [scanFlashMessage, setScanFlashMessage] = useState('');
+  // Default to admin nav until /api/me resolves – this page is reachable by both admins
+  // and cashiers (see middleware.ts), so the nav must be corrected as soon as we know
+  // who's asking, to avoid showing a cashier links the middleware would immediately block.
+  const [navUser, setNavUser] = useState<NavUser>({ role: 'admin' });
+
+  useEffect(() => {
+    fetch('/api/me').then(res => res.ok ? res.json() : null).then(me => {
+      if (!me) return;
+      if (me.role === 'admin') {
+        setNavUser({ role: 'admin' });
+      } else {
+        setNavUser({ role: me.isEmployee ? 'employee' : 'seller', isEmployee: me.isEmployee, isCashier: me.isCashier });
+      }
+    }).catch(() => { /* ignore – keep admin default */ });
+  }, []);
 
   function showErrorFlash(msg: string, durationMs = 1200) {
     setScanFlashMessage(msg);
@@ -453,6 +470,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <Header links={getNavLinks(navUser, 'kasse')} />
       {/* Status bar */}
       <div className={`text-center text-xs py-1 font-medium ${isOnline ? 'bg-green-500 text-white' : 'bg-orange-500 text-white'}`}>
         {isOnline

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Header from '../../components/Header';
+import { getNavLinks } from '../../lib/navLinks';
 
 interface Seller {
   sellerId: number;
@@ -482,14 +483,8 @@ export default function AdminListPage() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <Header 
-        links={[
-          { href: '/admin', label: 'Basarliste' },
-          { href: '/admin/basars', label: 'Basare' },
-          { href: '/admin/list', label: 'Helferliste', active: true },
-          { href: '/admin/tasks', label: 'Aufgaben' },
-          { href: '/', label: 'Logout' },
-        ]}
+      <Header
+        links={getNavLinks({ role: 'admin' }, 'helferliste')}
       />
 
       <div className="max-w-7xl mx-auto p-8">
