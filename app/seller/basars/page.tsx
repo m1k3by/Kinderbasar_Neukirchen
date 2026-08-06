@@ -15,6 +15,7 @@ interface Basar {
   entryFee: number;
   status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
   _count?: { basarSellers: number };
+  myParticipation: { isActive: boolean; activatedAt: string | null } | null;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -45,9 +46,9 @@ export default function SellerBasarsPage() {
   async function loadData() {
     setLoading(true);
     try {
-      const [basarsRes, sellersRes] = await Promise.all([
+      const [basarsRes, meRes] = await Promise.all([
         fetch('/api/basars'),
-        fetch('/api/sellers'),
+        fetch('/api/me'),
       ]);
       if (basarsRes.ok) {
         const data = await basarsRes.json();
@@ -62,14 +63,12 @@ export default function SellerBasarsPage() {
         setBasars(relevant);
         setClosedBasars(closed);
       }
-      if (sellersRes.ok) {
-        const sellers = await sellersRes.json();
-        const cookies = document.cookie.split(';');
-        const sellerIdCookie = cookies.find(c => c.trim().startsWith('sellerId='));
-        if (sellerIdCookie) {
-          const id = parseInt(sellerIdCookie.split('=')[1], 10);
-          const me = sellers.find((s: any) => s.sellerId === id);
-          if (me) { setSellerName(`${me.firstName} ${me.lastName}`); setSellerNumber(me.sellerId); setIsEmployee(me.isEmployee || false); }
+      if (meRes.ok) {
+        const me = await meRes.json();
+        if (me.role !== 'admin') {
+          setSellerName(`${me.firstName} ${me.lastName}`);
+          setSellerNumber(me.sellerId);
+          setIsEmployee(me.isEmployee || false);
         }
       }
     } finally {
@@ -117,6 +116,12 @@ export default function SellerBasarsPage() {
                           Max. {basar.maxArticlesPerSeller} Artikel · {Number(basar.commissionPercent).toFixed(0)}% Provision
                           {Number(basar.entryFee) > 0 && ` · ${Number(basar.entryFee).toFixed(2)} € Gebühr`}
                         </p>
+                        {!basar.myParticipation?.isActive && basar.status === 'OPEN' && (
+                          <p className="text-sm text-amber-700 mt-1">
+                            Du bist für diesen Basar noch nicht angemeldet.{' '}
+                            <Link href="/seller" className="underline font-medium">Jetzt teilnehmen</Link>
+                          </p>
+                        )}
                       </div>
                       <Link
                         href={`/seller/basars/${basar.id}`}

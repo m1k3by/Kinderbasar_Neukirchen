@@ -13,6 +13,7 @@ interface ScannedArticle {
   qrCode: string;
   basarId: string;
   saleId?: string; // set after successful kassieren
+  status?: 'AVAILABLE' | 'SOLD' | 'RETURNED'; // as of last cache refresh – only set on cached (offline-lookup) entries
 }
 
 interface PendingTransaction {
@@ -168,10 +169,19 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
     } catch { /* ignore */ }
   }
 
-  // Fetch all articles for this basar and persist them in IndexedDB for offline use
+  // Fetch all articles for this basar and persist them in IndexedDB for offline use.
+  // Uses the minimal scan-cache projection (same shape for admin and cashier callers – see
+  // app/api/basars/[id]/scan-cache/route.ts) and sends the last stored ETag so a 304 short-
+  // circuits the download when nothing changed. handleOnline fires on every WiFi flap, so
+  // avoiding a repeated multi-MB re-fetch here matters.
   async function cacheBasarArticles() {
     try {
-      const res = await fetch(`/api/basars/${basarId}/articles`);
+      const { get, set } = await import('idb-keyval');
+      const storedEtag = await get<string>(`basar-articles-etag-${basarId}`);
+      const res = await fetch(`/api/basars/${basarId}/scan-cache`, {
+        headers: storedEtag ? { 'If-None-Match': storedEtag } : {},
+      });
+      if (res.status === 304) return; // cache already up to date – keep existing IndexedDB contents
       if (!res.ok) return;
       const data = await res.json();
       const articles: Array<Omit<ScannedArticle, 'salePrice'>> = (data.articles ?? []).map((a: any) => ({
@@ -179,13 +189,15 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
         title: a.title,
         sizeLabel: a.sizeLabel ?? undefined,
         price: Number(a.price),
-        sellerId: a.basarSeller?.seller?.sellerId ?? 0,
-        sellerName: `${a.basarSeller?.seller?.firstName ?? ''} ${a.basarSeller?.seller?.lastName ?? ''}`.trim(),
+        sellerId: a.sellerId ?? 0,
+        sellerName: a.sellerName ?? '',
         qrCode: a.qrCode,
         basarId,
+        status: a.status,
       }));
-      const { set } = await import('idb-keyval');
       await set(`basar-articles-${basarId}`, articles);
+      const newEtag = res.headers.get('etag');
+      if (newEtag) await set(`basar-articles-etag-${basarId}`, newEtag);
       articleCacheRef.current = new Map(articles.map(a => [a.qrCode, a]));
     } catch { /* ignore */ }
   }
@@ -301,7 +313,13 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
     } catch {
       // When offline: try the local article cache first
       const cached = articleCacheRef.current.get(qrCode);
-      if (cached) {
+      if (cached && cached.status === 'SOLD') {
+        // Cache says this article was already sold as of the last sync – don't let it be
+        // scanned into the cart again (it would just get rejected once synced anyway).
+        scannedCodesRef.current.delete(qrCode);
+        showErrorFlash('Bereits verkauft (laut Cache)');
+        return 1000;
+      } else if (cached) {
         setCart(prev => [...prev, { ...cached, salePrice: cached.price }]);
         scanTimestampsRef.current.set(qrCode, Date.now());
         setScanLastTitle(cached.title + ' (offline)');

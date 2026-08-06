@@ -1,11 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Header from '../components/Header';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -30,14 +28,12 @@ export default function LoginPage() {
         throw new Error(data.error || 'Ein Fehler ist aufgetreten');
       }
 
-      // Redirect based on role
-      if (data.role === 'admin') {
-        router.push('/admin');
-      } else if (data.role === 'seller') {
-        router.push('/seller');
-      } else {
-        router.push('/employee');
-      }
+      // Full page load, not router.push: the auth cookie is set by the API response, but a
+      // client-side navigation reuses the already-rendered root layout, which read "no cookie"
+      // on /login. That layout decides whether the help assistant renders at all.
+      const target =
+        data.role === 'admin' ? '/admin' : data.role === 'seller' ? '/seller' : '/employee';
+      window.location.href = target;
     } catch (err: any) {
       setError(err.message);
     }

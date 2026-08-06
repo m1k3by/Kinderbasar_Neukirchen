@@ -8,13 +8,22 @@ export async function GET(request: Request) {
     if (authResult.response) return authResult.response;
     const { auth } = authResult;
 
+    // Trimmed projection: only the fields the client pages actually read (employee/admin
+    // Helferliste views use signups[].sellerId + signups[].seller.{firstName,lastName,email}).
+    // _count.signups was previously sent alongside the full signups array but never read by
+    // any consumer, so it's dropped here.
     const tasks = await prisma.task.findMany({
-      include: {
-        _count: {
-          select: { signups: true },
-        },
+      select: {
+        id: true,
+        title: true,
+        day: true,
+        timeFrom: true,
+        timeTo: true,
+        capacity: true,
+        createdAt: true,
         signups: {
-          include: {
+          select: {
+            sellerId: true,
             seller: {
               select: {
                 firstName: true,

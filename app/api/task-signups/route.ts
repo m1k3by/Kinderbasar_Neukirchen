@@ -56,12 +56,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Hole die Aufgabe, für die sich der User anmelden will
+    // Hole die Aufgabe, für die sich der User anmelden will (capacity is re-counted fresh
+    // inside the transaction below, so the full signups list isn't needed here)
     const targetTask = await prisma.task.findUnique({
       where: { id: taskId },
-      include: {
-        signups: true,
-      },
     });
 
     if (!targetTask) {
@@ -102,18 +100,27 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Prüfen ob noch Platz ist
-    if (targetTask.signups.length >= targetTask.capacity) {
+    // Prüfen ob noch Platz ist + Anmelden – in einer Transaktion, damit die Kapazität nicht
+    // durch parallele Anfragen überbucht werden kann (z. B. wenn die Helferliste öffnet und
+    // alle gleichzeitig klicken). Der Count wird in der Transaktion neu ausgeführt statt den
+    // oben geladenen targetTask.signups zu verwenden, der zwischen Laden und Schreiben schon
+    // veraltet sein könnte.
+    const signup = await prisma.$transaction(async (tx) => {
+      const currentCount = await tx.taskSignup.count({ where: { taskId } });
+      if (currentCount >= targetTask.capacity) {
+        return null; // signals "full" to the caller
+      }
+      return tx.taskSignup.create({
+        data: {
+          taskId,
+          sellerId: sellerIdInt,
+        },
+      });
+    });
+
+    if (!signup) {
       return NextResponse.json({ error: 'Keine Plätze mehr verfügbar' }, { status: 400 });
     }
-
-    // Anmelden
-    const signup = await prisma.taskSignup.create({
-      data: {
-        taskId,
-        sellerId: sellerIdInt,
-      },
-    });
 
     return NextResponse.json({ success: true, signup });
   } catch (error) {

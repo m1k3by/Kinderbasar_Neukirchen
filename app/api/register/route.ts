@@ -1,14 +1,32 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '../../lib/prisma';
 import { generateQR, generateBarcode } from '../../lib/qr';
-import { sendMail } from '../../lib/mail';
-import { parseAsGermanTime } from '../../lib/time';
+import { isRegistrationOpen } from '../../lib/basarWindows';
 import path from 'path';
 import fs from 'fs';
 import { rateLimit } from '../../lib/rateLimit';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { getAuth } from '../../lib/apiAuth';
+
+// Allocates the next sellerId atomically (range 1000-9999). A single UPDATE...RETURNING
+// statement, serialized by Postgres at the row level, so two concurrent registrations always
+// get different ids. Replaces the old approach of loading every existing sellerId and
+// scanning for the first free slot, which was O(n) per request (repeated on every retry) and
+// still raced under parallel load – two requests could compute the same "free" id and one
+// would lose to a P2002 on create. Returns null once the range is exhausted (nextId > 9999).
+async function allocateSellerId(): Promise<number | null> {
+  const rows = await prisma.$transaction(async (tx) => {
+    return tx.$queryRaw<{ allocated: number }[]>`
+      UPDATE "SellerIdCounter"
+      SET "nextId" = "nextId" + 1
+      WHERE "id" = 'default' AND "nextId" <= 9999
+      RETURNING "nextId" - 1 AS "allocated"
+    `;
+  });
+  if (!rows || rows.length === 0) return null;
+  return rows[0].allocated;
+}
 
 export async function POST(request: NextRequest) {
   const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
@@ -17,7 +35,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { email: emailInput, firstName, lastName, isEmployee: isEmployeeInput } = body;
+    const { email: emailInput, firstName, lastName, isEmployee: isEmployeeInput, basarId } = body;
     email = emailInput;
     // Strict boolean coercion – nothing else in the body may influence privileges
     // (isCashier in particular is never settable through registration).
@@ -40,12 +58,20 @@ export async function POST(request: NextRequest) {
     const auth = await getAuth();
     const isAdmin = auth?.role === 'admin';
 
-    // Rate limiting: 5 registration attempts per 15 minutes per IP (skip for admin)
+    // Rate limiting: per-email (the identity that actually matters for abuse) rather than
+    // per-IP – at a bazaar hall or in a family, everyone shares one NAT IP, so a strict
+    // per-IP limit locks out legitimate co-located users. A much higher per-IP limit is kept
+    // as a coarse guard against a single source hammering the endpoint. Skipped for admin.
     if (!isAdmin) {
-      const rateLimitKey = `register:${ip}`;
-      
-      if (!rateLimit(rateLimitKey, { maxRequests: 5, windowMs: 15 * 60 * 1000 })) {
-        console.log('[REGISTER] Rate limit exceeded:', { email: email?.substring(0, 3) + '***', ip });
+      const emailKey = `register:email:${email}`;
+      const ipKey = `register:ip:${ip}`;
+      const [emailAllowed, ipAllowed] = await Promise.all([
+        rateLimit(emailKey, { maxRequests: 5, windowMs: 15 * 60 * 1000 }),
+        rateLimit(ipKey, { maxRequests: 50, windowMs: 15 * 60 * 1000 }),
+      ]);
+
+      if (!emailAllowed || !ipAllowed) {
+        console.log('[REGISTER] Rate limit exceeded:', { email: email?.substring(0, 3) + '***', ip, emailAllowed, ipAllowed });
         return NextResponse.json(
           { error: 'Zu viele Registrierungsversuche. Bitte versuchen Sie es später erneut.' },
           { status: 429 }
@@ -53,52 +79,62 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Check registration periods (skip for admin)
-    const settings = await prisma.settings.findMany();
-    const settingsObj: Record<string, string> = {};
-    settings.forEach(s => {
-      settingsObj[s.key] = s.value;
-    });
+    // Registrierung ist an einen Basar gebunden – ein Konto entsteht, aber die
+    // Teilnahme (BasarSeller) gehört zu genau diesem Basar. Admins dürfen weiterhin
+    // ein reines Konto ohne Basarbezug anlegen (z.B. Helferlisten-Verwaltung).
+    if (!isAdmin && !basarId) {
+      return NextResponse.json({ error: 'Basar ist ein Pflichtfeld' }, { status: 400 });
+    }
+
+    const basar = basarId
+      ? await prisma.basar.findUnique({ where: { id: basarId } })
+      : null;
+
+    if (basarId && !basar) {
+      return NextResponse.json({ error: 'Basar nicht gefunden' }, { status: 404 });
+    }
 
     const now = new Date();
 
-    // Check if registration period is open for the given type (skip for admin)
-    if (!isAdmin) {
-      if (isEmployee) {
-        if (settingsObj.registration_employee_start && settingsObj.registration_employee_end) {
-          const start = parseAsGermanTime(settingsObj.registration_employee_start);
-          const end = parseAsGermanTime(settingsObj.registration_employee_end);
-          
-          if (now < start || now > end) {
-            console.log('[REGISTER] Failed: Employee registration period closed', { 
-              now: now.toISOString(),
-              start: start.toISOString(),
-              end: end.toISOString(),
-              ip 
-            });
-            return NextResponse.json(
-              { error: 'Die Mitarbeiter-Registrierung ist derzeit geschlossen.' },
-              { status: 403 }
-            );
-          }
-        }
-      } else {
-        if (settingsObj.registration_seller_start && settingsObj.registration_seller_end) {
-          const start = parseAsGermanTime(settingsObj.registration_seller_start);
-          const end = parseAsGermanTime(settingsObj.registration_seller_end);
-          
-          if (now < start || now > end) {
-            console.log('[REGISTER] Failed: Seller registration period closed', { 
-              now: now.toISOString(),
-              start: start.toISOString(),
-              end: end.toISOString(),
-              ip 
-            });
-            return NextResponse.json(
-              { error: 'Die Verkäufer-Registrierung ist derzeit geschlossen.' },
-              { status: 403 }
-            );
-          }
+    if (!isAdmin && basar) {
+      if (basar.isArchived || basar.status === 'CLOSED' || basar.status === 'DRAFT') {
+        return NextResponse.json(
+          { error: 'Für diesen Basar ist derzeit keine Registrierung möglich.' },
+          { status: 403 }
+        );
+      }
+
+      if (!isRegistrationOpen(basar, isEmployee, now)) {
+        console.log('[REGISTER] Failed: Registration period closed', {
+          basarId: basar.id,
+          isEmployee,
+          now: now.toISOString(),
+          ip,
+        });
+        return NextResponse.json(
+          {
+            error: isEmployee
+              ? 'Die Mitarbeiter-Registrierung ist derzeit geschlossen.'
+              : 'Die Verkäufer-Registrierung ist derzeit geschlossen.',
+          },
+          { status: 403 }
+        );
+      }
+
+      // Kapazität nur für Verkäufer geprüft – Mitarbeiter zählen nicht gegen
+      // maxSellers, analog zur bisherigen globalen Zählung.
+      if (!isEmployee) {
+        const activeSellers = await prisma.basarSeller.count({
+          where: { basarId: basar.id, isActive: true, seller: { isEmployee: false } },
+        });
+        if (activeSellers >= basar.maxSellers) {
+          console.log('[REGISTER] Failed: Basar capacity reached', {
+            basarId: basar.id, activeSellers, maxSellers: basar.maxSellers, ip,
+          });
+          return NextResponse.json(
+            { error: `Die maximale Anzahl von ${basar.maxSellers} Verkäufern für diesen Basar ist bereits erreicht.` },
+            { status: 400 }
+          );
         }
       }
     }
@@ -151,39 +187,17 @@ export async function POST(request: NextRequest) {
     const tempPassword = crypto.randomBytes(9).toString('base64url').slice(0, 12);
     const password = await bcrypt.hash(tempPassword, 10);
 
-    // First, try 10er numbers (ending in 0): 1010, 1020, 1030, ..., 9990
-    // Then fill in ones place: 1011, 1021, 1031, etc.
-    // Priority order: first all ending in 0, then 1, then 2, etc.
-    function computeNextSellerId(existingIds: Set<number>): number | null {
-      for (let lastDigit = 0; lastDigit <= 9; lastDigit++) {
-        for (let base = 100; base <= 999; base++) {
-          const id = base * 10 + lastDigit;
-          if (id >= 1000 && id <= 9999 && !existingIds.has(id)) {
-            return id;
-          }
-        }
-      }
-      return null;
-    }
-
     let seller: Awaited<ReturnType<typeof prisma.seller.create>> | undefined;
     let sellerId: number | null = null;
     const MAX_ATTEMPTS = 3;
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      // Get all existing seller IDs in this range (re-read each attempt so a concurrent
-      // registration that just took our candidate ID is reflected on retry)
-      const existingSellers = await prisma.seller.findMany({
-        where: { sellerId: { gte: 1000, lte: 9999 } },
-        select: { sellerId: true },
-        orderBy: { sellerId: 'asc' },
-      });
-      const existingIds = new Set(existingSellers.map(s => s.sellerId));
-      sellerId = computeNextSellerId(existingIds);
+      // Atomic allocation – no more loading every existing id and scanning for a gap.
+      sellerId = await allocateSellerId();
 
       // If no ID available (all 9000 IDs are used)
       if (sellerId === null) {
-        console.log('[REGISTER] Failed: All IDs used', { totalExisting: existingIds.size, ip });
+        console.log('[REGISTER] Failed: All IDs used', { ip });
         return NextResponse.json(
           { error: 'Alle Verkäufer-IDs sind vergeben (1000-9999). Keine weiteren Registrierungen möglich.' },
           { status: 400 }
@@ -237,32 +251,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use settings already loaded at the beginning for email
-    const formatDateTime = (dateTimeString: string | undefined) => {
-      if (!dateTimeString) return null;
+    // Teilnahme an diesem Basar direkt anlegen. Das lazy Anlegen beim ersten
+    // Artikel (app/api/basars/[id]/articles/route.ts) bleibt als Fallback für
+    // Alt-Basare bzw. admin-erstellte Konten ohne Basarbezug bestehen.
+    if (basar) {
+      await prisma.basarSeller.create({
+        data: { basarId: basar.id, sellerId: seller.sellerId, isActive: true, activatedAt: new Date() },
+      });
+    }
+
+    const formatDateTime = (dateTimeValue: Date | null | undefined) => {
+      if (!dateTimeValue) return null;
       try {
-        const date = new Date(dateTimeString);
+        const date = dateTimeValue instanceof Date ? dateTimeValue : new Date(dateTimeValue);
         return date.toLocaleString('de-DE', {
           weekday: 'long',
           day: '2-digit',
           month: '2-digit',
           year: 'numeric',
           hour: '2-digit',
-          minute: '2-digit'
+          minute: '2-digit',
+          timeZone: 'Europe/Berlin',
         });
       } catch {
         return null;
       }
     };
 
-    const deliveryStart = formatDateTime(settingsObj.delivery_start);
-    const deliveryEnd = formatDateTime(settingsObj.delivery_end);
-    const deliveryStart2 = formatDateTime(settingsObj.delivery_start2);
-    const deliveryEnd2 = formatDateTime(settingsObj.delivery_end2);
-    const pickupStart = formatDateTime(settingsObj.pickup_start);
-    const pickupEnd = formatDateTime(settingsObj.pickup_end);
-    const pickupStart2 = formatDateTime(settingsObj.pickup_start2);
-    const pickupEnd2 = formatDateTime(settingsObj.pickup_end2);
+    const deliveryStart = formatDateTime(basar?.deliveryStart);
+    const deliveryEnd = formatDateTime(basar?.deliveryEnd);
+    const deliveryStart2 = formatDateTime(basar?.deliveryStart2);
+    const deliveryEnd2 = formatDateTime(basar?.deliveryEnd2);
+    const pickupStart = formatDateTime(basar?.pickupStart);
+    const pickupEnd = formatDateTime(basar?.pickupEnd);
+    const pickupStart2 = formatDateTime(basar?.pickupStart2);
+    const pickupEnd2 = formatDateTime(basar?.pickupEnd2);
 
     let deliveryInfo = '';
     if (deliveryStart && deliveryEnd) {
@@ -361,11 +384,24 @@ export async function POST(request: NextRequest) {
         </div>
       `;
 
-      // Send email with attachments if any
-      await sendMail(email, 'Ihre Registrierung beim Kinderbasar Neukirchen', emailHtml, attachments);
+      // Enqueue the confirmation email instead of sending it synchronously – a slow or
+      // unavailable SMTP server used to block the request (and QR/barcode generation,
+      // bcrypt, and now-atomic id allocation still make this endpoint hot enough that adding
+      // a synchronous SMTP round trip on top is what actually risked Vercel timeouts under
+      // load). A separate processor (app/api/admin/mail-queue/route.ts) drains PENDING rows
+      // with retry/backoff; failures land in status=FAILED with lastError instead of being
+      // silently swallowed.
+      await prisma.mailQueue.create({
+        data: {
+          to: email,
+          subject: 'Ihre Registrierung beim Kinderbasar Neukirchen',
+          html: emailHtml,
+          attachmentsJson: attachments.length > 0 ? JSON.stringify(attachments) : null,
+        },
+      });
     } catch (emailError) {
-      console.error('[REGISTER] Email sending failed:', { 
-        sellerId, 
+      console.error('[REGISTER] Failed to enqueue confirmation email:', {
+        sellerId,
         email: email?.substring(0, 3) + '***',
         error: emailError,
         ip

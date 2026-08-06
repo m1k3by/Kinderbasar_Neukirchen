@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Header from '../components/Header';
+import { dateForWeekday } from '../lib/basarWindows';
 
 interface Seller {
   sellerId: number;
@@ -36,42 +37,79 @@ interface Cake {
   };
 }
 
+interface Basar {
+  id: string;
+  title: string;
+  status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
+  isArchived: boolean;
+  dateFriday?: string | null;
+  dateSaturday?: string | null;
+  dateSunday?: string | null;
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: 'Vorbereitung', OPEN: 'Anmeldung offen', ACTIVE: 'Läuft', CLOSED: 'Beendet',
+};
+
 const dayOrder = ['Freitag', 'Samstag', 'Sonntag'];
+
+// /api/sellers is cursor-paginated (admin-only, up to 500 rows per page) so a single fetch no
+// longer returns the whole table. Loop pages to reassemble the full list for this dashboard's
+// seller-ID-exhaustion warning and cake-owner lookup.
+async function fetchAllSellers(): Promise<Seller[]> {
+  const all: Seller[] = [];
+  let cursor: number | null = null;
+  do {
+    const qs = new URLSearchParams({ limit: '500' });
+    if (cursor !== null) qs.set('cursor', String(cursor));
+    const res = await fetch(`/api/sellers?${qs.toString()}`);
+    if (!res.ok) throw new Error('Failed to fetch sellers');
+    const data = await res.json();
+    all.push(...(data.sellers ?? []));
+    cursor = data.nextCursor;
+  } while (cursor !== null);
+  return all;
+}
 
 export default function AdminPage() {
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [cakes, setCakes] = useState<Cake[]>([]);
-  const [settings, setSettings] = useState<Record<string, string>>({});
+  const [basars, setBasars] = useState<Basar[]>([]);
+  const [helferlisteBasarId, setHelferlisteBasarId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch sellers, tasks, cakes, and settings
-        const [sellersRes, tasksRes, cakesRes, settingsRes] = await Promise.all([
-          fetch('/api/sellers'),
+        // Fetch sellers (paginated, looped to "all"), tasks, cakes, and basars
+        const [sellersData, tasksRes, cakesRes, basarsRes] = await Promise.all([
+          fetchAllSellers(),
           fetch('/api/tasks'),
           fetch('/api/cakes'),
-          fetch('/api/settings'),
+          fetch('/api/basars'),
         ]);
 
-        if (!sellersRes.ok || !tasksRes.ok || !cakesRes.ok || !settingsRes.ok) {
+        if (!tasksRes.ok || !cakesRes.ok || !basarsRes.ok) {
           throw new Error('Failed to fetch data');
         }
 
-        const [sellersData, tasksData, cakesData, settingsData] = await Promise.all([
-          sellersRes.json(),
+        const [tasksData, cakesData, basarsData] = await Promise.all([
           tasksRes.json(),
           cakesRes.json(),
-          settingsRes.json(),
+          basarsRes.json(),
         ]);
 
         setSellers(sellersData);
         setTasks(tasksData);
         setCakes(cakesData);
-        setSettings(settingsData);
+        const relevant: Basar[] = (basarsData.basars ?? []).filter((b: Basar) => !b.isArchived && b.status !== 'DRAFT');
+        setBasars(relevant);
+        setHelferlisteBasarId(relevant.find(b => b.status === 'ACTIVE')?.id
+          || relevant.find(b => b.status === 'OPEN')?.id
+          || relevant[0]?.id
+          || '');
       } catch (err) {
         setError('Fehler beim Laden der Daten');
       } finally {
@@ -125,7 +163,6 @@ export default function AdminPage() {
           { href: '/admin/basars', label: 'Basare' },
           { href: '/admin/list', label: 'Helferliste' },
           { href: '/admin/tasks', label: 'Aufgaben' },
-          { href: '/admin/settings', label: 'Einstellungen' },
           { href: '/', label: 'Logout' },
         ]}
       />
@@ -156,19 +193,52 @@ export default function AdminPage() {
           </a>
         </div>
 
+        {/* Hilfe-Assistent Card */}
+        <div className="mb-8 bg-yellow-50 border border-yellow-200 rounded-lg shadow-sm p-6 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-gray-800">Hilfe-Assistent auswerten</h2>
+            <p className="text-gray-600 mt-1 text-sm">
+              Gestellte Fragen, unbeantwortete Fälle und Bewertungen einsehen.
+            </p>
+          </div>
+          <a
+            href="/admin/hilfe"
+            className="flex-shrink-0 px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold rounded-xl transition-colors shadow-sm"
+          >
+            Zur Auswertung →
+          </a>
+        </div>
+
         {/* Helferliste */}
-        <h2 className="text-2xl font-bold text-gray-800 mb-4">Helferliste (Admin)</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h2 className="text-2xl font-bold text-gray-800">Helferliste (Admin)</h2>
+          {basars.length > 1 && (
+            <label className="text-sm text-gray-600 flex items-center gap-2">
+              Termine von:
+              <select
+                value={helferlisteBasarId}
+                onChange={(e) => setHelferlisteBasarId(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
+              >
+                {basars.map(b => (
+                  <option key={b.id} value={b.id}>{b.title} ({STATUS_LABELS[b.status]})</option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
 
         <div className="space-y-8 mb-12">
           {dayOrder.map((day) => {
             const dayTasks = groupedTasks[day] || [];
-            const dateKey = `date_${day.toLowerCase()}`;
-            const dateValue = settings[dateKey];
-            const formattedDate = dateValue 
-              ? new Date(dateValue + 'T00:00:00').toLocaleDateString('de-DE', { 
-                  day: '2-digit', 
-                  month: '2-digit', 
-                  year: 'numeric' 
+            const helferlisteBasar = basars.find(b => b.id === helferlisteBasarId);
+            const dateValue = helferlisteBasar ? dateForWeekday(helferlisteBasar, day) : null;
+            const formattedDate = dateValue
+              ? dateValue.toLocaleDateString('de-DE', {
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric',
+                  timeZone: 'Europe/Berlin',
                 })
               : '';
             

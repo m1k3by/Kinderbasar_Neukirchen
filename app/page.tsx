@@ -1,65 +1,46 @@
 import Link from 'next/link';
 import { prisma } from './lib/prisma';
-import { parseAsGermanTime } from './lib/time';
+import { isRegistrationOpen } from './lib/basarWindows';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+function formatDay(value: Date | null) {
+  if (!value) return null;
+  return value.toLocaleDateString('de-DE', {
+    weekday: 'long',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: 'Europe/Berlin',
+  });
+}
+
 export default async function Home() {
-  const activeSellerCount = await prisma.seller.count({
-    where: {
-      sellerStatusActive: true
-    }
-  });
-  const max = parseInt(process.env.MAX_SELLERS || '200');
-  const isCapacityFull = activeSellerCount >= max;
-
-  // Fetch basar dates from settings
-  const settings = await prisma.settings.findMany();
-  const settingsObj: Record<string, string> = {};
-  settings.forEach(s => {
-    settingsObj[s.key] = s.value;
+  // Entwürfe sind noch nicht öffentlich, geschlossene und archivierte Basare
+  // nehmen keine Anmeldungen mehr an.
+  const basars = await prisma.basar.findMany({
+    where: { isArchived: false, status: { in: ['OPEN', 'ACTIVE'] } },
+    orderBy: { eventDate: 'asc' },
+    include: {
+      _count: { select: { basarSellers: { where: { isActive: true } } } },
+    },
   });
 
-  const formatDate = (dateString: string | undefined) => {
-    if (!dateString) return null;
-    try {
-      const date = new Date(dateString + 'T00:00:00');
-      return date.toLocaleDateString('de-DE', {
-        weekday: 'long',
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-      });
-    } catch {
-      return null;
-    }
-  };
-
-  const freitagDate = formatDate(settingsObj.date_freitag);
-  const samstagDate = formatDate(settingsObj.date_samstag);
-  const sonntagDate = formatDate(settingsObj.date_sonntag);
-
-  const hasAnyDate = freitagDate || samstagDate || sonntagDate;
-
-  // Check registration periods
   const now = new Date();
 
-  const isSellerRegistrationOpen = (() => {
-    if (!settingsObj.registration_seller_start || !settingsObj.registration_seller_end) return true;
-    
-    const start = parseAsGermanTime(settingsObj.registration_seller_start);
-    const end = parseAsGermanTime(settingsObj.registration_seller_end);
-    return now >= start && now <= end;
-  })();
-
-  const isEmployeeRegistrationOpen = (() => {
-    if (!settingsObj.registration_employee_start || !settingsObj.registration_employee_end) return true;
-    
-    const start = parseAsGermanTime(settingsObj.registration_employee_start);
-    const end = parseAsGermanTime(settingsObj.registration_employee_end);
-    return now >= start && now <= end;
-  })();
+  const cards = basars.map(basar => ({
+    basar,
+    days: [
+      formatDay(basar.dateFriday),
+      formatDay(basar.dateSaturday),
+      formatDay(basar.dateSunday),
+    ].filter((d): d is string => d !== null),
+    activeSellers: basar._count.basarSellers,
+    isFull: basar._count.basarSellers >= basar.maxSellers,
+    sellerOpen: isRegistrationOpen(basar, false, now),
+    employeeOpen: isRegistrationOpen(basar, true, now),
+  }));
 
   return (
     <div className="basar-background">
@@ -80,64 +61,94 @@ export default async function Home() {
 
       {/* Main Content */}
       <div className="max-w-6xl mx-auto p-8">
-        {/* Full Capacity Warning */}
-        {isCapacityFull && (
-          <div className="mb-6 bg-red-100 border-2 border-red-600 text-red-900 px-6 py-4 rounded-lg text-center">
-            <p className="text-xl font-bold">⚠️ Die maximale Anzahl von aktiven Verkäufern ist erreicht</p>
-            <p className="mt-2">Keine weiteren Anmeldungen mehr möglich.</p>
+        {cards.length === 0 ? (
+          <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-8 text-center">
+            <p className="text-lg font-semibold text-gray-800">Aktuell ist kein Basar geöffnet</p>
+            <p className="mt-2 text-sm text-gray-600">
+              Sobald der nächste Basar ansteht, erscheint er hier mit den Anmeldezeiten.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {cards.map(({ basar, days, activeSellers, isFull, sellerOpen, employeeOpen }) => (
+              <div key={basar.id} className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6">
+                <div className="md:flex md:items-start md:justify-between md:gap-6">
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-800">{basar.title}</h2>
+                    {basar.location && (
+                      <p className="text-sm text-gray-600 mt-0.5">{basar.location}</p>
+                    )}
+                    {basar.description && (
+                      <p className="text-sm text-gray-700 mt-2">{basar.description}</p>
+                    )}
+                    {days.length > 0 && (
+                      <ul className="mt-3 space-y-0.5 text-sm text-gray-700">
+                        {days.map(day => (
+                          <li key={day}>{day}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  <div className="mt-4 md:mt-0 md:w-72 flex-shrink-0 flex flex-col gap-3">
+                    <p className="text-sm text-gray-600">
+                      Angemeldete Verkäufer: <strong>{activeSellers}</strong> von <strong>{basar.maxSellers}</strong>
+                    </p>
+
+                    {isFull ? (
+                      <div className="bg-red-100 border-2 border-red-600 text-red-900 px-4 py-3 rounded-md text-sm text-center">
+                        <strong>Dieser Basar ist ausgebucht.</strong>
+                        <div className="mt-1">Keine weiteren Anmeldungen möglich.</div>
+                      </div>
+                    ) : (
+                      <>
+                        {sellerOpen && (
+                          <Link
+                            href={{ pathname: '/register/seller', query: { basarId: basar.id, basarTitle: basar.title } }}
+                            className="inline-flex items-center justify-center rounded-md bg-yellow-500 hover:bg-yellow-600 text-gray-800 px-4 py-3 text-sm font-medium transition-colors shadow"
+                          >
+                            Verkäufer Registrierung (A)
+                          </Link>
+                        )}
+                        {employeeOpen && (
+                          <Link
+                            href={{ pathname: '/register/employee', query: { basarId: basar.id, basarTitle: basar.title } }}
+                            className="inline-flex items-center justify-center rounded-md bg-teal-700 hover:bg-teal-800 text-white px-4 py-3 text-sm font-medium transition-colors shadow"
+                          >
+                            Mitarbeiter registrieren (B)
+                          </Link>
+                        )}
+                        {!sellerOpen && !employeeOpen && (
+                          <div className="bg-gray-100 border border-gray-300 text-gray-600 px-4 py-3 rounded-md text-sm text-center">
+                            Registrierungen für diesen Basar sind aktuell geschlossen
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Registration Options */}
-          <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6 flex flex-col">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">Registrierungen</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Aktuell aktive Verkäufer: <strong>{activeSellerCount}</strong> von <strong>{max}</strong>
-            </p>
-            <div className="mt-auto flex flex-col gap-3">
-              {isSellerRegistrationOpen && (
-                <Link
-                  href="/register/seller"
-                  className="inline-flex items-center justify-center rounded-md bg-yellow-500 hover:bg-yellow-600 text-gray-800 px-4 py-3 text-sm font-medium transition-colors shadow"
-                >
-                  Verkäufer Registrierung (A)
-                </Link>
-              )}
-              {isEmployeeRegistrationOpen && (
-                <Link
-                  href="/register/employee"
-                  className="inline-flex items-center justify-center rounded-md bg-teal-700 hover:bg-teal-800 text-white px-4 py-3 text-sm font-medium transition-colors shadow"
-                >
-                  Mitarbeiter registrieren (B)
-                </Link>
-              )}
-              {!isSellerRegistrationOpen && !isEmployeeRegistrationOpen && (
-                <div className="bg-gray-100 border border-gray-300 text-gray-600 px-4 py-3 rounded-md text-sm text-center">
-                  Registrierungen sind aktuell geschlossen
-                </div>
-              )}
+        {/* Information */}
+        <div className="mt-6 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6">
+          <h2 className="text-xl font-semibold text-gray-800 mb-3">Hinweise</h2>
+          <div className="mt-3 space-y-4 text-sm text-gray-700">
+            <div>
+              <strong>A:</strong> Für alle, die sich nur als Verkäufer registrieren wollen.
+              Nach Anlage wird eine E-Mail mit Verkäufer-ID an die angegebene E-Mail Adresse versendet.
             </div>
-          </div>
-          
-          {/* Information */}
-          <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-3">Hinweise</h2>
-            <div className="mt-3 space-y-4 text-sm text-gray-700">
-              <div>
-                <strong>A:</strong> Für alle, die sich nur als Verkäufer registrieren wollen. 
-                Nach Anlage wird eine E-Mail mit Verkäufer-ID an die angegebene E-Mail Adresse versendet.
-              </div>
-              <div>
-                <strong>B:</strong> Für alle die sich aktiv am Basar beteiligen wollen 
-                (Vorsortieren, Kuchenverkauf etc.). Es wird auch direkt eine Verkäufer-ID erstellt. 
-                Alle Info wie Login werden ebenfalls per E-Mail an die angegebene E-Mail Adresse versendet.
-              </div>
-              {hasAnyDate && sonntagDate && (
-                <div className="pt-3 mt-3 border-t border-gray-300">
-                  <div><strong>Basartag Sonntag:</strong> {sonntagDate.split(',')[1]?.trim()}</div>
-                </div>
-              )}
+            <div>
+              <strong>B:</strong> Für alle die sich aktiv am Basar beteiligen wollen
+              (Vorsortieren, Kuchenverkauf etc.). Es wird auch direkt eine Verkäufer-ID erstellt.
+              Alle Info wie Login werden ebenfalls per E-Mail an die angegebene E-Mail Adresse versendet.
+            </div>
+            <div className="pt-3 mt-3 border-t border-gray-300">
+              Wer bereits ein Konto hat, meldet seine Teilnahme nach dem{' '}
+              <Link href="/login" className="text-blue-700 hover:underline">Login</Link>{' '}
+              direkt beim gewünschten Basar an.
             </div>
           </div>
         </div>

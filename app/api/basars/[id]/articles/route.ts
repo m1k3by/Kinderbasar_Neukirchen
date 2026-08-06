@@ -11,13 +11,35 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const { id: basarId } = await params;
 
     // Admin sees all articles; seller/employee sees only their own
-    let articles;
     if (auth.role === 'admin') {
-      articles = await prisma.article.findMany({
+      // Cursor-paginated (?cursor=<articleId>&limit=<n>, default 200, max 1000) with a
+      // trimmed projection – at 2000+ sellers a single basar can have tens of thousands of
+      // articles, and the previous unbounded include(basarSeller -> include(seller)) sent
+      // every scalar field of both to every admin request regardless of basar size. (The
+      // Kasse's own offline cache uses the dedicated /scan-cache route instead of this one.)
+      const url = new URL(request.url);
+      const cursor = url.searchParams.get('cursor');
+      const limitParam = parseInt(url.searchParams.get('limit') || '200', 10);
+      const limit = Math.min(Math.max(Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 200, 1), 1000);
+
+      const rows = await prisma.article.findMany({
         where: { basarSeller: { basarId } },
-        include: { basarSeller: { include: { seller: { select: { firstName: true, lastName: true, sellerId: true } } } } },
+        select: {
+          id: true, title: true, sizeLabel: true, gender: true, price: true, qrCode: true, status: true, soldAt: true, createdAt: true,
+          basarSeller: { select: { seller: { select: { firstName: true, lastName: true, sellerId: true } } } },
+        },
         orderBy: { createdAt: 'asc' },
+        take: limit + 1,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       });
+
+      let nextCursor: string | null = null;
+      if (rows.length > limit) {
+        const next = rows.pop();
+        nextCursor = next!.id;
+      }
+
+      return NextResponse.json({ articles: rows, nextCursor });
     } else {
       const sellerId = auth.sellerId;
       if (!sellerId) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
@@ -28,14 +50,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       });
       if (!basarSeller) return NextResponse.json({ articles: [], basarSeller: null });
 
-      articles = await prisma.article.findMany({
+      const articles = await prisma.article.findMany({
         where: { basarSellerId: basarSeller.id },
         orderBy: { createdAt: 'asc' },
       });
       return NextResponse.json({ articles, basarSeller });
     }
-
-    return NextResponse.json({ articles });
   } catch (error) {
     console.error('GET /api/basars/[id]/articles error:', error);
     return NextResponse.json({ error: 'Interner Serverfehler' }, { status: 500 });
@@ -55,11 +75,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const sellerId: number = auth.sellerId!;
     const { id: basarId } = await params;
 
-    // Check seller is active
-    const seller = await prisma.seller.findUnique({ where: { sellerId } });
-    if (!seller?.sellerStatusActive) {
-      return NextResponse.json({ error: 'Du bist nicht als Verkäufer aktiv' }, { status: 403 });
+    // Parse and validate the request body BEFORE any DB round trips, so a malformed request
+    // is rejected cheaply instead of paying for seller/basar lookups first.
+    const body = await request.json();
+    const { title, sizeLabel, gender, price } = body;
+
+    if (!title || !price) {
+      return NextResponse.json({ error: 'Beschreibung und Preis sind Pflichtfelder' }, { status: 400 });
     }
+    const priceNum = parseFloat(price);
+    if (!Number.isFinite(priceNum) || priceNum <= 0) {
+      return NextResponse.json({ error: 'Preis muss größer als 0 sein' }, { status: 400 });
+    }
+    const genderValue = (gender === 'Junge' || gender === 'Mädchen' || gender === 'Unisex') ? gender : null;
+    const titleTrimmed = String(title).substring(0, 120);
+    const sizeLabelTrimmed = sizeLabel ? String(sizeLabel).substring(0, 40) : null;
 
     // Check basar is OPEN
     const basar = await prisma.basar.findUnique({ where: { id: basarId } });
@@ -68,70 +98,88 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Artikel können nur bei offenem Basar angelegt werden' }, { status: 400 });
     }
 
-    // Get or create BasarSeller entry
-    let basarSeller = await prisma.basarSeller.findUnique({
-      where: { basarId_sellerId: { basarId, sellerId } },
-    });
-
-    if (!basarSeller) {
-      // Check max sellers
-      const sellerCount = await prisma.basarSeller.count({ where: { basarId } });
-      if (sellerCount >= basar.maxSellers) {
-        return NextResponse.json({ error: 'Maximale Verkäuferanzahl erreicht' }, { status: 400 });
-      }
-
-      basarSeller = await prisma.basarSeller.create({
-        data: { basarId, sellerId },
-      });
-    }
-
-    // Check article limit
-    const maxArticles = basarSeller.maxArticlesOverride ?? basar.maxArticlesPerSeller;
-    const articleCount = await prisma.article.count({ where: { basarSellerId: basarSeller.id } });
-    if (articleCount >= maxArticles) {
-      return NextResponse.json({ error: `Maximale Artikelanzahl (${maxArticles}) erreicht` }, { status: 400 });
-    }
-
-    const body = await request.json();
-    const { title, sizeLabel, gender, price } = body;
-
-    if (!title || !price) {
-      return NextResponse.json({ error: 'Beschreibung und Preis sind Pflichtfelder' }, { status: 400 });
-    }
-    if (parseFloat(price) <= 0) {
-      return NextResponse.json({ error: 'Preis muss größer als 0 sein' }, { status: 400 });
-    }
-
-    const genderValue = (gender === 'Junge' || gender === 'Mädchen' || gender === 'Unisex') ? gender : null;
-
     // Generate one stable QR code – lives on the archive entry, reused across basars
     const stableQrCode = crypto.randomUUID();
 
-    // Auto-create a SellerArticle archive entry so it survives basar closure
-    const sellerArticle = await prisma.sellerArticle.create({
-      data: {
-        sellerId,
-        title: title.substring(0, 120),
-        sizeLabel: sizeLabel ? sizeLabel.substring(0, 40) : null,
-        gender: genderValue,
-        price: parseFloat(price),
-        qrCode: stableQrCode,
-      },
+    // Everything that must stay consistent under parallel requests (get-or-create BasarSeller,
+    // the maxSellers/maxArticles limit checks, and both writes) happens inside one transaction:
+    //  - basarSeller.upsert instead of find-then-create: a double-click or two open tabs used
+    //    to race two concurrent creates into a P2002 on [basarId, sellerId] → 500. upsert is a
+    //    single atomic statement, so the second caller just gets the same row back.
+    //  - maxSellers/maxArticles are re-read here (not from a check made before the transaction
+    //    started) so the limits can't be exceeded by two requests that both passed the check
+    //    before either had written anything.
+    // Errors are returned as a discriminated result rather than thrown, mirroring the
+    // conditional-update pattern already used in app/api/basars/[id]/sales/route.ts.
+    const result = await prisma.$transaction(async (tx) => {
+      let basarSeller = await tx.basarSeller.findUnique({
+        where: { basarId_sellerId: { basarId, sellerId } },
+      });
+
+      if (!basarSeller) {
+        // Randfall: normalerweise entsteht BasarSeller schon bei der Registrierung
+        // für diesen Basar (app/api/register) oder bei der Teilnahme-Aktivierung
+        // (app/api/basars/[id]/participation). Dieser lazy-create-Pfad fängt
+        // Alt-Konten ohne diesen Schritt auf.
+        const sellerCount = await tx.basarSeller.count({ where: { basarId, isActive: true } });
+        if (sellerCount >= basar.maxSellers) {
+          return { error: 'MAX_SELLERS' as const };
+        }
+        basarSeller = await tx.basarSeller.upsert({
+          where: { basarId_sellerId: { basarId, sellerId } },
+          update: {},
+          create: { basarId, sellerId, isActive: true, activatedAt: new Date() },
+        });
+      } else if (!basarSeller.isActive) {
+        return { error: 'NOT_ACTIVE' as const };
+      }
+
+      const maxArticles = basarSeller.maxArticlesOverride ?? basar.maxArticlesPerSeller;
+      const articleCount = await tx.article.count({ where: { basarSellerId: basarSeller.id } });
+      if (articleCount >= maxArticles) {
+        return { error: 'MAX_ARTICLES' as const, maxArticles };
+      }
+
+      // Auto-create a SellerArticle archive entry so it survives basar closure. Both writes
+      // are in the same transaction now – previously, if the Article insert failed after the
+      // SellerArticle insert succeeded, an orphaned archive row was left behind.
+      const sellerArticle = await tx.sellerArticle.create({
+        data: {
+          sellerId,
+          title: titleTrimmed,
+          sizeLabel: sizeLabelTrimmed,
+          gender: genderValue,
+          price: priceNum,
+          qrCode: stableQrCode,
+        },
+      });
+
+      const article = await tx.article.create({
+        data: {
+          basarSellerId: basarSeller.id,
+          sellerArticleId: sellerArticle.id,
+          title: titleTrimmed,
+          sizeLabel: sizeLabelTrimmed,
+          gender: genderValue,
+          price: priceNum,
+          qrCode: stableQrCode,
+        },
+      });
+
+      return { article, basarSeller };
     });
 
-    const article = await prisma.article.create({
-      data: {
-        basarSellerId: basarSeller.id,
-        sellerArticleId: sellerArticle.id,
-        title: title.substring(0, 120),
-        sizeLabel: sizeLabel ? sizeLabel.substring(0, 40) : null,
-        gender: genderValue,
-        price: parseFloat(price),
-        qrCode: stableQrCode,
-      },
-    });
+    if ('error' in result) {
+      if (result.error === 'MAX_SELLERS') {
+        return NextResponse.json({ error: 'Maximale Verkäuferanzahl erreicht' }, { status: 400 });
+      }
+      if (result.error === 'NOT_ACTIVE') {
+        return NextResponse.json({ error: 'Du bist für diesen Basar nicht als Teilnehmer aktiv' }, { status: 403 });
+      }
+      return NextResponse.json({ error: `Maximale Artikelanzahl (${result.maxArticles}) erreicht` }, { status: 400 });
+    }
 
-    return NextResponse.json({ article, basarSeller }, { status: 201 });
+    return NextResponse.json({ article: result.article, basarSeller: result.basarSeller }, { status: 201 });
   } catch (error) {
     console.error('POST /api/basars/[id]/articles error:', error);
     return NextResponse.json({ error: 'Interner Serverfehler' }, { status: 500 });

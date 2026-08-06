@@ -42,3 +42,29 @@ export function parseAsGermanTime(dateTimeStr: string): Date {
   const offset = isDST(testDate) ? '+02:00' : '+01:00';
   return new Date(dateTimeStr + offset);
 }
+
+/**
+ * Umkehrung von parseAsGermanTime: Date → "YYYY-MM-DDTHH:mm" in deutscher Zeit,
+ * direkt verwendbar als Wert eines <input type="datetime-local">.
+ *
+ * Ohne diese Umrechnung würde ein Formular die gespeicherte UTC-Zeit in der
+ * Browser-Zeitzone rendern und beim Speichern verschieben.
+ */
+export function formatAsGermanDateTimeLocal(value: Date | string | null | undefined): string {
+  const shifted = shiftToGermanTime(value);
+  return shifted ? shifted.toISOString().slice(0, 16) : '';
+}
+
+/** Date → "YYYY-MM-DD" in deutscher Zeit, für <input type="date">. */
+export function formatAsGermanDate(value: Date | string | null | undefined): string {
+  const shifted = shiftToGermanTime(value);
+  return shifted ? shifted.toISOString().slice(0, 10) : '';
+}
+
+function shiftToGermanTime(value: Date | string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (isNaN(date.getTime())) return null;
+  const offsetMinutes = isDST(date) ? 120 : 60;
+  return new Date(date.getTime() + offsetMinutes * 60_000);
+}

@@ -10,8 +10,19 @@ const prismaMock = vi.hoisted(() => ({
   basarSeller: { findUnique: vi.fn(), findMany: vi.fn() },
   settlement: { findMany: vi.fn(), upsert: vi.fn() },
   basar: { findUnique: vi.fn() },
+  $transaction: vi.fn(),
 }));
 vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
+
+// POST batches settlement upserts via the array form of $transaction (prisma.$transaction([
+// upsert1, upsert2, ...])) – one batch per SETTLEMENT_BATCH_SIZE sellers. The mocked upsert
+// calls already return promises (since settlement.upsert is a vi.fn()), so the mock just
+// needs to await them like Prisma's real array-transaction does.
+function mockTransactionArray() {
+  prismaMock.$transaction.mockImplementation((arg: any) =>
+    Array.isArray(arg) ? Promise.all(arg) : arg(prismaMock)
+  );
+}
 
 import { GET, POST } from '@/app/api/basars/[id]/settlements/route';
 
@@ -81,7 +92,10 @@ describe('GET /api/basars/[id]/settlements', () => {
 });
 
 describe('POST /api/basars/[id]/settlements', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockTransactionArray();
+  });
 
   it('returns 401 when no token', async () => {
     cookiesGetMock.mockReturnValue(undefined);
@@ -126,11 +140,43 @@ describe('POST /api/basars/[id]/settlements', () => {
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.created).toBe(1);
+    // Progress/total reporting, since a single response can't stream progress for a run that
+    // spans multiple batches.
+    expect(data.total).toBe(1);
+    expect(data.batches).toBe(1);
+    expect(data.batchSize).toBe(100);
     expect(prismaMock.settlement.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         update: expect.objectContaining({ grossRevenue: 5.0, commissionAmount: 1.0, netPayout: 4.0 }),
       })
     );
+    // Upserts run through $transaction (one batch here) rather than a bare sequential loop –
+    // this is what keeps a batch from being partially written if it fails midway.
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('chunks sellers into batches of 100, each in its own transaction', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.basar.findUnique.mockResolvedValue(closedBasar);
+    const manySellers = Array.from({ length: 150 }, (_, i) => ({
+      id: `bs-${i}`,
+      commissionOverride: null,
+      articles: [],
+    }));
+    prismaMock.basarSeller.findMany.mockResolvedValue(manySellers);
+    prismaMock.settlement.upsert.mockImplementation((args: any) =>
+      Promise.resolve({ id: `set-${args.where.basarSellerId}`, netPayout: 0 })
+    );
+
+    const res = await POST(makePostRequest(), makeContext());
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.total).toBe(150);
+    expect(data.created).toBe(150);
+    expect(data.batches).toBe(2); // ceil(150 / 100)
+    // One $transaction call per batch (100 + 50), not one call per seller.
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(2);
   });
 
   it('ignores a cancelled sale on a SOLD article when computing settlement (storno-then-resell)', async () => {

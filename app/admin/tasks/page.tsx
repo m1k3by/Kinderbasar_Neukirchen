@@ -210,7 +210,6 @@ export default function TasksManagementPage() {
           { href: '/admin/basars', label: 'Basare' },
           { href: '/admin/list', label: 'Helferliste' },
           { href: '/admin/tasks', label: 'Aufgaben', active: true },
-          { href: '/admin/settings', label: 'Einstellungen' },
           { href: '/', label: 'Logout' },
         ]}
       />

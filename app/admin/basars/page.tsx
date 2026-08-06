@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Header from '../../components/Header';
+import BasarFormFields, { EMPTY_BASAR_FORM, type BasarFormState } from './BasarFormFields';
 
 interface Basar {
   id: string;
@@ -38,11 +39,7 @@ export default function AdminBasarsPage() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
-  const [form, setForm] = useState({
-    title: '', description: '', eventDate: '', location: '',
-    maxSellers: '100', maxArticlesPerSeller: '50',
-    commissionPercent: '20', entryFee: '0',
-  });
+  const [form, setForm] = useState<BasarFormState>(EMPTY_BASAR_FORM);
 
   useEffect(() => { loadBasars(); }, []);
 
@@ -71,7 +68,7 @@ export default function AdminBasarsPage() {
       if (res.ok) {
         setMessage('Basar erfolgreich angelegt');
         setShowForm(false);
-        setForm({ title: '', description: '', eventDate: '', location: '', maxSellers: '100', maxArticlesPerSeller: '50', commissionPercent: '20', entryFee: '0' });
+        setForm(EMPTY_BASAR_FORM);
         loadBasars();
       } else {
         const data = await res.json();
@@ -124,7 +121,6 @@ export default function AdminBasarsPage() {
           { href: '/admin/basars/archiv', label: 'Archiv' },
           { href: '/admin/list', label: 'Helferliste' },
           { href: '/admin/tasks', label: 'Aufgaben' },
-          { href: '/admin/settings', label: 'Einstellungen' },
           { href: '/', label: 'Logout' },
         ]}
       />
@@ -149,46 +145,7 @@ export default function AdminBasarsPage() {
           <div className="bg-white rounded-xl shadow-md p-6 mb-6">
             <h2 className="text-xl font-bold mb-4">Neuer Basar</h2>
             <form onSubmit={handleCreate} className="grid md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Titel *</label>
-                <input required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500" placeholder="z.B. Herbst-Kinderbasar 2026" />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Beschreibung</label>
-                <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Datum *</label>
-                <input type="date" required value={form.eventDate} onChange={e => setForm(f => ({ ...f, eventDate: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ort</label>
-                <input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500" placeholder="z.B. Gemeindehaus" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Max. Verkäufer</label>
-                <input type="number" min="1" value={form.maxSellers} onChange={e => setForm(f => ({ ...f, maxSellers: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Max. Artikel pro Verkäufer</label>
-                <input type="number" min="1" value={form.maxArticlesPerSeller} onChange={e => setForm(f => ({ ...f, maxArticlesPerSeller: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Provision (%)</label>
-                <input type="number" min="0" max="100" step="0.5" value={form.commissionPercent} onChange={e => setForm(f => ({ ...f, commissionPercent: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Teilnahmegebühr (€)</label>
-                <input type="number" min="0" step="0.50" value={form.entryFee} onChange={e => setForm(f => ({ ...f, entryFee: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500" />
-              </div>
+              <BasarFormFields form={form} setForm={setForm} />
               <div className="md:col-span-2 flex justify-end gap-3">
                 <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">Abbrechen</button>
                 <button type="submit" disabled={saving} className="px-6 py-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold rounded-lg transition-colors disabled:opacity-50">

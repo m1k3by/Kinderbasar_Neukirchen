@@ -15,7 +15,6 @@ model Seller {
   lastName           String
   isEmployee         Boolean  @default(false)
   isCashier          Boolean  @default(false)
-  sellerStatusActive Boolean  @default(false)
   createdAt          DateTime @default(now())
   password           String?
   qrCode             String?
@@ -59,13 +58,6 @@ model Cake {
   createdAt DateTime @default(now())
 }
 
-model Settings {
-  id            String   @id @default(cuid())
-  key           String   @unique
-  value         String
-  updatedAt     DateTime @updatedAt
-}
-
 // ───────────────────────────────────────────────
 // Basar Feature
 // ───────────────────────────────────────────────
@@ -87,6 +79,9 @@ model Basar {
   id                   String      @id @default(cuid())
   title                String
   description          String?
+  // Abgeleitet aus dateFriday/dateSaturday/dateSunday (frühester gesetzter Tag),
+  // siehe deriveEventDate in app/lib/basarWindows.ts. Bleibt als Sortierschlüssel
+  // und für Listen-/Archivanzeigen erhalten, wird nicht eigenständig gepflegt.
   eventDate            DateTime
   location             String?
   maxSellers           Int         @default(100)
@@ -95,6 +90,35 @@ model Basar {
   entryFee             Decimal     @db.Decimal(6, 2) @default(0)
   status               BasarStatus @default(DRAFT)
   isArchived           Boolean     @default(false)
+
+  // Basartage. Task.day ("Freitag") wird über dateForWeekday hierauf abgebildet.
+  dateFriday                DateTime?
+  dateSaturday              DateTime?
+  dateSunday                DateTime?
+
+  // Zeitfenster. Nicht gesetzt = keine Einschränkung (siehe isWindowOpen).
+  registrationSellerStart   DateTime?
+  registrationSellerEnd     DateTime?
+  registrationEmployeeStart DateTime?
+  registrationEmployeeEnd   DateTime?
+  activationSellerStart     DateTime?
+  activationSellerEnd       DateTime?
+  activationEmployeeStart   DateTime?
+  activationEmployeeEnd     DateTime?
+
+  // Logistik – fließt in die Registrierungs-Bestätigungsmail ein.
+  deliveryStart             DateTime?
+  deliveryEnd               DateTime?
+  deliveryStart2            DateTime?
+  deliveryEnd2              DateTime?
+  pickupStart               DateTime?
+  pickupEnd                 DateTime?
+  pickupStart2              DateTime?
+  pickupEnd2                DateTime?
+
+  // CSV, beim Anlegen aus DEFAULT_SIZES (app/lib/sizes.ts) vorbelegt.
+  allowedSizes              String?   @db.Text
+
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
   basarSellers         BasarSeller[]
@@ -107,6 +131,11 @@ model BasarSeller {
   sellerId            Int
   maxArticlesOverride Int?
   commissionOverride  Decimal?  @db.Decimal(5, 2)
+  // Teilnahme an genau diesem Basar. Ersetzt das globale Seller.sellerStatusActive.
+  // Eine Abmeldung setzt isActive=false statt die Zeile zu löschen – an ihr hängen
+  // Artikel mit onDelete: Cascade.
+  isActive            Boolean   @default(true)
+  activatedAt         DateTime?
   createdAt           DateTime  @default(now())
   basar               Basar     @relation(fields: [basarId], references: [id], onDelete: Cascade)
   seller              Seller    @relation(fields: [sellerId], references: [sellerId], onDelete: Cascade)
@@ -178,4 +207,64 @@ model Settlement {
   netPayout        Decimal     @db.Decimal(10, 2)
   generatedAt      DateTime    @default(now())
   basarSeller      BasarSeller @relation(fields: [basarSellerId], references: [id])
+}
+
+// ───────────────────────────────────────────────
+// Scalability infrastructure (registration thundering herd)
+// ───────────────────────────────────────────────
+
+// Single-row atomic counter for sellerId allocation (1000-9999). Replaces the old
+// "load all sellerIds and scan for a gap" approach, which was O(n) per registration and
+// raced under parallel signups. Allocation is a single atomic UPDATE...RETURNING – see
+// app/api/register/route.ts. Gaps from deleted sellers are no longer reclaimed (monotonic
+// counter), which trades gap-filling for correctness under 2000+ concurrent registrations.
+model SellerIdCounter {
+  id     String @id @default("default")
+  nextId Int    @default(1000)
+}
+
+enum MailStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+// Outbound mail is enqueued here instead of being sent synchronously in the request path
+// (registration in particular). A separate processor (app/api/admin/mail-queue/route.ts)
+// drains PENDING rows in batches with retry/backoff, so a slow/unavailable SMTP server no
+// longer blocks or times out user-facing requests, and failures are visible instead of
+// silently swallowed.
+model MailQueue {
+  id              String     @id @default(cuid())
+  to              String
+  subject         String
+  html            String
+  attachmentsJson String?
+  status          MailStatus @default(PENDING)
+  attempts        Int        @default(0)
+  lastError       String?
+  createdAt       DateTime   @default(now())
+  sentAt          DateTime?
+
+  @@index([status, createdAt])
+}
+
+// ───────────────────────────────────────────────
+// Help assistant (Stufe 1) – search feedback logging
+// ───────────────────────────────────────────────
+
+// One row per question asked to the in-app help assistant. Written by
+// app/api/chat-feedback/route.ts and read by app/admin/hilfe (unanswered /
+// unhelpful queries surface gaps in the FAQ content).
+model ChatLog {
+  id           String   @id @default(cuid())
+  sellerId     Int?
+  role         String
+  question     String   @db.VarChar(300)
+  matchedFaqId String?
+  resultType   String
+  helpful      Boolean?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
 }

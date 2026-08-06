@@ -10,6 +10,7 @@ vi.mock('next/headers', () => ({
 // ─── Prisma mock ──────────────────────────────────────────────────────────────
 const prismaMock = vi.hoisted(() => ({
   basar: { findUnique: vi.fn(), update: vi.fn() },
+  basarSeller: { findUnique: vi.fn() },
 }));
 vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
 
@@ -50,6 +51,7 @@ describe('GET /api/basars/[id]', () => {
   it('returns basar for valid token → 200', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basar.findUnique.mockResolvedValue(fakeBasar);
+    prismaMock.basarSeller.findUnique.mockResolvedValue(null);
     const res = await GET(makeGetRequest(), makeContext());
     expect(res.status).toBe(200);
     expect((await res.json()).title).toBe('Basar 2025');

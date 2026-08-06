@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '../components/Header';
+import { dateForWeekday } from '../lib/basarWindows';
 
 interface Task {
   id: string;
@@ -29,27 +30,44 @@ interface Cake {
   sellerId?: number;
 }
 
+interface Basar {
+  id: string;
+  title: string;
+  eventDate: string;
+  location?: string;
+  status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
+  isArchived: boolean;
+  myParticipation: { isActive: boolean; activatedAt: string | null } | null;
+  dateFriday?: string | null;
+  dateSaturday?: string | null;
+  dateSunday?: string | null;
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: 'Vorbereitung', OPEN: 'Anmeldung offen', ACTIVE: 'Läuft', CLOSED: 'Beendet',
+};
+
 const dayOrder = ['Freitag', 'Samstag', 'Sonntag'];
 
 export default function EmployeePage() {
   const router = useRouter();
   const [sellerId, setSellerId] = useState('');
-  const [sellerStatusActive, setSellerStatusActive] = useState(false);
   const [sellerName, setSellerName] = useState('');
   const [sellerNumber, setSellerNumber] = useState(0);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [cakes, setCakes] = useState<Cake[]>([]);
-  const [settings, setSettings] = useState<Record<string, string>>({});
   const [myCakes, setMyCakes] = useState<Cake[]>([]);
   const [cakeName, setCakeName] = useState('');
   const [editingCakeId, setEditingCakeId] = useState<string | null>(null);
   const [editingCakeName, setEditingCakeName] = useState('');
   const [message, setMessage] = useState('');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [showSellerConfirmModal, setShowSellerConfirmModal] = useState(false);
-  const [sellerStatusLoading, setSellerStatusLoading] = useState(false);
+  const [basars, setBasars] = useState<Basar[]>([]);
+  const [helferlisteBasarId, setHelferlisteBasarId] = useState<string>('');
+  const [pendingBasar, setPendingBasar] = useState<Basar | null>(null);
+  const [togglingBasarId, setTogglingBasarId] = useState<string | null>(null);
   const [isCashier, setIsCashier] = useState(false);
-  const [activeBasars, setActiveBasars] = useState<{ id: string; title: string }[]>([]);
+  const activeBasars = basars.filter(b => b.status === 'ACTIVE');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
@@ -84,25 +102,29 @@ export default function EmployeePage() {
       return c ? c.split('=')[1].trim() : '';
     })();
     if (!id) return;
-    const sellerIdNum = parseInt(id, 10);
-    
+
     try {
-      const res = await fetch(`/api/sellers`);
-      if (res.ok) {
-        const sellers = await res.json();
-        const currentSeller = sellers.find((s: any) => s.sellerId === sellerIdNum);
-        if (currentSeller) {
-          setSellerStatusActive(currentSeller.sellerStatusActive || false);
-          setSellerName(`${currentSeller.firstName} ${currentSeller.lastName}`);
-          setSellerNumber(currentSeller.sellerId);
-          setIsCashier(currentSeller.isCashier || false);
-          if (currentSeller.isCashier) {
-            fetch('/api/basars')
-              .then(r => r.ok ? r.json() : { basars: [] })
-              .then(data => setActiveBasars((data.basars || []).filter((b: any) => b.status === 'ACTIVE')))
-              .catch(() => {});
-          }
+      const [meRes, basarsRes] = await Promise.all([
+        fetch('/api/me'),
+        fetch('/api/basars'),
+      ]);
+      if (meRes.ok) {
+        const me = await meRes.json();
+        if (me.role !== 'admin') {
+          setSellerName(`${me.firstName} ${me.lastName}`);
+          setSellerNumber(me.sellerId);
+          setIsCashier(me.isCashier || false);
         }
+      }
+      if (basarsRes.ok) {
+        const data = await basarsRes.json();
+        const all: Basar[] = data.basars ?? [];
+        const relevant = all.filter(b => !b.isArchived && b.status !== 'DRAFT');
+        setBasars(relevant);
+        setHelferlisteBasarId(prev => prev || relevant.find(b => b.status === 'ACTIVE')?.id
+          || relevant.find(b => b.status === 'OPEN')?.id
+          || relevant[0]?.id
+          || '');
       }
     } catch (error) {
       console.error('Error loading seller info:', error);
@@ -116,23 +138,16 @@ export default function EmployeePage() {
     } else {
       setMyCakes([]);
     }
-    
-    // Load seller info when sellerId changes
-    if (sellerId) {
-      loadSellerInfo();
-    }
   }, [sellerId, cakes]);
 
   async function loadData() {
     try {
-      const [tasksRes, cakesRes, settingsRes] = await Promise.all([
+      const [tasksRes, cakesRes] = await Promise.all([
         fetch('/api/tasks'),
         fetch('/api/cakes'),
-        fetch('/api/settings'),
       ]);
 
       if (tasksRes.ok) setTasks(await tasksRes.json());
-      if (settingsRes.ok) setSettings(await settingsRes.json());
       if (cakesRes.ok) {
         const allCakes = await cakesRes.json();
         setCakes(allCakes);
@@ -149,51 +164,52 @@ export default function EmployeePage() {
     }
   }
 
-  function handleToggleSellerStatus() {
+  function handleToggleParticipation(basar: Basar) {
     if (!sellerId) return;
-    setShowSellerConfirmModal(true);
+    setPendingBasar(basar);
   }
 
-  async function handleConfirmSellerStatusToggle() {
-    if (!sellerId) return;
-    setShowSellerConfirmModal(false);
+  async function handleConfirmParticipationToggle() {
+    if (!sellerId || !pendingBasar) return;
+    const basar = pendingBasar;
+    setPendingBasar(null);
 
-    const newStatus = !sellerStatusActive;
+    const newStatus = !basar.myParticipation?.isActive;
 
     // Optimistic update – sofortige visuelle Rückmeldung
-    setSellerStatusActive(newStatus);
-    setSellerStatusLoading(true);
-    setMessage(newStatus
-      ? '⏳ Wird aktiviert…'
-      : '⏳ Wird deaktiviert…');
+    setBasars(prev => prev.map(b =>
+      b.id === basar.id ? { ...b, myParticipation: { isActive: newStatus, activatedAt: b.myParticipation?.activatedAt ?? null } } : b
+    ));
+    setTogglingBasarId(basar.id);
+    setMessage(newStatus ? '⏳ Wird aktiviert…' : '⏳ Wird deaktiviert…');
 
     try {
-      const res = await fetch('/api/sellers/seller-status', {
+      const res = await fetch(`/api/basars/${basar.id}/participation`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sellerId, sellerStatusActive: newStatus }),
+        body: JSON.stringify({ isActive: newStatus }),
       });
 
       if (res.ok) {
         setMessage(newStatus
-          ? '✓ Verkäuferstatus wurde aktiviert! Du bist jetzt als Verkäufer aktiv.'
-          : '✓ Verkäuferstatus wurde deaktiviert.');
+          ? `✓ Teilnahme an "${basar.title}" aktiviert! Du bist jetzt als Verkäufer aktiv.`
+          : `✓ Teilnahme an "${basar.title}" beendet.`);
         setTimeout(() => setMessage(''), 5000);
       } else {
         // Rollback on error
-        setSellerStatusActive(!newStatus);
+        setBasars(prev => prev.map(b => b.id === basar.id ? basar : b));
         const data = await res.json();
-        setMessage(data.error || 'Fehler beim Aktualisieren des Verkäuferstatus');
+        setMessage(data.error || 'Fehler beim Aktualisieren der Teilnahme');
         setTimeout(() => setMessage(''), 4000);
       }
     } catch (error) {
       // Rollback on network error
-      setSellerStatusActive(!newStatus);
-      console.error('Error toggling seller status:', error);
-      setMessage('Fehler beim Aktualisieren des Verkäuferstatus');
+      setBasars(prev => prev.map(b => b.id === basar.id ? basar : b));
+      console.error('Error toggling participation:', error);
+      setMessage('Fehler beim Aktualisieren der Teilnahme');
       setTimeout(() => setMessage(''), 4000);
     } finally {
-      setSellerStatusLoading(false);
+      setTogglingBasarId(null);
     }
   }
 
@@ -463,41 +479,58 @@ export default function EmployeePage() {
       />
 
       <div className="max-w-6xl mx-auto p-8">
-        {/* Seller Status Toggle */}
+        {/* Deine Basare – Teilnahme pro Basar */}
         <div className="mb-8 bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-bold mb-6 text-center">Verkäuferstatus</h2>
-          
-          <div className="flex flex-col items-center justify-center space-y-6">
-            <p className="text-lg text-center text-gray-700">
-              Hier können Sie Ihren Verkäuferstatus aktivieren oder deaktivieren.
-            </p>
-            
-            <button
-              onClick={handleToggleSellerStatus}
-              disabled={sellerStatusLoading}
-              className={`w-full md:w-auto px-12 py-6 rounded-xl text-2xl font-bold transition-all transform shadow-lg ${
-                sellerStatusLoading
-                  ? 'opacity-60 cursor-not-allowed bg-gray-900 text-white'
-                  : sellerStatusActive
-                  ? 'bg-green-500 hover:bg-green-600 hover:scale-105 text-white ring-4 ring-green-200'
-                  : 'bg-gray-900 hover:bg-gray-800 hover:scale-105 text-white ring-4 ring-gray-300'
-              }`}
-            >
-              {sellerStatusLoading
-                ? 'Wird gespeichert…'
-                : sellerStatusActive
-                ? 'Status: AKTIV'
-                : 'Status: INAKTIV'}
-            </button>
+          <h2 className="text-2xl font-bold mb-2 text-center">Deine Basare</h2>
+          <p className="text-center text-gray-600 mb-6 text-sm">
+            Melde dich für die Basare an oder ab, an denen du teilnehmen möchtest.
+          </p>
 
-            {message && (
-              <div className={`mt-4 px-6 py-3 rounded-lg font-medium animate-fade-in ${
-                message.includes('aktiviert') ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-red-100 text-red-800 border border-red-200'
-              }`}>
-                {message}
-              </div>
-            )}
-          </div>
+          {message && (
+            <div className={`mb-6 px-6 py-3 rounded-lg font-medium text-center animate-fade-in ${
+              message.includes('Fehler') ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-green-100 text-green-800 border border-green-200'
+            }`}>
+              {message}
+            </div>
+          )}
+
+          {basars.length === 0 ? (
+            <p className="text-center text-gray-400 py-6">Aktuell ist kein Basar für eine Teilnahme geöffnet.</p>
+          ) : (
+            <div className="space-y-3">
+              {basars.map(basar => {
+                const isActive = basar.myParticipation?.isActive ?? false;
+                const canToggle = basar.status === 'OPEN' || basar.status === 'ACTIVE' || isActive;
+                return (
+                  <div key={basar.id} className="flex flex-col md:flex-row md:items-center justify-between gap-3 border border-gray-200 rounded-xl p-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-gray-900">{basar.title}</span>
+                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">
+                          {STATUS_LABELS[basar.status]}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-0.5">
+                        {new Date(basar.eventDate).toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}
+                        {basar.location && ` · ${basar.location}`}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleToggleParticipation(basar)}
+                      disabled={togglingBasarId === basar.id || (!canToggle && !isActive)}
+                      className={`flex-shrink-0 px-6 py-3 rounded-xl font-bold transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed ${
+                        isActive
+                          ? 'bg-green-500 hover:bg-green-600 text-white'
+                          : 'bg-gray-900 hover:bg-gray-800 text-white'
+                      }`}
+                    >
+                      {togglingBasarId === basar.id ? '…' : isActive ? 'Teilnahme: AKTIV' : 'Teilnahme: INAKTIV'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Kasse Card – only for cashiers */}
@@ -545,18 +578,35 @@ export default function EmployeePage() {
           </a>
         </div>
 
-        <h2 className="text-2xl font-bold text-gray-800 mb-4">Helferliste</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h2 className="text-2xl font-bold text-gray-800">Helferliste</h2>
+          {basars.length > 1 && (
+            <label className="text-sm text-gray-600 flex items-center gap-2">
+              Termine von:
+              <select
+                value={helferlisteBasarId}
+                onChange={(e) => setHelferlisteBasarId(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              >
+                {basars.map(b => (
+                  <option key={b.id} value={b.id}>{b.title} ({STATUS_LABELS[b.status]})</option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
 
         <div className="space-y-8 mb-12">
           {dayOrder.map((day) => {
             const dayTasks = groupedTasks[day] || [];
-            const dateKey = `date_${day.toLowerCase()}`;
-            const dateValue = settings[dateKey];
-            const formattedDate = dateValue 
-              ? new Date(dateValue + 'T00:00:00').toLocaleDateString('de-DE', { 
-                  day: '2-digit', 
-                  month: '2-digit', 
-                  year: 'numeric' 
+            const helferlisteBasar = basars.find(b => b.id === helferlisteBasarId);
+            const dateValue = helferlisteBasar ? dateForWeekday(helferlisteBasar, day) : null;
+            const formattedDate = dateValue
+              ? dateValue.toLocaleDateString('de-DE', {
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric',
+                  timeZone: 'Europe/Berlin',
                 })
               : '';
             
@@ -851,8 +901,8 @@ export default function EmployeePage() {
         )}
       </div>
 
-      {/* Bestätigungsdialog: Verkäuferstatus umschalten */}
-      {showSellerConfirmModal && (
+      {/* Bestätigungsdialog: Teilnahme an einem Basar umschalten */}
+      {pendingBasar && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
           role="dialog"
@@ -861,29 +911,31 @@ export default function EmployeePage() {
         >
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-8 animate-fade-in">
             <div className="flex items-center gap-3 mb-4">
-              <span className="text-3xl">{sellerStatusActive ? '❌' : '✅'}</span>
+              <span className="text-3xl">{pendingBasar.myParticipation?.isActive ? '❌' : '✅'}</span>
               <h2 id="seller-modal-title" className="text-xl font-bold text-gray-800">
-                {sellerStatusActive ? 'Verkäuferstatus deaktivieren?' : 'Als Verkäufer aktivieren?'}
+                {pendingBasar.myParticipation?.isActive
+                  ? `Teilnahme an "${pendingBasar.title}" beenden?`
+                  : `An "${pendingBasar.title}" teilnehmen?`}
               </h2>
             </div>
 
             <div className="text-gray-700 space-y-2 mb-6">
-              {sellerStatusActive ? (
+              {pendingBasar.myParticipation?.isActive ? (
                 <>
-                  <p>Du möchtest deinen <strong>Verkäuferstatus deaktivieren</strong>.</p>
+                  <p>Du möchtest deine <strong>Teilnahme beenden</strong>.</p>
                   <p className="text-sm text-gray-500">
-                    Dein Status beim Basar wird dann als <span className="font-semibold text-red-600">nicht aktiv</span> markiert.
-                    Du kannst den Status jederzeit wieder aktivieren.
+                    Dein Status für diesen Basar wird dann als <span className="font-semibold text-red-600">nicht aktiv</span> markiert.
+                    Du kannst dich jederzeit wieder anmelden.
                   </p>
                 </>
               ) : (
                 <>
-                  <p>Du möchtest dich als <strong>Verkäufer aktivieren</strong>.</p>
+                  <p>Du möchtest an diesem Basar <strong>teilnehmen</strong>.</p>
                   <ul className="text-sm text-gray-500 list-disc list-inside space-y-1 mt-2">
                     <li>Dein Status wird als <span className="font-semibold text-green-600">aktiv</span> registriert.</li>
-                    <li>Du wirst beim nächsten Basar verkaufen können.</li>
+                    <li>Du wirst bei diesem Basar verkaufen können.</li>
                     <li>Verkäufernummer: <span className="font-semibold">#{sellerNumber}</span></li>
-                    <li>Du kannst den Status jederzeit wieder deaktivieren.</li>
+                    <li>Du kannst deine Teilnahme jederzeit wieder beenden.</li>
                   </ul>
                 </>
               )}
@@ -891,20 +943,20 @@ export default function EmployeePage() {
 
             <div className="flex gap-3 justify-end">
               <button
-                onClick={() => setShowSellerConfirmModal(false)}
+                onClick={() => setPendingBasar(null)}
                 className="px-5 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors font-medium"
               >
                 Abbrechen
               </button>
               <button
-                onClick={handleConfirmSellerStatusToggle}
+                onClick={handleConfirmParticipationToggle}
                 className={`px-5 py-2 rounded-lg text-white font-semibold transition-colors ${
-                  sellerStatusActive
+                  pendingBasar.myParticipation?.isActive
                     ? 'bg-red-500 hover:bg-red-600'
                     : 'bg-green-500 hover:bg-green-600'
                 }`}
               >
-                {sellerStatusActive ? 'Ja, deaktivieren' : 'Ja, aktivieren'}
+                {pendingBasar.myParticipation?.isActive ? 'Ja, beenden' : 'Ja, teilnehmen'}
               </button>
             </div>
           </div>

@@ -1,11 +1,25 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 export default function RegisterEmployeePage() {
+  return (
+    <Suspense fallback={null}>
+      <RegisterEmployeeForm />
+    </Suspense>
+  );
+}
+
+function RegisterEmployeeForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const basarId = searchParams.get('basarId');
+  // Der Titel kommt als Query-Param von der Startseite mit – /api/basars/[id]
+  // verlangt einen eingeloggten Nutzer und ist für diese anonyme Seite nicht
+  // erreichbar.
+  const basarTitle = searchParams.get('basarTitle');
   const [formData, setFormData] = useState({
     email: '',
     firstName: '',
@@ -21,6 +35,11 @@ export default function RegisterEmployeePage() {
     setError('');
     setSuccess('');
 
+    if (!basarId) {
+      setError('Bitte wählen Sie auf der Startseite einen Basar aus, für den Sie sich registrieren möchten.');
+      return;
+    }
+
     if (!agbAccepted) {
       setError('Bitte akzeptieren Sie die AGB');
       return;
@@ -35,6 +54,7 @@ export default function RegisterEmployeePage() {
         body: JSON.stringify({
           ...formData,
           isEmployee: true,
+          basarId,
         }),
       });
 
@@ -97,6 +117,18 @@ export default function RegisterEmployeePage() {
               Als Mitarbeiter erhalten Sie Login-Daten per E-Mail und können Aufgaben übernehmen sowie Kuchen registrieren.
             </p>
           </div>
+
+          {basarId && basarTitle && (
+            <div className="bg-teal-50 border border-teal-200 text-teal-800 px-4 py-3 rounded mb-6 text-base">
+              Registrierung für: <strong>{basarTitle}</strong>
+            </div>
+          )}
+          {!basarId && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6 text-base">
+              Kein Basar ausgewählt. Bitte gehen Sie zurück zur{' '}
+              <Link href="/" className="underline font-medium">Startseite</Link> und wählen Sie einen Basar aus.
+            </div>
+          )}
 
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 text-lg">

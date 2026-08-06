@@ -67,6 +67,7 @@ export const config = {
     '/api/sales/:path*',
     '/api/admin/:path*',
     '/api/task-signups/:path*',
+    '/api/chat-feedback/:path*',
     '/api/seller-articles/:path*',
     '/api/articles/:path*',
   ],

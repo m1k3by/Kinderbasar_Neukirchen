@@ -120,7 +120,6 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
         { href: '/admin/basars', label: 'Basare', active: true },
         { href: '/admin/list', label: 'Helferliste' },
         { href: '/admin/tasks', label: 'Aufgaben' },
-        { href: '/admin/settings', label: 'Einstellungen' },
         { href: '/', label: 'Logout' },
       ]} />
       <div className="text-center py-20 text-gray-500">Laden…</div>
@@ -134,7 +133,6 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
         { href: '/admin/basars', label: 'Basare', active: true },
         { href: '/admin/list', label: 'Helferliste' },
         { href: '/admin/tasks', label: 'Aufgaben' },
-        { href: '/admin/settings', label: 'Einstellungen' },
         { href: '/', label: 'Logout' },
       ]} />
       <div className="max-w-5xl mx-auto p-6">

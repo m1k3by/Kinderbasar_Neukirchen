@@ -40,6 +40,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 }
 
+// Sellers per transaction. A plain sequential loop of un-batched upserts (the old
+// implementation) has no transaction boundary at all: with 2000 sellers, a function timeout
+// midway through leaves an inconsistent mix of updated and stale settlements. Chunking into
+// batches, each wrapped in its own transaction, bounds how much work is in flight
+// un-committed at any point – if a batch fails, only that batch rolls back, and every
+// previously completed batch is already durably written.
+const SETTLEMENT_BATCH_SIZE = 100;
+
 // POST /api/basars/:id/settlements – generate settlements for all sellers (admin only)
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -55,43 +63,61 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const basarSellers = await prisma.basarSeller.findMany({
       where: { basarId },
-      include: {
+      select: {
+        id: true,
+        commissionOverride: true,
         articles: {
-          include: { sales: true },
+          select: {
+            status: true,
+            sales: { select: { isCancelled: true, salePrice: true } },
+          },
         },
       },
     });
 
-    const created = [];
-    for (const bs of basarSellers) {
-      const commissionRate = Number(bs.commissionOverride ?? basar.commissionPercent) / 100;
-      const entryFeeAmt = Number(basar.entryFee);
+    const entryFeeAmt = Number(basar.entryFee);
+    let created = 0;
+    const totalBatches = Math.max(1, Math.ceil(basarSellers.length / SETTLEMENT_BATCH_SIZE));
 
-      const grossRevenue = bs.articles
-        .filter(a => a.status === 'SOLD')
-        .map(a => a.sales?.find(s => !s.isCancelled))
-        .filter((s): s is NonNullable<typeof s> => !!s)
-        .reduce((sum, s) => sum + Number(s.salePrice), 0);
+    for (let i = 0; i < basarSellers.length; i += SETTLEMENT_BATCH_SIZE) {
+      const batch = basarSellers.slice(i, i + SETTLEMENT_BATCH_SIZE);
 
-      const commissionAmount = Math.round(grossRevenue * commissionRate * 100) / 100;
-      const netPayout = Math.max(0, grossRevenue - commissionAmount - entryFeeAmt);
+      const upserts = batch.map((bs) => {
+        const commissionRate = Number(bs.commissionOverride ?? basar.commissionPercent) / 100;
 
-      const settlement = await prisma.settlement.upsert({
-        where: { basarSellerId: bs.id },
-        update: { grossRevenue, commissionAmount, entryFeeAmount: entryFeeAmt, netPayout },
-        create: {
-          basarId,
-          basarSellerId: bs.id,
-          grossRevenue,
-          commissionAmount,
-          entryFeeAmount: entryFeeAmt,
-          netPayout,
-        },
+        const grossRevenue = bs.articles
+          .filter((a) => a.status === 'SOLD')
+          .map((a) => a.sales?.find((s) => !s.isCancelled))
+          .filter((s): s is NonNullable<typeof s> => !!s)
+          .reduce((sum, s) => sum + Number(s.salePrice), 0);
+
+        const commissionAmount = Math.round(grossRevenue * commissionRate * 100) / 100;
+        const netPayout = Math.max(0, grossRevenue - commissionAmount - entryFeeAmt);
+
+        return prisma.settlement.upsert({
+          where: { basarSellerId: bs.id },
+          update: { grossRevenue, commissionAmount, entryFeeAmount: entryFeeAmt, netPayout },
+          create: {
+            basarId,
+            basarSellerId: bs.id,
+            grossRevenue,
+            commissionAmount,
+            entryFeeAmount: entryFeeAmt,
+            netPayout,
+          },
+        });
       });
-      created.push(settlement);
+
+      const results = await prisma.$transaction(upserts);
+      created += results.length;
     }
 
-    return NextResponse.json({ created: created.length, settlements: created });
+    return NextResponse.json({
+      created,
+      total: basarSellers.length,
+      batches: totalBatches,
+      batchSize: SETTLEMENT_BATCH_SIZE,
+    });
   } catch (error) {
     console.error('POST /api/basars/[id]/settlements error:', error);
     return NextResponse.json({ error: 'Interner Serverfehler' }, { status: 500 });

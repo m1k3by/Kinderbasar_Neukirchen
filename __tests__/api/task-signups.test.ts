@@ -12,14 +12,23 @@ const prismaMock = vi.hoisted(() => ({
   taskSignup: {
     findUnique: vi.fn(),
     findMany: vi.fn(),
+    count: vi.fn(),
     create: vi.fn(),
     delete: vi.fn(),
   },
   task: {
     findUnique: vi.fn(),
   },
+  $transaction: vi.fn(),
 }));
 vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
+
+// Interactive transaction: prisma.$transaction(async (tx) => {...}). The mocked tx client
+// reuses the same model mocks as the top-level prismaMock (mirrors the pattern in
+// basars-id-sales.test.ts).
+function mockTransactionSuccess() {
+  prismaMock.$transaction.mockImplementation(async (fn: any) => fn(prismaMock));
+}
 
 import { POST, DELETE } from '@/app/api/task-signups/route';
 
@@ -47,7 +56,10 @@ const fakeTask = {
 };
 
 describe('POST /api/task-signups', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockTransactionSuccess();
+  });
 
   it('returns 401 when no token', async () => {
     cookiesGetMock.mockReturnValue(undefined);
@@ -83,24 +95,40 @@ describe('POST /api/task-signups', () => {
     expect(res.status).toBe(404);
   });
 
-  it('returns 400 when no capacity left', async () => {
+  it('returns 400 when no capacity left (fresh count inside the transaction)', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.taskSignup.findUnique.mockResolvedValue(null);
-    prismaMock.task.findUnique.mockResolvedValue({
-      ...fakeTask,
-      signups: [{ id: 's1' }, { id: 's2' }, { id: 's3' }, { id: 's4' }, { id: 's5' }], // capacity exceeded
-    });
+    prismaMock.task.findUnique.mockResolvedValue(fakeTask); // capacity: 5
     prismaMock.taskSignup.findMany.mockResolvedValue([]);
+    prismaMock.taskSignup.count.mockResolvedValue(5); // already at capacity
     const res = await POST(makePostRequest({ taskId: 'task-1', sellerId: 1234 }));
     expect(res.status).toBe(400);
     expect((await res.json()).error).toMatch(/keine plätze/i);
+    expect(prismaMock.taskSignup.create).not.toHaveBeenCalled();
+  });
+
+  it('capacity check and create run inside one transaction (race-safety)', async () => {
+    // This is the behavior that prevents overbooking when the Helferliste opens and everyone
+    // signs up at once: the count is re-read fresh inside prisma.$transaction rather than
+    // relying on a value read before the transaction started.
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.taskSignup.findUnique.mockResolvedValue(null);
+    prismaMock.task.findUnique.mockResolvedValue(fakeTask);
+    prismaMock.taskSignup.findMany.mockResolvedValue([]);
+    prismaMock.taskSignup.count.mockResolvedValue(0);
+    prismaMock.taskSignup.create.mockResolvedValue({ id: 'new-signup', taskId: 'task-1', sellerId: 1234 });
+
+    await POST(makePostRequest({ taskId: 'task-1', sellerId: 1234 }));
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+    expect(prismaMock.taskSignup.count).toHaveBeenCalledWith({ where: { taskId: 'task-1' } });
   });
 
   it('creates signup and returns success → 200 (self)', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.taskSignup.findUnique.mockResolvedValue(null);
-    prismaMock.task.findUnique.mockResolvedValue({ ...fakeTask, signups: [] }); // has capacity
+    prismaMock.task.findUnique.mockResolvedValue(fakeTask); // has capacity
     prismaMock.taskSignup.findMany.mockResolvedValue([]);
+    prismaMock.taskSignup.count.mockResolvedValue(0);
     prismaMock.taskSignup.create.mockResolvedValue({ id: 'new-signup', taskId: 'task-1', sellerId: 1234 });
 
     const res = await POST(makePostRequest({ taskId: 'task-1', sellerId: 1234 }));
@@ -111,8 +139,9 @@ describe('POST /api/task-signups', () => {
   it('admin can sign up any seller', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.taskSignup.findUnique.mockResolvedValue(null);
-    prismaMock.task.findUnique.mockResolvedValue({ ...fakeTask, signups: [] });
+    prismaMock.task.findUnique.mockResolvedValue(fakeTask);
     prismaMock.taskSignup.findMany.mockResolvedValue([]);
+    prismaMock.taskSignup.count.mockResolvedValue(0);
     prismaMock.taskSignup.create.mockResolvedValue({ id: 'new-signup', taskId: 'task-1', sellerId: 9999 });
 
     const res = await POST(makePostRequest({ taskId: 'task-1', sellerId: 9999 }));

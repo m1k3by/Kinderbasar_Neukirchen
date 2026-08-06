@@ -75,7 +75,7 @@ describe('POST /api/basars', () => {
     expect(res.status).toBe(403);
   });
 
-  it('returns 400 when title or eventDate missing', async () => {
+  it('returns 400 when title is missing', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     const res = await POST(makeRequest('POST', { description: 'no title' }));
     expect(res.status).toBe(400);
@@ -84,7 +84,7 @@ describe('POST /api/basars', () => {
   it('creates basar and returns 201 for admin', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.basar.create.mockResolvedValue({ ...fakeBasar, id: 'basar-new' });
-    const res = await POST(makeRequest('POST', { title: 'New Basar', eventDate: '2025-06-01' }));
+    const res = await POST(makeRequest('POST', { title: 'New Basar', dateFriday: '2025-06-01' }));
     expect(res.status).toBe(201);
     expect((await res.json()).title).toBe('Basar 2025'); // mock returns fakeBasar
   });
@@ -92,7 +92,7 @@ describe('POST /api/basars', () => {
   it('returns 500 on DB error', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.basar.create.mockRejectedValue(new Error('DB error'));
-    const res = await POST(makeRequest('POST', { title: 'Fail Basar', eventDate: '2025-06-01' }));
+    const res = await POST(makeRequest('POST', { title: 'Fail Basar', dateFriday: '2025-06-01' }));
     expect(res.status).toBe(500);
   });
 });

@@ -3,6 +3,7 @@
 import { useState, useEffect, use, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '../../../components/Header';
+import { parseSizes } from '../../../lib/sizes';
 
 interface Article {
   id: string;
@@ -32,6 +33,8 @@ interface BasarDetail {
   commissionPercent: number;
   entryFee: number;
   status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
+  allowedSizes?: string;
+  myParticipation?: { isActive: boolean; activatedAt: string | null } | null;
 }
 
 interface Settlement {
@@ -90,22 +93,18 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   async function loadAll() {
     setLoading(true);
     try {
-      const [basarRes, articlesRes, sellersRes, settingsRes] = await Promise.all([
+      const [basarRes, articlesRes, meRes] = await Promise.all([
         fetch(`/api/basars/${basarId}`),
         fetch(`/api/basars/${basarId}/articles`),
-        fetch('/api/sellers'),
-        fetch('/api/settings'),
+        fetch('/api/me'),
       ]);
 
-      if (settingsRes.ok) {
-        const sData = await settingsRes.json();
-        const raw: string = sData.allowed_sizes ||
-          'XXS,XS,S,M,L,XL,XXL,3XL,4XL,5XL,50,56,62,68,74,80,86,92,98,104,110,116,122,128,134,140,146,152,158,164,170,176,W24,W25,W26,W27,W28,W29,W30,W31,W32,W33,W34,W36,W38,W40,W42,W44,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50';
-        setAllowedSizes(raw.split(',').map(s => s.trim()).filter(Boolean));
-      }
-
       let basarData: BasarDetail | null = null;
-      if (basarRes.ok) { basarData = await basarRes.json(); setBasar(basarData); }
+      if (basarRes.ok) {
+        basarData = await basarRes.json();
+        setBasar(basarData);
+        setAllowedSizes(parseSizes(basarData?.allowedSizes));
+      }
 
       // CLOSED basars are viewable (read-only settlement/archive) – no redirect
 
@@ -114,15 +113,15 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
         setArticles(data.articles ?? []);
         setBasarSeller(data.basarSeller ?? null);
       }
-      if (sellersRes.ok && sellerId) {
-        const sellers = await sellersRes.json();
-        const me = sellers.find((s: any) => s.sellerId === sellerId);
-        if (me) {
+      const isActiveParticipant = basarData?.myParticipation?.isActive ?? false;
+      setActiveSellerStatus(isActiveParticipant);
+      if (meRes.ok && sellerId) {
+        const me = await meRes.json();
+        if (me.role !== 'admin') {
           setSellerName(`${me.firstName} ${me.lastName}`);
-          setActiveSellerStatus(me.sellerStatusActive ?? false);
           setIsEmployee(me.isEmployee || false);
-          // Load archive for OPEN basars where user is active
-          if (me.sellerStatusActive && basarData?.status === 'OPEN') {
+          // Load archive for OPEN basars where user is an active participant
+          if (isActiveParticipant && basarData?.status === 'OPEN') {
             const archRes = await fetch(`/api/seller-articles?basarId=${basarId}`);
             if (archRes.ok) {
               const archData = await archRes.json();
@@ -369,23 +368,134 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
     try {
       const { jsPDF } = await import('jspdf');
       const doc = new jsPDF({ orientation: 'portrait', format: 'a4' });
-      doc.setFontSize(18);
-      doc.text('Meine Abrechnung – Kinderbasar', 20, 20);
-      doc.setFontSize(12);
-      doc.text(basar?.title ?? '', 20, 30);
-      doc.text(`Verkäufer #${basarSeller?.seller?.sellerId ?? basarSeller?.sellerId}: ${sellerName}`, 20, 40);
-      doc.setFontSize(11);
-      doc.text(`Brutto-Erlös:`, 20, 60);
-      doc.text(`${fmt(Number(settlement.grossRevenue))} €`, 170, 60, { align: 'right' });
-      doc.text(`Provision (${basar?.commissionPercent ?? 0}%):`, 20, 70);
-      doc.text(`- ${fmt(Number(settlement.commissionAmount))} €`, 170, 70, { align: 'right' });
-      doc.text(`Teilnahmegebühr:`, 20, 80);
-      doc.text(`- ${fmt(Number(settlement.entryFeeAmount))} €`, 170, 80, { align: 'right' });
-      doc.setFontSize(14);
+      const mL = 18;   // left margin
+      const mR = 192;  // right margin
+      const soldArticles = articles.filter(a => a.status === 'SOLD');
+      const sellerId = basarSeller?.seller?.sellerId ?? basarSeller?.sellerId;
+
+      // ── Header ──────────────────────────────────────────────
       doc.setFont('helvetica', 'bold');
-      doc.text(`Netto-Auszahlung:`, 20, 96);
-      doc.text(`${fmt(Number(settlement.netPayout))} €`, 170, 96, { align: 'right' });
-      doc.save(`Abrechnung-${sellerName.replace(' ', '-')}.pdf`);
+      doc.setFontSize(18);
+      doc.text('Abrechnung Kinderbasar', mL, 22);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(12);
+      doc.text(basar?.title ?? '', mL, 32);
+      doc.text(`Verkäufer #${sellerId}: ${sellerName}`, mL, 40);
+
+      doc.setFontSize(9);
+      doc.setTextColor(140);
+      doc.text(`Erstellt: ${new Date().toLocaleDateString('de-DE')}`, mL, 48);
+      doc.setTextColor(0);
+
+      doc.setDrawColor(210);
+      doc.line(mL, 53, mR, 53);
+
+      // ── Zusammenfassung ─────────────────────────────────────
+      let y = 63;
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(130);
+      doc.text('ZUSAMMENFASSUNG', mL, y);
+      doc.setTextColor(0);
+      y += 7;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(11);
+      const summaryRows: [string, string][] = [
+        ['Brutto-Erlös:', `${fmt(Number(settlement.grossRevenue))} €`],
+        [`Provision (${basar?.commissionPercent ?? 0}%):`, `– ${fmt(Number(settlement.commissionAmount))} €`],
+        ['Teilnahmegebühr:', `– ${fmt(Number(settlement.entryFeeAmount))} €`],
+      ];
+      for (const [label, value] of summaryRows) {
+        doc.text(label, mL, y);
+        doc.text(value, mR, y, { align: 'right' });
+        y += 8;
+      }
+      doc.setDrawColor(180);
+      doc.line(mL, y, mR, y);
+      y += 7;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.text('Netto-Auszahlung:', mL, y);
+      doc.text(`${fmt(Number(settlement.netPayout))} €`, mR, y, { align: 'right' });
+      y += 14;
+
+      // ── Artikelliste ────────────────────────────────────────
+      doc.setDrawColor(210);
+      doc.line(mL, y, mR, y);
+      y += 9;
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(130);
+      doc.text(`VERKAUFTE ARTIKEL (${soldArticles.length})`, mL, y);
+      doc.setTextColor(0);
+      y += 7;
+
+      if (soldArticles.length === 0) {
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(10);
+        doc.setTextColor(160);
+        doc.text('Keine Artikel verkauft.', mL, y);
+        doc.setTextColor(0);
+      } else {
+        // Table header row
+        const colNr   = mL + 2;
+        const colDesc = mL + 12;
+        const colSize = mL + 108;
+        const colTime = mL + 138;
+        const colPrice = mR - 2;
+
+        doc.setFillColor(243, 244, 246);
+        doc.rect(mL, y - 5, mR - mL, 7, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.5);
+        doc.text('#', colNr, y);
+        doc.text('Beschreibung', colDesc, y);
+        doc.text('Größe', colSize, y);
+        doc.text('Uhrzeit', colTime, y);
+        doc.text('Preis', colPrice, y, { align: 'right' });
+        y += 2;
+        doc.setDrawColor(200);
+        doc.line(mL, y, mR, y);
+        y += 5;
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+
+        soldArticles.forEach((a, i) => {
+          if (y > 272) {
+            doc.addPage();
+            y = 20;
+          }
+          if (i % 2 === 0) {
+            doc.setFillColor(249, 250, 251);
+            doc.rect(mL, y - 4.5, mR - mL, 7, 'F');
+          }
+          doc.text(String(i + 1), colNr, y);
+          const title = a.title.length > 40 ? a.title.substring(0, 38) + '…' : a.title;
+          doc.text(title, colDesc, y);
+          doc.text(a.sizeLabel ?? '–', colSize, y);
+          const t = a.soldAt
+            ? new Date(a.soldAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+            : '–';
+          doc.text(t, colTime, y);
+          doc.text(`${fmt(Number(a.price))} €`, colPrice, y, { align: 'right' });
+          y += 7;
+        });
+
+        // Totals footer
+        doc.setDrawColor(180);
+        doc.line(mL, y, mR, y);
+        y += 6;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.text(`${soldArticles.length} Artikel gesamt`, colDesc, y);
+        doc.text(`${fmt(Number(settlement.grossRevenue))} €`, colPrice, y, { align: 'right' });
+      }
+
+      doc.save(`Abrechnung-${sellerName.replace(/\s+/g, '-')}.pdf`);
     } catch (err) {
       console.error(err);
       showMsg('Fehler beim PDF-Export', false);
@@ -464,8 +574,8 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
         {/* Not active warning */}
         {basar.status === 'OPEN' && !activeSellerStatus && (
           <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-5 text-orange-800">
-            <strong>Hinweis:</strong> Dein Verkäuferstatus ist aktuell inaktiv. Aktiviere ihn auf der{' '}
-            <a href="/employee" className="underline font-semibold">Helfer-Seite</a>, um Artikel anlegen zu können.
+            <strong>Hinweis:</strong> Du bist für diesen Basar aktuell nicht als Teilnehmer aktiv. Melde dich auf der{' '}
+            <a href={isEmployee ? '/employee' : '/seller'} className="underline font-semibold">Übersichtsseite</a> an, um Artikel anlegen zu können.
           </div>
         )}
 

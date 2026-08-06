@@ -66,7 +66,23 @@ describe('GET /api/cakes', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toHaveLength(1);
-    expect(prismaMock.cake.findMany).toHaveBeenCalledWith({ include: undefined });
+    expect(prismaMock.cake.findMany).toHaveBeenCalledWith({
+      select: { id: true, cakeName: true, sellerId: true },
+    });
+  });
+
+  it('admin select includes seller PII, non-admin select does not', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.cake.findMany.mockResolvedValue([fakeCake]);
+    await GET(makeGetRequest());
+    expect(prismaMock.cake.findMany).toHaveBeenCalledWith({
+      select: {
+        id: true,
+        cakeName: true,
+        sellerId: true,
+        seller: { select: { firstName: true, lastName: true, email: true } },
+      },
+    });
   });
 
   it('returns empty array when no cakes', async () => {

@@ -4,27 +4,57 @@ import { useState, useEffect } from 'react';
 import Header from '../../components/Header';
 
 interface Seller {
-  id: string;
   sellerId: number;
-  sellerStatusActive?: boolean;
+  // Teilnahme am unten gewählten Basar (via ?basarId= an /api/sellers). Ersetzt
+  // das frühere globale Seller.sellerStatusActive.
+  participation?: { isActive: boolean; activatedAt: string | null } | null;
   firstName: string;
   lastName: string;
   email: string;
   isEmployee: boolean;
   isCashier: boolean;
   createdAt: string;
-  taskSignups?: any[];
-  cakes?: any[];
-  qrCode?: string;
-  barcode?: string;
+  _count?: { taskSignups: number; cakes: number };
+}
+
+interface Basar {
+  id: string;
+  title: string;
+  status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
+  isArchived: boolean;
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: 'Vorbereitung', OPEN: 'Anmeldung offen', ACTIVE: 'Läuft', CLOSED: 'Beendet',
+};
+
+// /api/sellers is cursor-paginated (admin-only, up to 500 rows per page) and no longer embeds
+// qrCode/barcode blobs or full taskSignups/cakes arrays. Loop pages to reassemble the full
+// list for this table's client-side sort/filter/search UI.
+async function fetchAllSellers(basarId: string): Promise<Seller[]> {
+  const all: Seller[] = [];
+  let cursor: number | null = null;
+  do {
+    const qs = new URLSearchParams({ limit: '500' });
+    if (cursor !== null) qs.set('cursor', String(cursor));
+    if (basarId) qs.set('basarId', basarId);
+    const res = await fetch(`/api/sellers?${qs.toString()}`);
+    if (!res.ok) throw new Error('Failed to fetch sellers');
+    const data = await res.json();
+    all.push(...(data.sellers ?? []));
+    cursor = data.nextCursor;
+  } while (cursor !== null);
+  return all;
 }
 
 export default function AdminListPage() {
   const [sellers, setSellers] = useState<Seller[]>([]);
+  const [basars, setBasars] = useState<Basar[]>([]);
+  const [selectedBasarId, setSelectedBasarId] = useState<string>('');
   const [filter, setFilter] = useState<'all' | 'seller' | 'employee'>('all');
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [sellerStatusFilter, setSellerStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
-  const [sortField, setSortField] = useState<keyof Seller | 'active' | null>(null);
+  const [sortField, setSortField] = useState<keyof Seller | 'active' | 'sellerStatusActive' | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
@@ -51,20 +81,58 @@ export default function AdminListPage() {
   const [editUserLoading, setEditUserLoading] = useState(false);
 
   useEffect(() => {
-    loadSellers();
+    loadBasars();
   }, []);
 
-  async function loadSellers() {
+  useEffect(() => {
+    if (selectedBasarId) loadSellers();
+  }, [selectedBasarId]);
+
+  async function loadBasars() {
     try {
-      const res = await fetch('/api/sellers');
-      if (res.ok) {
-        const sellersData = await res.json();
-        setSellers(sellersData);
-      }
+      const res = await fetch('/api/basars');
+      if (!res.ok) return;
+      const data = await res.json();
+      const relevant: Basar[] = (data.basars ?? []).filter((b: Basar) => !b.isArchived && b.status !== 'DRAFT');
+      setBasars(relevant);
+      const defaultId = relevant.find(b => b.status === 'ACTIVE')?.id
+        || relevant.find(b => b.status === 'OPEN')?.id
+        || relevant[0]?.id
+        || '';
+      setSelectedBasarId(defaultId);
+      if (!defaultId) setLoading(false); // no basar → nothing to load, don't spin forever
+    } catch (error) {
+      console.error('Error loading basars:', error);
+      setLoading(false);
+    }
+  }
+
+  async function loadSellers() {
+    setLoading(true);
+    try {
+      const sellersData = await fetchAllSellers(selectedBasarId);
+      setSellers(sellersData);
     } catch (error) {
       console.error('Error loading sellers:', error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleShowQr(sellerId: number) {
+    try {
+      const res = await fetch(`/api/sellers/${sellerId}/qr`);
+      if (res.ok) {
+        const data = await res.json();
+        window.open(data.qrCode, '_blank');
+      } else {
+        setMessage('Fehler beim Laden des QR-Codes');
+        setTimeout(() => setMessage(''), 3000);
+      }
+    } catch (error) {
+      console.error('Error loading QR code:', error);
+      setMessage('Fehler beim Laden des QR-Codes');
+      setTimeout(() => setMessage(''), 3000);
     }
   }
 
@@ -78,18 +146,19 @@ export default function AdminListPage() {
     // Filter by role
     if (filter === 'seller' && s.isEmployee) return false;
     if (filter === 'employee' && !s.isEmployee) return false;
-    
+
     // Filter by active status
     if (activeFilter !== 'all') {
-      const hasActivity = (s.taskSignups?.length || 0) > 0 || (s.cakes?.length || 0) > 0;
+      const hasActivity = (s._count?.taskSignups || 0) > 0 || (s._count?.cakes || 0) > 0;
       if (activeFilter === 'active' && !hasActivity) return false;
       if (activeFilter === 'inactive' && hasActivity) return false;
     }
     
-    // Filter by seller status
+    // Filter by participation in the selected basar
     if (sellerStatusFilter !== 'all') {
-      if (sellerStatusFilter === 'active' && !s.sellerStatusActive) return false;
-      if (sellerStatusFilter === 'inactive' && s.sellerStatusActive) return false;
+      const isActive = s.participation?.isActive ?? false;
+      if (sellerStatusFilter === 'active' && !isActive) return false;
+      if (sellerStatusFilter === 'inactive' && isActive) return false;
     }
     
     return true;
@@ -104,8 +173,8 @@ export default function AdminListPage() {
 
     if (sortField === 'active') {
       // Sort by activity status
-      const aHasActivity = (a.taskSignups?.length || 0) > 0 || (a.cakes?.length || 0) > 0;
-      const bHasActivity = (b.taskSignups?.length || 0) > 0 || (b.cakes?.length || 0) > 0;
+      const aHasActivity = (a._count?.taskSignups || 0) > 0 || (a._count?.cakes || 0) > 0;
+      const bHasActivity = (b._count?.taskSignups || 0) > 0 || (b._count?.cakes || 0) > 0;
       aValue = aHasActivity ? 1 : 0;
       bValue = bHasActivity ? 1 : 0;
     } else if (sortField === 'sellerId') {
@@ -115,8 +184,8 @@ export default function AdminListPage() {
       aValue = a.isEmployee ? 1 : 0;
       bValue = b.isEmployee ? 1 : 0;
     } else if (sortField === 'sellerStatusActive') {
-      aValue = a.sellerStatusActive ? 1 : 0;
-      bValue = b.sellerStatusActive ? 1 : 0;
+      aValue = a.participation?.isActive ? 1 : 0;
+      bValue = b.participation?.isActive ? 1 : 0;
     } else if (sortField === 'firstName' || sortField === 'lastName' || sortField === 'email') {
       aValue = a[sortField]?.toLowerCase() || '';
       bValue = b[sortField]?.toLowerCase() || '';
@@ -130,7 +199,7 @@ export default function AdminListPage() {
     return 0;
   });
 
-  function handleSort(field: keyof Seller | 'active') {
+  function handleSort(field: keyof Seller | 'active' | 'sellerStatusActive') {
     if (sortField === field) {
       // Toggle direction if clicking the same field
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -141,14 +210,14 @@ export default function AdminListPage() {
     }
   }
 
-  function getSortIcon(field: keyof Seller | 'active') {
+  function getSortIcon(field: keyof Seller | 'active' | 'sellerStatusActive') {
     if (sortField !== field) return ' ↕';
     return sortDirection === 'asc' ? ' ↑' : ' ↓';
   }
 
   function getActiveStatus(seller: Seller) {
     // Mitarbeiter sind nur aktiv wenn sie Tasks oder Kuchen haben
-    const hasActivity = (seller.taskSignups?.length || 0) > 0 || (seller.cakes?.length || 0) > 0;
+    const hasActivity = (seller._count?.taskSignups || 0) > 0 || (seller._count?.cakes || 0) > 0;
     
     if (seller.isEmployee) {
       // Mitarbeiter: zeige "Aktiv" oder "Inaktiv"
@@ -217,16 +286,18 @@ export default function AdminListPage() {
   }
 
   async function toggleSellerStatus(sellerId: number) {
+    if (!selectedBasarId) return;
+    const seller = sellers.find(s => s.sellerId === sellerId);
+    const nextActive = !(seller?.participation?.isActive ?? false);
     try {
-      const res = await fetch('/api/admin/toggle-seller-status', {
-        method: 'POST',
+      const res = await fetch(`/api/basars/${selectedBasarId}/participation`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sellerId }),
+        body: JSON.stringify({ sellerId, isActive: nextActive }),
       });
 
       if (res.ok) {
-        const data = await res.json();
-        setMessage(data.message);
+        setMessage(nextActive ? 'Teilnahme aktiviert' : 'Teilnahme deaktiviert');
         setTimeout(() => setMessage(''), 3000);
         loadSellers(); // Reload list
       } else {
@@ -235,8 +306,8 @@ export default function AdminListPage() {
         setTimeout(() => setMessage(''), 5000);
       }
     } catch (error) {
-      console.error('Error toggling seller status:', error);
-      setMessage('Fehler beim Ändern des Verkäufer Status');
+      console.error('Error toggling participation:', error);
+      setMessage('Fehler beim Ändern der Teilnahme');
       setTimeout(() => setMessage(''), 5000);
     }
   }
@@ -270,8 +341,9 @@ export default function AdminListPage() {
   }
 
   async function handleGlobalReset() {
+    if (!selectedBasarId) return;
     try {
-      const res = await fetch('/api/admin/reset-seller-status', {
+      const res = await fetch(`/api/basars/${selectedBasarId}/participation/reset`, {
         method: 'POST',
       });
       const data = await res.json();
@@ -416,7 +488,6 @@ export default function AdminListPage() {
           { href: '/admin/basars', label: 'Basare' },
           { href: '/admin/list', label: 'Helferliste', active: true },
           { href: '/admin/tasks', label: 'Aufgaben' },
-          { href: '/admin/settings', label: 'Einstellungen' },
           { href: '/', label: 'Logout' },
         ]}
       />
@@ -430,21 +501,44 @@ export default function AdminListPage() {
         
         {/* Global Actions */}
         <div className="mb-8 bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-bold text-gray-800 mb-4">Globale Aktionen</h2>
-          
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h2 className="text-2xl font-bold text-gray-800">Globale Aktionen</h2>
+            {basars.length > 0 && (
+              <label className="text-sm text-gray-600 flex items-center gap-2">
+                Teilnahme-Basar:
+                <select
+                  value={selectedBasarId}
+                  onChange={(e) => setSelectedBasarId(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {basars.map(b => (
+                    <option key={b.id} value={b.id}>{b.title} ({STATUS_LABELS[b.status]})</option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
+
+          {basars.length === 0 && (
+            <p className="text-amber-700 text-sm mb-4">
+              Kein Basar vorhanden – Teilnahme-Status kann erst nach Anlage eines Basars verwaltet werden.
+            </p>
+          )}
+
           <div className="flex flex-col md:flex-row items-start gap-4">
             <div className="flex-1">
               <p className="text-gray-600 mb-2">
-                Setzen Sie den Status aller Verkäufer (inkl. Mitarbeiter) auf "Inaktiv".
+                Setzen Sie die Teilnahme aller Verkäufer (inkl. Mitarbeiter) am gewählten Basar auf &quot;Inaktiv&quot;.
               </p>
               <button
                 onClick={() => setShowResetConfirm1(true)}
-                className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
+                disabled={!selectedBasarId}
+                className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Alle Verkäufer Status zurücksetzen
+                Teilnahme für diesen Basar zurücksetzen
               </button>
             </div>
-            
+
             <div className="flex-1">
               <p className="text-gray-600 mb-2">
                 Neuen Verkäufer oder Mitarbeiter anlegen.
@@ -464,7 +558,10 @@ export default function AdminListPage() {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full">
               <h3 className="text-xl font-bold mb-4">Wirklich?</h3>
-              <p className="mb-6">Möchten Sie wirklich alle Verkäufer Status auf inaktiv setzen?</p>
+              <p className="mb-6">
+                Möchten Sie wirklich die Teilnahme aller Verkäufer für{' '}
+                <strong>{basars.find(b => b.id === selectedBasarId)?.title ?? 'diesen Basar'}</strong> auf inaktiv setzen?
+              </p>
               <div className="flex justify-end gap-4">
                 <button
                   onClick={() => setShowResetConfirm1(false)}
@@ -735,7 +832,7 @@ export default function AdminListPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Verkäufer Status</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Teilnahme</label>
             <select
               value={sellerStatusFilter}
               onChange={(e) => setSellerStatusFilter(e.target.value as any)}
@@ -796,7 +893,7 @@ export default function AdminListPage() {
                     className="w-20 px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort('sellerStatusActive')}
                   >
-                    Verkäufer Status{getSortIcon('sellerStatusActive')}
+                    Teilnahme{getSortIcon('sellerStatusActive')}
                   </th>
                   <th 
                     className="w-20 px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
@@ -824,21 +921,18 @@ export default function AdminListPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {sortedSellers.length > 0 ? (
                   sortedSellers.map((seller, idx) => (
-                    <tr key={seller.id} className="hover:bg-gray-50">
+                    <tr key={seller.sellerId} className="hover:bg-gray-50">
                       <td className="px-2 py-2 whitespace-nowrap text-sm font-mono text-gray-900">
                         {seller.sellerId}
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap text-sm">
-                        {seller.qrCode ? (
-                          <img 
-                            src={seller.qrCode} 
-                            alt="QR" 
-                            className="w-10 h-10 cursor-pointer hover:scale-150 transition-transform"
-                            onClick={() => window.open(seller.qrCode, '_blank')}
-                          />
-                        ) : (
-                          <span className="text-gray-400">–</span>
-                        )}
+                        <button
+                          onClick={() => handleShowQr(seller.sellerId)}
+                          className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-xs font-medium transition-colors"
+                          title="QR-Code anzeigen (wird bei Bedarf geladen)"
+                        >
+                          QR
+                        </button>
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap text-sm">
                         <span
@@ -852,9 +946,9 @@ export default function AdminListPage() {
                         </span>
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap text-sm">
-                        {typeof seller.sellerStatusActive === 'boolean' ? (
-                          <span className={`px-2 py-1 text-xs rounded font-medium ${seller.sellerStatusActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                            {seller.sellerStatusActive ? 'Aktiv' : 'Inaktiv'}
+                        {selectedBasarId ? (
+                          <span className={`px-2 py-1 text-xs rounded font-medium ${seller.participation?.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                            {seller.participation?.isActive ? 'Aktiv' : 'Inaktiv'}
                           </span>
                         ) : (
                           <span className="text-gray-400">–</span>
@@ -889,14 +983,15 @@ export default function AdminListPage() {
                           </button>
                           <button
                             onClick={() => toggleSellerStatus(seller.sellerId)}
-                            className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                              seller.sellerStatusActive
+                            disabled={!selectedBasarId}
+                            className={`px-2 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                              seller.participation?.isActive
                                 ? 'bg-red-500 hover:bg-red-600 text-white'
                                 : 'bg-green-500 hover:bg-green-600 text-white'
                             }`}
-                            title={seller.sellerStatusActive ? 'Status deaktivieren' : 'Status aktivieren'}
+                            title={seller.participation?.isActive ? 'Teilnahme deaktivieren' : 'Teilnahme aktivieren'}
                           >
-                            {seller.sellerStatusActive ? 'Deakt' : 'Akt'}
+                            {seller.participation?.isActive ? 'Deakt' : 'Akt'}
                           </button>
                           <button
                             onClick={() => toggleCashierStatus(seller.sellerId)}

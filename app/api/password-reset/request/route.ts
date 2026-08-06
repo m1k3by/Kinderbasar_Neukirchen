@@ -2,10 +2,14 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import crypto from 'crypto';
 import { sendMail } from '@/app/lib/mail';
+import { rateLimit } from '@/app/lib/rateLimit';
 
 export async function POST(req: Request) {
+  const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown';
+
   try {
-    const { email } = await req.json();
+    const { email: emailInput } = await req.json();
+    const email = emailInput?.toLowerCase();
 
     if (!email) {
       return NextResponse.json(
@@ -14,9 +18,26 @@ export async function POST(req: Request) {
       );
     }
 
+    // Rate limiting: per-email (the identity that actually matters here) rather than per-IP
+    // – a bazaar hall or a family shares one NAT IP, so a strict per-IP limit would lock out
+    // legitimate co-located users. A much higher per-IP limit is kept as a coarse abuse guard.
+    // Rate limiting by email does not weaken the anti-enumeration response below: both a
+    // known and an unknown email get throttled identically, and the ambiguous success
+    // message is unchanged either way.
+    const [emailAllowed, ipAllowed] = await Promise.all([
+      rateLimit(`password-reset:email:${email}`, { maxRequests: 5, windowMs: 15 * 60 * 1000 }),
+      rateLimit(`password-reset:ip:${ip}`, { maxRequests: 50, windowMs: 15 * 60 * 1000 }),
+    ]);
+    if (!emailAllowed || !ipAllowed) {
+      return NextResponse.json(
+        { error: 'Zu viele Anfragen. Bitte versuchen Sie es später erneut.' },
+        { status: 429 }
+      );
+    }
+
     // Suche Seller mit dieser E-Mail
     const seller = await prisma.seller.findUnique({
-      where: { email: email.toLowerCase() },
+      where: { email },
     });
 
     // Aus Sicherheitsgründen immer erfolgreiche Antwort zurückgeben

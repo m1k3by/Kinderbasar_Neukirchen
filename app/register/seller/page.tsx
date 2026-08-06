@@ -1,11 +1,25 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 export default function RegisterSellerPage() {
+  return (
+    <Suspense fallback={null}>
+      <RegisterSellerForm />
+    </Suspense>
+  );
+}
+
+function RegisterSellerForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const basarId = searchParams.get('basarId');
+  // Der Titel kommt als Query-Param von der Startseite mit – /api/basars/[id]
+  // verlangt einen eingeloggten Nutzer und ist für diese anonyme Seite nicht
+  // erreichbar.
+  const basarTitle = searchParams.get('basarTitle');
   const [formData, setFormData] = useState({
     email: '',
     firstName: '',
@@ -21,6 +35,11 @@ export default function RegisterSellerPage() {
     setError('');
     setSuccess('');
 
+    if (!basarId) {
+      setError('Bitte wählen Sie auf der Startseite einen Basar aus, für den Sie sich registrieren möchten.');
+      return;
+    }
+
     if (!agbAccepted) {
       setError('Bitte akzeptieren Sie die AGB');
       return;
@@ -35,6 +54,7 @@ export default function RegisterSellerPage() {
         body: JSON.stringify({
           ...formData,
           isEmployee: false,
+          basarId,
         }),
       });
 
@@ -91,7 +111,20 @@ export default function RegisterSellerPage() {
       <div className="max-w-2xl mx-auto p-8">
         <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-8">
           <h2 className="text-2xl font-bold text-gray-800 mb-6">Verkäufer Registrierung</h2>
-          
+
+          {basarId ? (
+            basarTitle && (
+              <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded mb-6 text-base">
+                Registrierung für: <strong>{basarTitle}</strong>
+              </div>
+            )
+          ) : (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6 text-base">
+              Kein Basar ausgewählt. Bitte gehen Sie zurück zur{' '}
+              <Link href="/" className="underline font-medium">Startseite</Link> und wählen Sie einen Basar aus.
+            </div>
+          )}
+
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 text-lg">
               {error}

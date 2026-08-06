@@ -4,12 +4,27 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '../components/Header';
 
+interface Basar {
+  id: string;
+  title: string;
+  eventDate: string;
+  location?: string;
+  status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
+  isArchived: boolean;
+  myParticipation: { isActive: boolean; activatedAt: string | null } | null;
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: 'Vorbereitung', OPEN: 'Anmeldung offen', ACTIVE: 'Läuft', CLOSED: 'Beendet',
+};
+
 export default function SellerPage() {
   const router = useRouter();
   const [sellerId, setSellerId] = useState('');
-  const [sellerStatusActive, setSellerStatusActive] = useState(false);
   const [sellerName, setSellerName] = useState('');
   const [loading, setLoading] = useState(true);
+  const [basars, setBasars] = useState<Basar[]>([]);
+  const [togglingBasarId, setTogglingBasarId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
@@ -40,14 +55,20 @@ export default function SellerPage() {
 
   async function loadSellerInfo() {
     try {
-      const res = await fetch(`/api/sellers`);
-      if (res.ok) {
-        const sellers = await res.json();
-        const currentSeller = sellers.find((s: any) => s.sellerId === parseInt(sellerId, 10));
-        if (currentSeller) {
-          setSellerStatusActive(currentSeller.sellerStatusActive || false);
-          setSellerName(`${currentSeller.firstName} ${currentSeller.lastName}`);
+      const [meRes, basarsRes] = await Promise.all([
+        fetch('/api/me'),
+        fetch('/api/basars'),
+      ]);
+      if (meRes.ok) {
+        const me = await meRes.json();
+        if (me.role !== 'admin') {
+          setSellerName(`${me.firstName} ${me.lastName}`);
         }
+      }
+      if (basarsRes.ok) {
+        const data = await basarsRes.json();
+        const all: Basar[] = data.basars ?? [];
+        setBasars(all.filter(b => !b.isArchived && b.status !== 'DRAFT'));
       }
     } catch (error) {
       console.error('Error loading seller info:', error);
@@ -56,31 +77,35 @@ export default function SellerPage() {
     }
   }
 
-  async function toggleSellerStatus() {
+  async function toggleParticipation(basar: Basar) {
+    const nextActive = !basar.myParticipation?.isActive;
+    setTogglingBasarId(basar.id);
     try {
-      const res = await fetch('/api/sellers/seller-status', {
+      const res = await fetch(`/api/basars/${basar.id}/participation`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sellerId: parseInt(sellerId, 10),
-          sellerStatusActive: !sellerStatusActive,
-        }),
+        body: JSON.stringify({ isActive: nextActive }),
       });
 
+      const data = await res.json();
       if (res.ok) {
-        const data = await res.json();
-        setSellerStatusActive(data.sellerStatusActive);
-        setMessage(data.sellerStatusActive ? 'Status aktiviert!' : 'Status deaktiviert!');
+        setBasars(prev => prev.map(b =>
+          b.id === basar.id
+            ? { ...b, myParticipation: { isActive: data.isActive, activatedAt: b.myParticipation?.activatedAt ?? null } }
+            : b
+        ));
+        setMessage(data.isActive ? `Teilnahme an "${basar.title}" aktiviert!` : `Teilnahme an "${basar.title}" beendet.`);
         setTimeout(() => setMessage(''), 3000);
       } else {
-        const data = await res.json();
         setMessage('Fehler: ' + (data.error || 'Unbekannter Fehler'));
         setTimeout(() => setMessage(''), 5000);
       }
     } catch (error) {
-      console.error('Error updating status:', error);
-      setMessage('Fehler beim Aktualisieren des Verkäuferstatus');
+      console.error('Error updating participation:', error);
+      setMessage('Fehler beim Aktualisieren der Teilnahme');
       setTimeout(() => setMessage(''), 5000);
+    } finally {
+      setTogglingBasarId(null);
     }
   }
 
@@ -167,32 +192,56 @@ export default function SellerPage() {
         </div>
 
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <h2 className="text-2xl font-bold mb-6 text-center text-gray-900">Verkäuferstatus</h2>
-          
-          <div className="flex flex-col items-center justify-center space-y-6">
-            <p className="text-lg text-center text-gray-900">
-              Hier können Sie Ihren Verkäuferstatus aktivieren oder deaktivieren.
-            </p>
-            
-            <button
-              onClick={toggleSellerStatus}
-              className={`w-full md:w-auto px-12 py-6 rounded-xl text-2xl font-bold transition-all transform hover:scale-105 shadow-lg ${
-                sellerStatusActive
-                  ? 'bg-green-500 hover:bg-green-600 text-white ring-4 ring-green-200'
-                  : 'bg-gray-900 hover:bg-gray-800 text-white ring-4 ring-gray-300'
-              }`}
-            >
-              {sellerStatusActive ? 'Status: AKTIV' : 'Status: INAKTIV'}
-            </button>
+          <h2 className="text-2xl font-bold mb-2 text-center text-gray-900">Deine Basare</h2>
+          <p className="text-center text-gray-600 mb-6 text-sm">
+            Melde dich für die Basare an oder ab, an denen du teilnehmen möchtest.
+          </p>
 
-            {message && (
-              <div className={`mt-4 px-6 py-3 rounded-lg font-medium animate-fade-in ${
-                message.includes('aktiviert') ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-red-100 text-red-800 border border-red-200'
-              }`}>
-                {message}
-              </div>
-            )}
-          </div>
+          {message && (
+            <div className={`mb-6 px-6 py-3 rounded-lg font-medium text-center animate-fade-in ${
+              message.startsWith('Fehler') ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-green-100 text-green-800 border border-green-200'
+            }`}>
+              {message}
+            </div>
+          )}
+
+          {basars.length === 0 ? (
+            <p className="text-center text-gray-400 py-6">Aktuell ist kein Basar für eine Teilnahme geöffnet.</p>
+          ) : (
+            <div className="space-y-3">
+              {basars.map(basar => {
+                const isActive = basar.myParticipation?.isActive ?? false;
+                const canToggle = basar.status === 'OPEN' || basar.status === 'ACTIVE' || isActive;
+                return (
+                  <div key={basar.id} className="flex flex-col md:flex-row md:items-center justify-between gap-3 border border-gray-200 rounded-xl p-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-gray-900">{basar.title}</span>
+                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">
+                          {STATUS_LABELS[basar.status]}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-0.5">
+                        {new Date(basar.eventDate).toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}
+                        {basar.location && ` · ${basar.location}`}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => toggleParticipation(basar)}
+                      disabled={togglingBasarId === basar.id || (!canToggle && !isActive)}
+                      className={`flex-shrink-0 px-6 py-3 rounded-xl font-bold transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed ${
+                        isActive
+                          ? 'bg-green-500 hover:bg-green-600 text-white'
+                          : 'bg-gray-900 hover:bg-gray-800 text-white'
+                      }`}
+                    >
+                      {togglingBasarId === basar.id ? '…' : isActive ? 'Teilnahme: AKTIV' : 'Teilnahme: INAKTIV'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Password Change Section */}

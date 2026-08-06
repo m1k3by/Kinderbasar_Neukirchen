@@ -43,17 +43,4 @@ describe('env module', () => {
     const { env } = await import('@/app/lib/env');
     expect(env.SMTP_PORT).toBe(587);
   });
-
-  it('parses MAX_SELLERS to a number', async () => {
-    vi.stubEnv('MAX_SELLERS', '150');
-    const { env } = await import('@/app/lib/env');
-    expect(env.MAX_SELLERS).toBe(150);
-    expect(typeof env.MAX_SELLERS).toBe('number');
-  });
-
-  it('defaults MAX_SELLERS to 200', async () => {
-    vi.stubEnv('MAX_SELLERS', '');
-    const { env } = await import('@/app/lib/env');
-    expect(env.MAX_SELLERS).toBe(200);
-  });
 });

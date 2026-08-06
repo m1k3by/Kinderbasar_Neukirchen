@@ -16,17 +16,22 @@ export async function GET(request: Request) {
     const { auth } = authResult;
 
     const cakes = await prisma.cake.findMany({
-      include: auth.role === 'admin'
-        ? {
-            seller: {
-              select: {
-                firstName: true,
-                lastName: true,
-                email: true,
+      select: {
+        id: true,
+        cakeName: true,
+        sellerId: true,
+        ...(auth.role === 'admin'
+          ? {
+              seller: {
+                select: {
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                },
               },
-            },
-          }
-        : undefined,
+            }
+          : {}),
+      },
     });
 
     return NextResponse.json(cakes);

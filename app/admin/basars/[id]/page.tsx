@@ -3,6 +3,7 @@
 import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import Header from '../../../components/Header';
+import BasarFormFields, { EMPTY_BASAR_FORM, basarFormFromApi, type BasarFormState } from '../BasarFormFields';
 
 interface Basar {
   id: string;
@@ -22,7 +23,8 @@ interface Basar {
 interface BasarSellerEntry {
   id: string;
   sellerId: number;
-  seller: { sellerId: number; firstName: string; lastName: string; email: string; sellerStatusActive: boolean };
+  isActive: boolean;
+  seller: { sellerId: number; firstName: string; lastName: string; email: string };
   _count: { articles: number };
 }
 
@@ -45,7 +47,7 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<'overview' | 'sellers'>('overview');
   const [editMode, setEditMode] = useState(false);
-  const [form, setForm] = useState<Partial<Basar>>({});
+  const [form, setForm] = useState<BasarFormState>(EMPTY_BASAR_FORM);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { loadBasar(); }, [id]);
@@ -57,11 +59,7 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
       if (res.ok) {
         const data = await res.json();
         setBasar(data);
-        setForm({
-          title: data.title, description: data.description, location: data.location,
-          maxSellers: data.maxSellers, maxArticlesPerSeller: data.maxArticlesPerSeller,
-          commissionPercent: data.commissionPercent, entryFee: data.entryFee,
-        });
+        setForm(basarFormFromApi(data));
       }
     } finally {
       setLoading(false);
@@ -121,7 +119,6 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
         { href: '/admin/basars', label: 'Basare', active: true },
         { href: '/admin/list', label: 'Helferliste' },
         { href: '/admin/tasks', label: 'Aufgaben' },
-        { href: '/admin/settings', label: 'Einstellungen' },
         { href: '/', label: 'Logout' },
       ]} />
       <div className="text-center py-20 text-gray-500">Laden…</div>
@@ -135,7 +132,6 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
         { href: '/admin/basars', label: 'Basare', active: true },
         { href: '/admin/list', label: 'Helferliste' },
         { href: '/admin/tasks', label: 'Aufgaben' },
-        { href: '/admin/settings', label: 'Einstellungen' },
         { href: '/', label: 'Logout' },
       ]} />
       <div className="text-center py-20 text-red-500">Basar nicht gefunden</div>
@@ -150,7 +146,6 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
           { href: '/admin/basars', label: 'Basare', active: true },
           { href: '/admin/list', label: 'Helferliste' },
           { href: '/admin/tasks', label: 'Aufgaben' },
-          { href: '/admin/settings', label: 'Einstellungen' },
           { href: '/', label: 'Logout' },
         ]}
       />
@@ -195,31 +190,7 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
         {editMode && (
           <div className="bg-white rounded-xl shadow-md p-6 mb-6">
             <form onSubmit={handleSave} className="grid md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Titel</label>
-                <input required value={form.title ?? ''} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ort</label>
-                <input value={form.location ?? ''} onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Max. Artikel/Verkäufer</label>
-                <input type="number" min="1" value={form.maxArticlesPerSeller ?? 50} onChange={e => setForm(f => ({ ...f, maxArticlesPerSeller: parseInt(e.target.value) }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Provision (%)</label>
-                <input type="number" min="0" max="100" step="0.5" value={form.commissionPercent ?? 20} onChange={e => setForm(f => ({ ...f, commissionPercent: parseFloat(e.target.value) }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Teilnahmegebühr (€)</label>
-                <input type="number" min="0" step="0.50" value={form.entryFee ?? 0} onChange={e => setForm(f => ({ ...f, entryFee: parseFloat(e.target.value) }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500" />
-              </div>
+              <BasarFormFields form={form} setForm={setForm} economicsLocked={basar.status === 'ACTIVE'} />
               <div className="md:col-span-2 flex gap-3 justify-end">
                 <button type="button" onClick={() => setEditMode(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">Abbrechen</button>
                 <button type="submit" disabled={saving} className="px-6 py-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold rounded-lg transition-colors disabled:opacity-50">
@@ -277,8 +248,8 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
                       <tr key={bs.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 font-bold text-gray-700">#{bs.seller.sellerId}</td>
                         <td className="px-4 py-3 text-gray-800">{bs.seller.firstName} {bs.seller.lastName}
-                          <span className={`ml-2 text-xs px-1.5 py-0.5 rounded ${bs.seller.sellerStatusActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                            {bs.seller.sellerStatusActive ? 'aktiv' : 'inaktiv'}
+                          <span className={`ml-2 text-xs px-1.5 py-0.5 rounded ${bs.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                            {bs.isActive ? 'aktiv' : 'inaktiv'}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{bs.seller.email}</td>

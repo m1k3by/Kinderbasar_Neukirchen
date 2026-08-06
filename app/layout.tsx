@@ -28,13 +28,34 @@ export const metadata: Metadata = {
   },
 };
 
-function getRoleFromToken(token: string): string | null {
+interface DecodedTokenPayload {
+  role?: 'admin' | 'seller' | 'employee';
+  isEmployee?: boolean;
+  isCashier?: boolean;
+}
+
+function decodeToken(token: string): DecodedTokenPayload | null {
   try {
     const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-    return payload.role ?? null;
+    return payload ?? null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Maps the JWT payload to the set of FAQ "contexts" the help assistant should
+ * draw from. Note that `role` is never 'cashier' – being a cashier is the
+ * `isCashier` boolean, layered on top of a seller or employee role. Admins
+ * get every context so they can see (and answer) the full FAQ set.
+ */
+function computeContexts(payload: DecodedTokenPayload | null): string[] {
+  if (!payload?.role) return [];
+  if (payload.role === 'admin') return ['seller', 'employee', 'cashier'];
+
+  const contexts: string[] = [payload.role];
+  if (payload.isCashier) contexts.push('cashier');
+  return contexts;
 }
 
 export default async function RootLayout({
@@ -44,8 +65,8 @@ export default async function RootLayout({
 }) {
   const cookieStore = await cookies();
   const token = cookieStore.get('token')?.value;
-  const role = token ? getRoleFromToken(token) : null;
-  const showChat = role && role !== 'admin';
+  const payload = token ? decodeToken(token) : null;
+  const contexts = computeContexts(payload);
 
   return (
     <html lang="de">
@@ -54,7 +75,7 @@ export default async function RootLayout({
           <main className="flex-grow">{children}</main>
           <LegalFooter />
         </div>
-        {showChat && <ChatWidget role={role} />}
+        {contexts.length > 0 && <ChatWidget contexts={contexts} />}
       </body>
     </html>
   );

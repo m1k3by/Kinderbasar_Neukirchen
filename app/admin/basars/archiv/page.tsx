@@ -64,7 +64,6 @@ export default function BasarArchivPage() {
           { href: '/admin/basars/archiv', label: 'Archiv', active: true },
           { href: '/admin/list', label: 'Helferliste' },
           { href: '/admin/tasks', label: 'Aufgaben' },
-          { href: '/admin/settings', label: 'Einstellungen' },
           { href: '/', label: 'Logout' },
         ]}
       />

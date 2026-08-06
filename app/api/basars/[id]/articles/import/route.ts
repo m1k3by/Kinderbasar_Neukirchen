@@ -20,10 +20,11 @@ export async function POST(
     const sellerId: number = auth.sellerId!;
     const { id: basarId } = await params;
 
-    // Verify seller is active
-    const seller = await prisma.seller.findUnique({ where: { sellerId } });
-    if (!seller?.sellerStatusActive) {
-      return NextResponse.json({ error: 'Du bist nicht als Verkäufer aktiv' }, { status: 403 });
+    // Parse and validate the request body BEFORE any DB round trips, so a malformed request
+    // is rejected cheaply instead of paying for seller/basar/basarSeller lookups first.
+    const { sellerArticleIds } = await request.json() as { sellerArticleIds: string[] };
+    if (!Array.isArray(sellerArticleIds) || sellerArticleIds.length === 0) {
+      return NextResponse.json({ error: 'Keine Artikel ausgewählt' }, { status: 400 });
     }
 
     // Verify basar is OPEN
@@ -33,29 +34,31 @@ export async function POST(
       return NextResponse.json({ error: 'Artikel können nur bei offenem Basar importiert werden' }, { status: 400 });
     }
 
-    // Get or create BasarSeller
+    // Get or create BasarSeller. upsert instead of find-then-create: two parallel requests
+    // (double-click, two open tabs) used to both pass the find-null check and both attempt a
+    // create, racing into a P2002 on [basarId, sellerId] → 500. upsert is a single atomic
+    // statement, so the second caller just gets the same row back instead of crashing.
     let basarSeller = await prisma.basarSeller.findUnique({
       where: { basarId_sellerId: { basarId, sellerId } },
     });
 
     if (!basarSeller) {
-      const sellerCount = await prisma.basarSeller.count({ where: { basarId } });
+      const sellerCount = await prisma.basarSeller.count({ where: { basarId, isActive: true } });
       if (sellerCount >= basar.maxSellers) {
         return NextResponse.json({ error: 'Maximale Verkäuferanzahl erreicht' }, { status: 400 });
       }
-      basarSeller = await prisma.basarSeller.create({
-        data: { basarId, sellerId },
+      basarSeller = await prisma.basarSeller.upsert({
+        where: { basarId_sellerId: { basarId, sellerId } },
+        update: {},
+        create: { basarId, sellerId, isActive: true, activatedAt: new Date() },
       });
+    } else if (!basarSeller.isActive) {
+      return NextResponse.json({ error: 'Du bist für diesen Basar nicht als Teilnehmer aktiv' }, { status: 403 });
     }
 
     // Check article limit
     const maxArticles = basarSeller.maxArticlesOverride ?? basar.maxArticlesPerSeller;
     const currentCount = await prisma.article.count({ where: { basarSellerId: basarSeller.id } });
-
-    const { sellerArticleIds } = await request.json() as { sellerArticleIds: string[] };
-    if (!Array.isArray(sellerArticleIds) || sellerArticleIds.length === 0) {
-      return NextResponse.json({ error: 'Keine Artikel ausgewählt' }, { status: 400 });
-    }
 
     // Filter: only articles owned by this seller and not already in this basar
     const archiveItems = await prisma.sellerArticle.findMany({
