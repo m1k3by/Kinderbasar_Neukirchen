@@ -65,12 +65,18 @@ function sendFeedback(logId: string, helpful: boolean) {
 const WELCOME = 'Hallo! Ich bin dein Hilfe-Assistent für den Kinderbasar. Wie kann ich dir helfen?';
 const NONE_MESSAGE = 'Dazu habe ich leider keine passende Antwort gefunden. Frag gern anders, oder schau in den Themen nach:';
 
+const PANEL_HEIGHT = 560;
+// bottom-4 (16px) + toggle button (56px) + mb-3 gap (12px) + a little breathing room.
+const RESERVED_BELOW_PANEL = 16 + 56 + 12 + 8;
+const TOP_CLEARANCE = 16;
+
 export default function ChatWidget({ contexts }: { contexts: string[] }) {
   const [isOpen, setIsOpen] = useState(false);
   const [browsing, setBrowsing] = useState(false);
   const [openCategory, setOpenCategory] = useState<FaqCategory | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([{ id: 0, kind: 'text', text: WELCOME }]);
   const [input, setInput] = useState('');
+  const [panelHeight, setPanelHeight] = useState(PANEL_HEIGHT);
   // A ref, not state: several messages are appended within a single event handler, and a
   // state counter would hand out the same id to all of them (the new value is only visible
   // after a re-render) – producing duplicate React keys.
@@ -91,6 +97,21 @@ export default function ChatWidget({ contexts }: { contexts: string[] }) {
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [isOpen, browsing]);
+
+  // The panel is anchored to the viewport bottom with a fixed target height, but on short
+  // viewports (small windows, phones, landscape) that pushes its top edge above the sticky
+  // header – which sits at a higher z-index and paints over it. Cap the height to whatever
+  // space is actually free above the header so it never gets clipped.
+  useEffect(() => {
+    function updatePanelHeight() {
+      const headerHeight = document.querySelector('header')?.getBoundingClientRect().height ?? 0;
+      const available = window.innerHeight - headerHeight - RESERVED_BELOW_PANEL - TOP_CLEARANCE;
+      setPanelHeight(Math.max(280, Math.min(PANEL_HEIGHT, available)));
+    }
+    updatePanelHeight();
+    window.addEventListener('resize', updatePanelHeight);
+    return () => window.removeEventListener('resize', updatePanelHeight);
+  }, [isOpen]);
 
   function takeId(): number {
     return nextIdRef.current++;
@@ -160,7 +181,7 @@ export default function ChatWidget({ contexts }: { contexts: string[] }) {
       {isOpen && (
         <div
           className="mb-3 w-96 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden"
-          style={{ height: '560px' }}
+          style={{ height: `${panelHeight}px` }}
         >
           {/* Header */}
           <div className="bg-yellow-400 px-4 py-3 flex items-center justify-between flex-shrink-0">

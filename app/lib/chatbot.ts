@@ -50,7 +50,7 @@ function normalizeText(text: string): string {
 // deliberately small: it only removes words that carry no topical signal.
 const STOP_WORDS = new Set([
   'ich', 'mich', 'mir', 'mein', 'meine', 'meinen', 'wie', 'was', 'wann', 'wo',
-  'warum', 'kann', 'der', 'die', 'das', 'ein', 'eine', 'einen', 'einem',
+  'wer', 'warum', 'kann', 'der', 'die', 'das', 'ein', 'eine', 'einen', 'einem',
   'und', 'oder', 'aber', 'für', 'mit', 'von', 'zu', 'in', 'an', 'auf', 'ist',
   'sind', 'habe', 'hat', 'haben', 'bitte', 'gibt', 'noch', 'nicht', 'kein',
   'keine', 'darf', 'soll', 'will', 'muss', 'auch', 'beim', 'im',
