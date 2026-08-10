@@ -10,8 +10,8 @@ interface HeaderProps {
   noTitleLink?: boolean;
 }
 
-export default function Header({ 
-  title = 'Kinderbasar Neukirchen', 
+export default function Header({
+  title = 'Kinderbasar Neukirchen',
   links = [{ href: '/', label: 'Zurück' }],
   sellerInfo = null,
   noTitleLink = false
@@ -20,35 +20,35 @@ export default function Header({
 
   return (
     <header className="sticky top-0 z-50 bg-yellow-500 text-gray-800 shadow-md">
-      <div className="max-w-6xl mx-auto px-4 py-4">
-        <div className="flex justify-between items-center">
-          {/* Logo/Title */}
-          <div className="flex items-center gap-4">
+      <div className="max-w-6xl mx-auto px-4 py-3">
+        <div className="flex justify-between items-center gap-4">
+
+          {/* Logo + User-Info untereinander */}
+          <div className="flex flex-col min-w-0">
             {noTitleLink ? (
-              <h1 className="text-xl md:text-2xl font-bold">{title}</h1>
+              <span className="text-xl md:text-2xl font-bold leading-tight">{title}</span>
             ) : (
-              <Link href="/" className="text-xl md:text-2xl font-bold hover:underline">
+              <Link href="/" className="text-xl md:text-2xl font-bold leading-tight hover:underline">
                 {title}
               </Link>
             )}
             {sellerInfo && (
-              <div className="hidden md:block bg-white/90 px-3 py-1 rounded-md text-sm">
-                <span className="font-semibold">{sellerInfo.name}</span>
-                <span className="text-gray-600 ml-2">(Verkäufer) Nummer: {sellerInfo.sellerId}</span>
-              </div>
+              <span className="text-xs text-gray-700 leading-tight mt-0.5 truncate">
+                {sellerInfo.name} &middot; Nr.&nbsp;{sellerInfo.sellerId}
+              </span>
             )}
           </div>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex gap-1 items-center">
+          {/* Desktop-Navigation */}
+          <nav className="hidden md:flex items-center gap-1">
             {links.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                   link.active
                     ? 'bg-gray-900 text-white'
-                    : 'hover:bg-yellow-600'
+                    : 'text-gray-800 hover:bg-yellow-600'
                 }`}
               >
                 {link.label}
@@ -56,60 +56,35 @@ export default function Header({
             ))}
           </nav>
 
-          {/* Mobile Burger Menu Button */}
+          {/* Burger-Button (Mobile) */}
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="md:hidden p-2 rounded hover:bg-yellow-600 transition-colors"
+            className="md:hidden p-2 rounded hover:bg-yellow-600 transition-colors flex-shrink-0"
             aria-label={isMenuOpen ? 'Menü schließen' : 'Menü öffnen'}
             aria-expanded={isMenuOpen}
             aria-controls="mobile-menu"
           >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-              focusable="false"
-            >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               {isMenuOpen ? (
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               ) : (
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               )}
             </svg>
           </button>
         </div>
 
-        {/* Mobile Seller Info */}
-        {sellerInfo && (
-          <div className="md:hidden mt-3 bg-white/90 px-3 py-2 rounded-md text-sm">
-            <span className="font-semibold">{sellerInfo.name}</span>
-            <span className="text-gray-600 ml-2">(Verkäufer) Nummer: {sellerInfo.sellerId}</span>
-          </div>
-        )}
-
-        {/* Mobile Navigation Menu */}
+        {/* Mobile-Navigation */}
         {isMenuOpen && (
-          <nav className="md:hidden mt-4 pt-4 border-t border-yellow-600" id="mobile-menu">
-            <div className="flex flex-col gap-3">
+          <nav className="md:hidden mt-3 pt-3 border-t border-yellow-600" id="mobile-menu">
+            <div className="flex flex-col gap-1">
               {links.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
                   onClick={() => setIsMenuOpen(false)}
-                  className={`text-lg py-2 px-3 rounded hover:bg-yellow-600 transition-colors ${
-                    link.active ? 'font-bold bg-yellow-600' : ''
+                  className={`text-base py-2 px-3 rounded-md transition-colors ${
+                    link.active ? 'bg-gray-900 text-white font-medium' : 'hover:bg-yellow-600'
                   }`}
                 >
                   {link.label}

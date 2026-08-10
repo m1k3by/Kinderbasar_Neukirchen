@@ -78,6 +78,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   const [allowedSizes, setAllowedSizes] = useState<string[]>([]);
   const [sizeError, setSizeError] = useState('');
   const [showSizeTooltip, setShowSizeTooltip] = useState(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const cookies = document.cookie.split(';');
@@ -207,9 +208,10 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
       status: 'AVAILABLE',
       createdAt: new Date().toISOString(),
     };
-    setArticles(prev => [...prev, tempArticle]);
+    setArticles(prev => [tempArticle, ...prev]);
     setForm({ title: '', sizeLabel: '', gender: '', price: '' });
     setSizeError('');
+    setTimeout(() => titleInputRef.current?.focus(), 0);
 
     try {
       const res = await fetch(`/api/basars/${basarId}/articles`, {
@@ -748,6 +750,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
               <div className="md:col-span-3">
                 <label className="block text-xs font-medium text-gray-600 mb-1">Beschreibung * (max. 30 Zeichen)</label>
                 <input
+                  ref={titleInputRef}
                   required maxLength={30}
                   value={form.title}
                   onChange={e => setForm(f => ({ ...f, title: e.target.value }))}

@@ -28,6 +28,7 @@ export default function SellerPage() {
   const [loading, setLoading] = useState(true);
   const [basars, setBasars] = useState<Basar[]>([]);
   const [togglingBasarId, setTogglingBasarId] = useState<string | null>(null);
+  const [deactivateConfirm, setDeactivateConfirm] = useState<Basar | null>(null);
   const [message, setMessage] = useState('');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
@@ -83,8 +84,35 @@ export default function SellerPage() {
   }
 
   async function toggleParticipation(basar: Basar) {
-    const nextActive = !basar.myParticipation?.isActive;
+    if (togglingBasarId === basar.id) return;
+    const isCurrentlyActive = basar.myParticipation?.isActive ?? false;
+
+    // Abmelden → zuerst Bestätigung einholen
+    if (isCurrentlyActive) {
+      setDeactivateConfirm(basar);
+      return;
+    }
+
+    // Anmelden → optimistisch sofort umschalten
+    await applyParticipationToggle(basar, true);
+  }
+
+  async function confirmDeactivate() {
+    const basar = deactivateConfirm;
+    if (!basar) return;
+    setDeactivateConfirm(null);
+    await applyParticipationToggle(basar, false);
+  }
+
+  async function applyParticipationToggle(basar: Basar, nextActive: boolean) {
+    // Optimistic update — UI reagiert sofort
+    setBasars(prev => prev.map(b =>
+      b.id === basar.id
+        ? { ...b, myParticipation: { isActive: nextActive, activatedAt: b.myParticipation?.activatedAt ?? null } }
+        : b
+    ));
     setTogglingBasarId(basar.id);
+
     try {
       const res = await fetch(`/api/basars/${basar.id}/participation`, {
         method: 'PUT',
@@ -94,19 +122,19 @@ export default function SellerPage() {
 
       const data = await res.json();
       if (res.ok) {
-        setBasars(prev => prev.map(b =>
-          b.id === basar.id
-            ? { ...b, myParticipation: { isActive: data.isActive, activatedAt: b.myParticipation?.activatedAt ?? null } }
-            : b
-        ));
         setMessage(data.isActive ? `Teilnahme an "${basar.title}" aktiviert!` : `Teilnahme an "${basar.title}" beendet.`);
         setTimeout(() => setMessage(''), 3000);
       } else {
+        setBasars(prev => prev.map(b =>
+          b.id === basar.id ? { ...b, myParticipation: basar.myParticipation } : b
+        ));
         setMessage('Fehler: ' + (data.error || 'Unbekannter Fehler'));
         setTimeout(() => setMessage(''), 5000);
       }
-    } catch (error) {
-      console.error('Error updating participation:', error);
+    } catch {
+      setBasars(prev => prev.map(b =>
+        b.id === basar.id ? { ...b, myParticipation: basar.myParticipation } : b
+      ));
       setMessage('Fehler beim Aktualisieren der Teilnahme');
       setTimeout(() => setMessage(''), 5000);
     } finally {
@@ -233,7 +261,7 @@ export default function SellerPage() {
                       className={`flex-shrink-0 px-6 py-3 rounded-xl font-bold transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed ${
                         isActive
                           ? 'bg-green-500 hover:bg-green-600 text-white'
-                          : 'bg-gray-900 hover:bg-gray-800 text-white'
+                          : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300'
                       }`}
                     >
                       {togglingBasarId === basar.id ? '…' : isActive ? 'Teilnahme: AKTIV' : 'Teilnahme: INAKTIV'}
@@ -373,6 +401,52 @@ export default function SellerPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Abmelde-Bestätigung */}
+        {deactivateConfirm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Von Basar abmelden?</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">{deactivateConfirm.title}</p>
+                </div>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5 space-y-2 text-sm text-amber-900">
+                <p className="font-semibold">Das hat folgende Konsequenzen:</p>
+                <ul className="space-y-1 list-disc list-inside">
+                  <li>Du wirst aus der Teilnehmerliste entfernt</li>
+                  <li>Dein Platz wird sofort freigegeben</li>
+                  <li>Du kannst keine Artikel mehr verkaufen</li>
+                  <li>Du kannst keine Kiste mehr anliefern</li>
+                  <li>Deine Artikel bleiben gespeichert</li>
+                  <li>Eine erneute Anmeldung ist möglich, solange noch Plätze frei sind</li>
+                </ul>
+              </div>
+
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setDeactivateConfirm(null)}
+                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors font-medium"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={confirmDeactivate}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors"
+                >
+                  Ja, abmelden
+                </button>
+              </div>
             </div>
           </div>
         )}
