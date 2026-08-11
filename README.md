@@ -131,8 +131,14 @@ MAX_SELLERS=200
    ```bash
    npx vercel link
    vercel env pull .env.local
-   npx prisma db push
+   npx prisma migrate deploy
    ```
+
+> ⚠️ **Für Produktivdatenbanken `prisma migrate deploy` verwenden, nicht `prisma db push`.**
+> `db push` gleicht nur das Tabellenschema ab und führt die Migrations-SQL **nicht** aus. Alles,
+> was eine Migration an Daten anlegt, fehlt danach – etwa die Zählerzeile in `SellerIdCounter`.
+> Ohne sie schlägt jede Registrierung mit „Alle Verkäufer-IDs sind vergeben" fehl, obwohl der
+> Bereich 1000–9999 leer ist. `db push` ist nur für die lokale Entwicklung gedacht.
 
 ---
 
@@ -140,7 +146,8 @@ MAX_SELLERS=200
 
 ```bash
 npx prisma studio     # Datenbank-UI
-npx prisma db push    # Schema-Änderungen anwenden
+npx prisma db push       # Schema-Änderungen anwenden – nur lokal, siehe Warnung oben
+npx prisma migrate deploy # Migrationen produktiv ausführen
 npx prisma generate   # Prisma Client neu generieren
 npm run build         # Production Build testen
 vercel --prod         # Manueller Deploy

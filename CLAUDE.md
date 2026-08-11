@@ -12,10 +12,26 @@ npm run build          # prisma generate + next build
 npm run lint           # ESLint
 npm run test:run       # Vitest einmalig
 npm run test:coverage  # Coverage (Schwellwert 90 %)
-npm run db:push        # Prisma-Schema anwenden
+npm run db:push        # Prisma-Schema anwenden – nur lokal!
 ```
 
+> **`db push` niemals gegen die Produktivdatenbank.** Es gleicht das Tabellenschema ab, führt
+> aber die Migrations-SQL nicht aus – von Migrationen angelegte Daten fehlen dann. Produktiv
+> gilt `prisma migrate deploy`. Wenn eine Migration Daten braucht (Seed-Zeilen, Backfills),
+> muss der Code den Fall „Daten fehlen" zusätzlich selbst abfangen können, statt ihn als
+> regulären Zustand zu interpretieren.
+
 Tests liegen unter `__tests__/` und decken `app/lib/**` und `app/api/**` ab. Prisma und externe Dienste (Mail, QR) werden pro Testdatei gemockt.
+
+### Testregeln
+
+> **Ein Mock, der sich anders verhält als das echte System, widerlegt keine falsche Annahme – er bestätigt sie.** Alle Tests sind vollständig gemockt, keiner spricht mit Postgres. Deshalb gelten drei Regeln:
+
+1. **`Decimal`-Spalten mit `dec()` mocken**, nie als `number` – siehe `__tests__/helpers/decimal.ts`. Prisma liefert `Prisma.Decimal`, dessen `valueOf()` ein String ist: `0 + dec(2.50) + dec(3.00)` ergibt `"02.53"`, nicht `5.5`. Nur Werte aus JSON-Request-Bodys bleiben `number`. Betroffen sind `Article.price`, `SellerArticle.price`, `Sale.salePrice`, `Basar.commissionPercent`, `Basar.entryFee`, `BasarSeller.commissionOverride` und alle vier `Settlement`-Beträge.
+2. **Wirkung prüfen, nicht nur den Statuscode.** Bei 401/403 ist der Code der ganze Vertrag – bei allem, was schreibt, nicht. Ein Storno, der `isCancelled: false` setzt, liefert ebenfalls 200.
+3. **Bei `$transaction` die Argumente der Schreiboperationen prüfen.** Ein gemocktes `$transaction` führt nichts aus; ohne Argumentprüfung ist der gesamte fachliche Inhalt ungetestet.
+
+Wer einen Fehler behebt, baut ihn danach einmal wieder ein und prüft, dass der neue Test rot wird. Ein Test, der ohne diesen Nachweis geschrieben wurde, ist nicht als Regressionsschutz belegt.
 
 ---
 

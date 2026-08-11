@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { dec } from '../helpers/decimal';
 import { sellerToken, adminToken } from '../helpers/tokens';
 
 const cookiesGetMock = vi.hoisted(() => vi.fn());
@@ -29,7 +30,7 @@ function makeDeleteRequest(id: string) {
 }
 
 const fakeItems = [
-  { id: 'sa-1', title: 'Shirt', sizeLabel: '80', price: 2.5, createdAt: new Date(), articles: [] },
+  { id: 'sa-1', title: 'Shirt', sizeLabel: '80', price: dec(2.5), createdAt: new Date(), articles: [] },
 ];
 
 describe('GET /api/seller-articles', () => {

@@ -3,7 +3,7 @@
 import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import Header from '../../../../components/Header';
-import { getNavLinks, type NavUser } from '../../../../lib/navLinks';
+import { getNavLinks, basarsAdminActiveKey, type NavUser } from '../../../../lib/navLinks';
 
 interface Settlement {
   id: string;
@@ -132,14 +132,14 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
 
   if (loading) return (
     <div className="min-h-screen bg-gray-50">
-      <Header links={getNavLinks(navUser, 'basare')} />
+      <Header links={getNavLinks(navUser, basarsAdminActiveKey(navUser))} />
       <div className="text-center py-20 text-gray-500">Laden…</div>
     </div>
   );
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header links={getNavLinks(navUser, 'basare')} />
+      <Header links={getNavLinks(navUser, basarsAdminActiveKey(navUser))} />
       <div className="max-w-5xl mx-auto p-6">
         <div className="flex items-center justify-between mb-6">
           <div>

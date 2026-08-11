@@ -8,6 +8,26 @@ import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { getAuth } from '../../lib/apiAuth';
 
+// Legt die Zählerzeile an, falls sie fehlt. Startwert ist eins über der höchsten bereits
+// vergebenen sellerId, damit bestehende Installationen nicht mit registrierten Verkäufern
+// kollidieren. Idempotent durch ON CONFLICT DO NOTHING.
+async function seedSellerIdCounter(): Promise<void> {
+  await prisma.$executeRaw`
+    INSERT INTO "SellerIdCounter" ("id", "nextId")
+    SELECT 'default', GREATEST(1000, COALESCE((SELECT MAX("sellerId") FROM "Seller" WHERE "sellerId" BETWEEN 1000 AND 9999), 999) + 1)
+    ON CONFLICT ("id") DO NOTHING
+  `;
+}
+
+function runAllocate() {
+  return prisma.$queryRaw<{ allocated: number }[]>`
+    UPDATE "SellerIdCounter"
+    SET "nextId" = "nextId" + 1
+    WHERE "id" = 'default' AND "nextId" <= 9999
+    RETURNING "nextId" - 1 AS "allocated"
+  `;
+}
+
 // Allocates the next sellerId atomically (range 1000-9999). A single UPDATE...RETURNING
 // statement, serialized by Postgres at the row level, so two concurrent registrations always
 // get different ids. Replaces the old approach of loading every existing sellerId and
@@ -15,14 +35,21 @@ import { getAuth } from '../../lib/apiAuth';
 // still raced under parallel load – two requests could compute the same "free" id and one
 // would lose to a P2002 on create. Returns null once the range is exhausted (nextId > 9999).
 async function allocateSellerId(): Promise<number | null> {
-  const rows = await prisma.$transaction(async (tx) => {
-    return tx.$queryRaw<{ allocated: number }[]>`
-      UPDATE "SellerIdCounter"
-      SET "nextId" = "nextId" + 1
-      WHERE "id" = 'default' AND "nextId" <= 9999
-      RETURNING "nextId" - 1 AS "allocated"
-    `;
-  });
+  let rows = await runAllocate();
+
+  // Null Treffer heißt zweierlei: Bereich erschöpft ODER die Zählerzeile fehlt. Letzteres
+  // passiert auf Installationen, die per `prisma db push` eingerichtet wurden – das legt die
+  // Tabelle aus dem Schema an, führt aber das INSERT der Migration nicht aus. Die Tabelle
+  // bleibt leer, das UPDATE trifft nichts, und die Registrierung meldete fälschlich
+  // „alle IDs vergeben". Einmal nachsäen und erneut versuchen unterscheidet die beiden Fälle.
+  if (rows.length === 0) {
+    await seedSellerIdCounter();
+    rows = await runAllocate();
+    if (rows.length > 0) {
+      console.warn('[REGISTER] SellerIdCounter fehlte und wurde nachträglich angelegt');
+    }
+  }
+
   if (!rows || rows.length === 0) return null;
   return rows[0].allocated;
 }

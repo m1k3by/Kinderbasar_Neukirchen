@@ -3,7 +3,7 @@
 import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import Header from '../../../components/Header';
-import { getNavLinks, type NavUser } from '../../../lib/navLinks';
+import { getNavLinks, basarsAdminActiveKey, type NavUser } from '../../../lib/navLinks';
 import BasarFormFields, { EMPTY_BASAR_FORM, basarFormFromApi, type BasarFormState } from '../BasarFormFields';
 
 interface Basar {
@@ -131,21 +131,21 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
 
   if (loading) return (
     <div className="min-h-screen bg-gray-50">
-      <Header links={getNavLinks(navUser, 'basare')} />
+      <Header links={getNavLinks(navUser, basarsAdminActiveKey(navUser))} />
       <div className="text-center py-20 text-gray-500">Laden…</div>
     </div>
   );
 
   if (!basar) return (
     <div className="min-h-screen bg-gray-50">
-      <Header links={getNavLinks(navUser, 'basare')} />
+      <Header links={getNavLinks(navUser, basarsAdminActiveKey(navUser))} />
       <div className="text-center py-20 text-red-500">Basar nicht gefunden</div>
     </div>
   );
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header links={getNavLinks(navUser, 'basare')} />
+      <Header links={getNavLinks(navUser, basarsAdminActiveKey(navUser))} />
       <div className="max-w-5xl mx-auto p-6">
         {message && (
           <div className={`mb-4 px-4 py-3 rounded-lg font-medium ${message.includes('Fehler') || message.includes('error') ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>

@@ -38,23 +38,16 @@ export async function POST(
     // (double-click, two open tabs) used to both pass the find-null check and both attempt a
     // create, racing into a P2002 on [basarId, sellerId] → 500. upsert is a single atomic
     // statement, so the second caller just gets the same row back instead of crashing.
-    let basarSeller = await prisma.basarSeller.findUnique({
+    //
+    // Die Übernahme aus dem Archiv ist Artikelanlage und damit – wie POST
+    // /api/basars/[id]/articles – bewusst von der Teilnahme entkoppelt: eine fehlende Zeile
+    // wird inaktiv angelegt, maxSellers wird hier nicht geprüft (eine inaktive Zeile belegt
+    // keinen Teilnehmerplatz), und `update: {}` lässt eine bestehende Zeile unangetastet.
+    const basarSeller = await prisma.basarSeller.upsert({
       where: { basarId_sellerId: { basarId, sellerId } },
+      update: {},
+      create: { basarId, sellerId, isActive: false, activatedAt: null },
     });
-
-    if (!basarSeller) {
-      const sellerCount = await prisma.basarSeller.count({ where: { basarId, isActive: true } });
-      if (sellerCount >= basar.maxSellers) {
-        return NextResponse.json({ error: 'Maximale Verkäuferanzahl erreicht' }, { status: 400 });
-      }
-      basarSeller = await prisma.basarSeller.upsert({
-        where: { basarId_sellerId: { basarId, sellerId } },
-        update: {},
-        create: { basarId, sellerId, isActive: true, activatedAt: new Date() },
-      });
-    } else if (!basarSeller.isActive) {
-      return NextResponse.json({ error: 'Du bist für diesen Basar nicht als Teilnehmer aktiv' }, { status: 403 });
-    }
 
     // Check article limit
     const maxArticles = basarSeller.maxArticlesOverride ?? basar.maxArticlesPerSeller;

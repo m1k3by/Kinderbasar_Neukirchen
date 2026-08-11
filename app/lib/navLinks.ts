@@ -10,6 +10,13 @@
  * nie Links zu admin-only Zielen sieht, die ihn die Middleware sofort wieder aussperren
  * würde – und ein Admin dort immer die volle Admin-Navigation behält, unabhängig davon,
  * auf welcher /admin/basars/**-Unterseite er gerade steht.
+ *
+ * Verkäufer und Mitarbeiter haben bewusst KEINEN "Basare"-Eintrag: Basar-Teilnahme und
+ * Artikelerfassung sind zusammengeführt und leben vollständig unter /seller. Die frühere
+ * Listenseite /seller/basars zeigte dieselben Basare ein zweites Mal, nur mit anderen
+ * Aktionen – wer teilnehmen und danach Artikel anlegen wollte, musste zwischen zwei Tabs
+ * wechseln. /seller/basars/[id] bleibt als Unterseite bestehen, ist aber kein Tab mehr.
+ * Für Admins ist "Basare" dagegen eine echte Verwaltungsansicht und bleibt erhalten.
  */
 
 export interface NavUser {
@@ -25,7 +32,7 @@ export interface NavLink {
 }
 
 export type AdminNavKey = 'basarliste' | 'basare' | 'archiv' | 'helferliste' | 'aufgaben' | 'hilfe';
-export type SellerNavKey = 'verkaeufer' | 'mitarbeiter' | 'basare' | 'kasse';
+export type SellerNavKey = 'verkaeufer' | 'mitarbeiter' | 'kasse';
 export type NavKey = AdminNavKey | SellerNavKey;
 
 interface NavLinkDef {
@@ -61,7 +68,6 @@ export function getNavLinks(user: NavUser, activeKey?: NavKey, opts?: { kasseHre
     if (user.isEmployee) {
       defs.push({ key: 'mitarbeiter', href: '/employee', label: 'Mitarbeiterbereich' });
     }
-    defs.push({ key: 'basare', href: '/seller/basars', label: 'Basare' });
     if (user.isCashier) {
       defs.push({ key: 'kasse', href: opts?.kasseHref ?? '/admin/basars', label: 'Kasse' });
     }
@@ -70,4 +76,15 @@ export function getNavLinks(user: NavUser, activeKey?: NavKey, opts?: { kasseHre
   const links: NavLink[] = defs.map(({ key, href, label }) => ({ href, label, active: key === activeKey }));
   links.push({ href: '/', label: 'Logout' });
   return links;
+}
+
+/**
+ * Aktiver Navigationseintrag für die Seiten unter /admin/basars/**, die laut middleware.ts
+ * von Admins UND Kassierern erreichbar sind. Beide sehen dort unterschiedliche Navigationen:
+ * Für den Admin ist die Seite "Basare", für den Kassierer ist sie der Einstieg in die
+ * "Kasse" – ein fest verdrahtetes 'basare' würde bei ihm auf gar keinen Eintrag passen,
+ * seit der Seller-Zweig keinen 'basare'-Link mehr hat.
+ */
+export function basarsAdminActiveKey(user: NavUser): NavKey {
+  return user.role === 'admin' ? 'basare' : 'kasse';
 }

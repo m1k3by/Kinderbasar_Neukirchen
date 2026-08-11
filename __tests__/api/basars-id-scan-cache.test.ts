@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { dec, decJson } from '../helpers/decimal';
 import { adminToken, sellerToken, cashierToken } from '../helpers/tokens';
 
 const cookiesGetMock = vi.hoisted(() => vi.fn());
@@ -25,7 +26,7 @@ const fakeArticleRow = {
   id: 'art-1',
   title: 'Shirt',
   sizeLabel: '104',
-  price: 3.5,
+  price: dec(3.5),
   qrCode: 'QR1',
   status: 'AVAILABLE',
   basarSeller: { seller: { sellerId: 1234, firstName: 'Max', lastName: 'Muster' } },
@@ -71,10 +72,27 @@ describe('GET /api/basars/[id]/scan-cache', () => {
     const data = await res.json();
     expect(data.articles).toEqual([
       {
-        id: 'art-1', title: 'Shirt', sizeLabel: '104', price: 3.5, qrCode: 'QR1', status: 'AVAILABLE',
+        id: 'art-1', title: 'Shirt', sizeLabel: '104', price: decJson(3.5), qrCode: 'QR1', status: 'AVAILABLE',
         sellerId: 1234, sellerName: 'Max Muster',
       },
     ]);
+  });
+
+  // Diese Route reicht die Decimal-Spalte unverändert durch, deshalb kommt der Preis als
+  // **String** beim Client an – Prisma.Decimal serialisiert über toJSON() zur Zeichenkette.
+  // Die Kasse muss ihn folglich mit Number() einlesen (siehe kasse/page.tsx, Aufbau des
+  // Offline-Caches). Würde sie den Wert direkt in den Warenkorb legen, ergäbe die Summe eine
+  // Verkettung statt eines Betrags. Der Test hält den Vertrag fest, damit niemand ihn
+  // versehentlich ändert.
+  it('liefert den Preis als String – Verbraucher müssen Number() anwenden', async () => {
+    cookiesGetMock.mockReturnValue({ value: cashierToken(5555) });
+    prismaMock.article.aggregate.mockResolvedValue({ _count: { _all: 1 }, _max: { createdAt: new Date(), soldAt: null } });
+    prismaMock.article.findMany.mockResolvedValue([fakeArticleRow]);
+
+    const data = await (await GET(makeRequest(), makeContext())).json();
+
+    expect(typeof data.articles[0].price).toBe('string');
+    expect(Number(data.articles[0].price)).toBe(3.5);
   });
 
   it('scopes to AVAILABLE and SOLD articles only (excludes RETURNED) for this basar', async () => {

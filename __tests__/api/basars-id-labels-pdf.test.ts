@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { dec } from '../helpers/decimal';
 import zlib from 'zlib';
 import { adminToken, sellerToken } from '../helpers/tokens';
 
@@ -34,7 +35,7 @@ function makeArticles(n: number) {
     title: `Artikel ${i}`,
     sizeLabel: '116',
     gender: 'Junge',
-    price: 2.5,
+    price: dec(2.5),
     qrCode: `KB-9001-${String(i).padStart(4, '0')}`,
   }));
 }
@@ -313,7 +314,7 @@ describe('GET /api/basars/[id]/labels.pdf – Inhalt', () => {
         title: 'Hshehejejehsjdjdjdjdjdjdjdjd Winterjacke Lego mit sehr langem Namen ohne Ende',
         sizeLabel: '116',
         gender: 'Junge',
-        price: 5,
+        price: dec(5),
         qrCode: 'KB-9001-0001',
       },
     ]);
@@ -335,7 +336,7 @@ describe('GET /api/basars/[id]/labels.pdf – Inhalt', () => {
 
   it('schreibt Umlaute und das Eurozeichen', async () => {
     happyPath([
-      { title: 'Jäckchen grün', sizeLabel: '110', gender: 'Mädchen', price: 12.5, qrCode: 'KB-1' },
+      { title: 'Jäckchen grün', sizeLabel: '110', gender: 'Mädchen', price: dec(12.5), qrCode: 'KB-1' },
     ]);
     const content = contentStream(await pdfBuffer(await GET(makeRequest(), makeContext())));
     expect(content).toContain('J\xe4ckchen gr\xfcn'); // WinAnsi: ä = 0xE4, ü = 0xFC

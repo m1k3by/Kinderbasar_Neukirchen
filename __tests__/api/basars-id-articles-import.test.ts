@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { dec } from '../helpers/decimal';
 import { adminToken, sellerToken } from '../helpers/tokens';
 
 const cookiesGetMock = vi.hoisted(() => vi.fn());
@@ -32,7 +33,7 @@ function makePostRequest(body: object) {
 const openBasar = { id: 'basar-1', status: 'OPEN', maxSellers: 100, maxArticlesPerSeller: 50 };
 const fakeBasarSeller = { id: 'bs-1', basarId: 'basar-1', sellerId: 1234, maxArticlesOverride: null, isActive: true };
 const archiveItems = [
-  { id: 'sa-1', title: 'Shirt', sizeLabel: '80', gender: null, price: 2.5, qrCode: 'uuid-1', articles: [] },
+  { id: 'sa-1', title: 'Shirt', sizeLabel: '80', gender: null, price: dec(2.5), qrCode: 'uuid-1', articles: [] },
 ];
 
 describe('POST /api/basars/[id]/articles/import', () => {
@@ -50,13 +51,22 @@ describe('POST /api/basars/[id]/articles/import', () => {
     expect(res.status).toBe(403);
   });
 
-  it('returns 403 when seller has deactivated their participation in this basar', async () => {
+  it('lets a seller WITHOUT an active participation import from the archive', async () => {
+    // Die Archivübernahme ist Artikelanlage und damit ebenso von der Teilnahme entkoppelt
+    // wie POST /api/basars/[id]/articles. Früher gab es hier ein 403.
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);
-    prismaMock.basarSeller.findUnique.mockResolvedValue({ ...fakeBasarSeller, isActive: false });
+    prismaMock.basarSeller.upsert.mockResolvedValue({ ...fakeBasarSeller, isActive: false });
+    prismaMock.article.count.mockResolvedValue(0);
+    prismaMock.sellerArticle.findMany.mockResolvedValue(archiveItems);
+    prismaMock.$transaction.mockResolvedValue([{ id: 'art-1', title: 'Shirt' }]);
+
     const res = await POST(makePostRequest({ sellerArticleIds: ['sa-1'] }), makeContext());
-    expect(res.status).toBe(403);
-    expect((await res.json()).error).toMatch(/nicht als Teilnehmer aktiv/i);
+
+    expect(res.status).toBe(201);
+    expect(prismaMock.article.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ basarSellerId: 'bs-1' }) })
+    );
   });
 
   it('returns 404 when basar not found', async () => {
@@ -76,7 +86,7 @@ describe('POST /api/basars/[id]/articles/import', () => {
   it('returns 400 when empty sellerArticleIds', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);
-    prismaMock.basarSeller.findUnique.mockResolvedValue(fakeBasarSeller);
+    prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
     prismaMock.article.count.mockResolvedValue(0);
     const res = await POST(makePostRequest({ sellerArticleIds: [] }), makeContext());
     expect(res.status).toBe(400);
@@ -86,7 +96,7 @@ describe('POST /api/basars/[id]/articles/import', () => {
   it('returns 400 when all articles already in basar', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);
-    prismaMock.basarSeller.findUnique.mockResolvedValue(fakeBasarSeller);
+    prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
     prismaMock.article.count.mockResolvedValue(0);
     prismaMock.sellerArticle.findMany.mockResolvedValue([
       { ...archiveItems[0], articles: [{ id: 'art-1' }] }, // already in basar
@@ -96,19 +106,26 @@ describe('POST /api/basars/[id]/articles/import', () => {
     expect((await res.json()).error).toMatch(/bereits/i);
   });
 
-  it('returns 400 when max sellers reached for new basarSeller', async () => {
+  it('does NOT apply the maxSellers limit to the archive import', async () => {
+    // Wie bei POST /articles: eine inaktive Zeile belegt keinen Teilnehmerplatz, ein
+    // ausgebuchter Basar darf die Artikelanlage deshalb nicht blockieren.
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);
-    prismaMock.basarSeller.findUnique.mockResolvedValue(null);
     prismaMock.basarSeller.count.mockResolvedValue(100);
+    prismaMock.basarSeller.upsert.mockResolvedValue({ ...fakeBasarSeller, isActive: false });
+    prismaMock.article.count.mockResolvedValue(0);
+    prismaMock.sellerArticle.findMany.mockResolvedValue(archiveItems);
+    prismaMock.$transaction.mockResolvedValue([{ id: 'art-1', title: 'Shirt' }]);
+
     const res = await POST(makePostRequest({ sellerArticleIds: ['sa-1'] }), makeContext());
-    expect(res.status).toBe(400);
+
+    expect(res.status).toBe(201);
   });
 
   it('imports articles successfully → 201', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);
-    prismaMock.basarSeller.findUnique.mockResolvedValue(fakeBasarSeller);
+    prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
     prismaMock.article.count.mockResolvedValue(5);
     prismaMock.sellerArticle.findMany.mockResolvedValue(archiveItems);
     prismaMock.$transaction.mockResolvedValue([{ id: 'art-1', title: 'Shirt' }]);
@@ -118,12 +135,52 @@ describe('POST /api/basars/[id]/articles/import', () => {
     expect(data.articles).toHaveLength(1);
   });
 
-  it('creates a new basarSeller via upsert (not create) when the seller has no row yet', async () => {
+  // Kernversprechen der Archivübernahme: Der QR-Code bleibt derselbe, damit bereits gedruckte
+  // Etiketten weiter gelten (siehe CLAUDE.md – Verkäufernummer und Artikel-QR sind basar-
+  // übergreifend stabil). Bisher prüfte der Erfolgstest nur Statuscode und Anzahl; ein Import,
+  // der neue QR-Codes vergibt, wäre unbemerkt durchgegangen und hätte jeden Verkäufer zum
+  // Neudruck gezwungen. Geprüft wird deshalb, was tatsächlich in die Transaktion geht.
+  it('übernimmt den QR-Code aus dem Archiv unverändert', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);
-    prismaMock.basarSeller.findUnique.mockResolvedValue(null); // no row yet
-    prismaMock.basarSeller.count.mockResolvedValue(0); // well under maxSellers
     prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
+    prismaMock.article.count.mockResolvedValue(5);
+    prismaMock.sellerArticle.findMany.mockResolvedValue(archiveItems);
+    prismaMock.$transaction.mockResolvedValue([{ id: 'art-1' }]);
+
+    await POST(makePostRequest({ sellerArticleIds: ['sa-1'] }), makeContext());
+
+    expect(prismaMock.article.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        qrCode: 'uuid-1',           // exakt der Code aus dem Archiveintrag
+        sellerArticleId: 'sa-1',    // Verknüpfung zurück ins Archiv
+        title: 'Shirt',
+        price: archiveItems[0].price,
+      }),
+    });
+  });
+
+  it('vergibt nur dann einen neuen QR-Code, wenn der Archiveintrag noch keinen hat', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basar.findUnique.mockResolvedValue(openBasar);
+    prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
+    prismaMock.article.count.mockResolvedValue(5);
+    prismaMock.sellerArticle.findMany.mockResolvedValue([
+      { ...archiveItems[0], qrCode: null }, // Altbestand von vor der QR-Wiederverwendung
+    ]);
+    prismaMock.$transaction.mockResolvedValue([{ id: 'art-1' }]);
+
+    await POST(makePostRequest({ sellerArticleIds: ['sa-1'] }), makeContext());
+
+    const [[createArgs]] = prismaMock.article.create.mock.calls;
+    expect(createArgs.data.qrCode).toEqual(expect.any(String));
+    expect(createArgs.data.qrCode).not.toBe('');
+  });
+
+  it('creates a new basarSeller via upsert (not create) and leaves it INACTIVE', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basar.findUnique.mockResolvedValue(openBasar);
+    prismaMock.basarSeller.upsert.mockResolvedValue({ ...fakeBasarSeller, isActive: false });
     prismaMock.article.count.mockResolvedValue(0);
     prismaMock.sellerArticle.findMany.mockResolvedValue(archiveItems);
     prismaMock.$transaction.mockResolvedValue([{ id: 'art-1', title: 'Shirt' }]);
@@ -132,18 +189,17 @@ describe('POST /api/basars/[id]/articles/import', () => {
 
     expect(res.status).toBe(201);
     expect(prismaMock.basarSeller.create).not.toHaveBeenCalled();
+    // isActive: false – die Übernahme aus dem Archiv darf keine Teilnahme erzeugen.
     expect(prismaMock.basarSeller.upsert).toHaveBeenCalledWith({
       where: { basarId_sellerId: { basarId: 'basar-1', sellerId: 1234 } },
       update: {},
-      create: { basarId: 'basar-1', sellerId: 1234, isActive: true, activatedAt: expect.any(Date) },
+      create: { basarId: 'basar-1', sellerId: 1234, isActive: false, activatedAt: null },
     });
   });
 
-  it('upsert keeps working across repeated calls that both see no existing basarSeller (double-click / two tabs)', async () => {
+  it('upsert keeps working across repeated calls (double-click / two tabs)', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);
-    prismaMock.basarSeller.findUnique.mockResolvedValue(null);
-    prismaMock.basarSeller.count.mockResolvedValue(0);
     prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
     prismaMock.article.count.mockResolvedValue(0);
     prismaMock.sellerArticle.findMany.mockResolvedValue(archiveItems);

@@ -375,9 +375,10 @@ export default function EmployeePage() {
 
       <div className="max-w-6xl mx-auto p-8">
         {/* Basar-Teilnahme und Artikelerfassung sind gemeinsame Funktionen für Verkäufer
-            und Mitarbeiter und leben daher nur im Verkäuferbereich (/seller) – der Link
-            dorthin steht immer in der Kopfzeile. Hier bleiben nur die Mitarbeiter-only
-            Funktionen: Kasse, Helferliste, Kuchenliste. */}
+            und Mitarbeiter und leben daher vollständig im Verkäuferbereich (/seller) –
+            erreichbar über den Tab "Verkäuferbereich" in der Kopfzeile. Einen eigenen
+            Tab "Basare" gibt es für Mitarbeiter bewusst nicht mehr. Hier bleiben nur die
+            Mitarbeiter-only Funktionen: Kasse, Helferliste, Kuchenliste. */}
         {message && (
           <div className={`mb-6 px-6 py-3 rounded-lg font-medium text-center animate-fade-in ${
             message.includes('Fehler') ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-green-100 text-green-800 border border-green-200'

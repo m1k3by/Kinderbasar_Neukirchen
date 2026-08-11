@@ -15,10 +15,13 @@ vi.mock('@/app/lib/rateLimit', () => ({ rateLimit: rateLimitMock }));
 // Registration is basar-independent: it only ever touches Seller/SellerIdCounter/MailQueue.
 // Basar participation is a separate step (PUT /api/basars/[id]/participation).
 const prismaMock = vi.hoisted(() => ({
-  seller: { findUnique: vi.fn(), create: vi.fn() },
+  // findMany ist bewusst gemockt, obwohl die Route es nicht mehr aufruft: Der Test unten
+  // hält damit fest, dass die alte O(n)-Scanlogik ("alle vorhandenen IDs laden und die erste
+  // Lücke suchen") nicht zurückkehrt.
+  seller: { findUnique: vi.fn(), create: vi.fn(), findMany: vi.fn() },
   mailQueue: { create: vi.fn() },
-  $transaction: vi.fn(),
   $queryRaw: vi.fn(),
+  $executeRaw: vi.fn(),
 }));
 vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
 
@@ -49,14 +52,28 @@ function makeNextRequest(body: object, token?: string) {
   return req;
 }
 
-// allocateSellerId() does `prisma.$transaction(async (tx) => tx.$queryRaw\`UPDATE ...
-// RETURNING "nextId" - 1 AS "allocated"\`)`. Mock $transaction to run the callback against the
-// same mock client, and $queryRaw to resolve to the allocated id row (or [] to simulate the
-// 1000-9999 range being exhausted, mirroring the WHERE ... AND "nextId" <= 9999 clause
-// matching zero rows).
+// allocateSellerId() setzt `prisma.$queryRaw\`UPDATE "SellerIdCounter" ... RETURNING\`` ab.
+// Kommt nichts zurück, wird die Zählerzeile per $executeRaw nachgesät und genau einmal erneut
+// versucht. Erst wenn auch der zweite Lauf leer bleibt, ist der Bereich wirklich erschöpft.
+//
+// `id: null` heißt hier deshalb ausdrücklich "beide Läufe leer" und nicht bloß "irgendein
+// leeres Ergebnis" – die frühere Fassung dieses Helpers deutete ein einzelnes leeres Ergebnis
+// als "Bereich erschöpft" und hat damit denselben Denkfehler kodiert wie der Produktivcode.
+// Die leere Zählertabelle sah dadurch im Test korrekt aus und blockierte produktiv jede
+// Registrierung mit der Falschmeldung "Alle Verkäufer-IDs sind vergeben".
 function mockAllocateSellerId(id: number | null) {
-  prismaMock.$transaction.mockImplementation(async (fn: any) => fn(prismaMock));
+  prismaMock.$executeRaw.mockResolvedValue(1);
   prismaMock.$queryRaw.mockResolvedValue(id === null ? [] : [{ allocated: id }]);
+}
+
+/**
+ * SQL-Text eines getaggten Template-Aufrufs, normalisiert auf einfache Leerzeichen.
+ * Damit prüfen die Tests, *welche* Anweisung abgesetzt wurde, statt nur zu zählen –
+ * sonst könnte ein Mock erneut unbemerkt eine falsche Annahme über die Datenbank festschreiben.
+ */
+function sqlOf(mock: { mock: { calls: unknown[][] } }, callIndex: number): string {
+  const strings = mock.mock.calls[callIndex][0] as string[];
+  return strings.join(' ? ').replace(/\s+/g, ' ').trim();
 }
 
 const validBody = { email: 'test@example.com', firstName: 'Max', lastName: 'Muster' };
@@ -215,21 +232,100 @@ describe('POST /api/register', () => {
   // ─── Atomic sellerId allocation ──────────────────────────────────────────────
 
   describe('atomic sellerId allocation', () => {
-    it('allocates the id via one $queryRaw call wrapped in a $transaction (no more scanning all existing ids)', async () => {
+    it('vergibt die ID mit einer einzigen UPDATE-Anweisung (kein Scannen aller vorhandenen IDs)', async () => {
       prismaMock.seller.findUnique.mockResolvedValue(null);
       prismaMock.seller.create.mockResolvedValue(createdSeller);
+
       await POST(makeNextRequest(validBody));
-      expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+
       expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
+      const sql = sqlOf(prismaMock.$queryRaw, 0);
+      expect(sql).toContain('UPDATE "SellerIdCounter"');
+      expect(sql).toContain('SET "nextId" = "nextId" + 1');
+      expect(sql).toContain('"nextId" <= 9999');   // Obergrenze des Bereichs 1000-9999
+      expect(sql).toContain('RETURNING');
+      // Im Normalfall wird nicht nachgesät – das kostet sonst eine Anweisung pro Registrierung
+      expect(prismaMock.$executeRaw).not.toHaveBeenCalled();
+      // Und schon gar nicht wird wieder die komplette Verkäufertabelle gelesen
+      expect(prismaMock.seller.findMany).not.toHaveBeenCalled();
     });
 
-    it('returns 400 "Alle Verkäufer-IDs sind vergeben" when the counter is exhausted', async () => {
-      prismaMock.seller.findUnique.mockResolvedValue(null);
-      mockAllocateSellerId(null); // WHERE "nextId" <= 9999 matches nothing → range exhausted
-      const res = await POST(makeNextRequest(validBody));
-      expect(res.status).toBe(400);
-      expect((await res.json()).error).toMatch(/Alle Verkäufer-IDs sind vergeben/i);
-      expect(prismaMock.seller.create).not.toHaveBeenCalled();
+    // ── Regression zum Produktionsvorfall vom 11.08.2026 ───────────────────────
+    // Die Zählerzeile fehlte in der Produktivdatenbank: Die Tabelle war zwar angelegt, das
+    // seedende INSERT der Migration lief aber nie. Das UPDATE traf damit 0 Zeilen – genau
+    // wie bei einem erschöpften Bereich. Der Code deutete das als "alle 9000 IDs vergeben"
+    // und blockierte jede Registrierung, obwohl der Bereich praktisch leer war.
+    //
+    // Entscheidend ist deshalb nicht, dass 0 Zeilen zu irgendeinem Verhalten führen, sondern
+    // dass die beiden Ursachen *unterschieden* werden.
+    describe('0 betroffene Zeilen sind zweideutig – fehlende Zählerzeile vs. erschöpfter Bereich', () => {
+      it('fehlende Zählerzeile: legt sie an und registriert danach normal weiter', async () => {
+        prismaMock.seller.findUnique.mockResolvedValue(null);
+        prismaMock.seller.create.mockResolvedValue(createdSeller);
+        prismaMock.$executeRaw.mockResolvedValue(1);
+        prismaMock.$queryRaw
+          .mockResolvedValueOnce([])                     // Zeile fehlt → 0 Treffer
+          .mockResolvedValueOnce([{ allocated: 1042 }]); // nach dem Nachsäen
+
+        const res = await POST(makeNextRequest(validBody));
+
+        expect(res.status).toBe(200);
+        expect(prismaMock.$executeRaw).toHaveBeenCalledTimes(1);
+        expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(2);
+        expect(prismaMock.seller.create).toHaveBeenCalledWith(
+          expect.objectContaining({ data: expect.objectContaining({ sellerId: 1042 }) })
+        );
+      });
+
+      it('sät die Zeile idempotent und leitet den Startwert aus der höchsten vergebenen Nummer ab', async () => {
+        prismaMock.seller.findUnique.mockResolvedValue(null);
+        prismaMock.seller.create.mockResolvedValue(createdSeller);
+        prismaMock.$executeRaw.mockResolvedValue(1);
+        prismaMock.$queryRaw
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([{ allocated: 1042 }]);
+
+        await POST(makeNextRequest(validBody));
+
+        const seed = sqlOf(prismaMock.$executeRaw, 0);
+        expect(seed).toContain('INSERT INTO "SellerIdCounter"');
+        // Ohne ON CONFLICT würde eine parallele Registrierung hier auf einen Primärschlüssel-
+        // konflikt laufen, statt einfach weiterzumachen.
+        expect(seed).toContain('ON CONFLICT ("id") DO NOTHING');
+        // Der Startwert MUSS aus MAX("sellerId") kommen. Ein fest verdrahtetes 1000 würde die
+        // nächsten Registrierungen mit längst bestehenden Verkäufern kollidieren lassen.
+        expect(seed).toContain('MAX("sellerId")');
+        expect(seed).toContain('GREATEST(1000');
+      });
+
+      it('wirklich erschöpfter Bereich: meldet 400 erst, nachdem das Nachsäen nichts geändert hat', async () => {
+        prismaMock.seller.findUnique.mockResolvedValue(null);
+        mockAllocateSellerId(null); // beide Läufe leer
+
+        const res = await POST(makeNextRequest(validBody));
+
+        expect(res.status).toBe(400);
+        expect((await res.json()).error).toMatch(/Alle Verkäufer-IDs sind vergeben/i);
+        // Genau ein Nachsäe-Versuch – keine Endlosschleife, kein zweiter Anlauf
+        expect(prismaMock.$executeRaw).toHaveBeenCalledTimes(1);
+        expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(2);
+        expect(prismaMock.seller.create).not.toHaveBeenCalled();
+      });
+
+      it('meldet nicht mehr "vergeben", solange das Nachsäen noch eine ID liefern kann', async () => {
+        prismaMock.seller.findUnique.mockResolvedValue(null);
+        prismaMock.seller.create.mockResolvedValue(createdSeller);
+        prismaMock.$executeRaw.mockResolvedValue(1);
+        prismaMock.$queryRaw
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([{ allocated: 1000 }]);
+
+        const res = await POST(makeNextRequest(validBody));
+
+        // Der eigentliche Fehler von damals: hier kam ein 400 heraus.
+        expect(res.status).toBe(200);
+        expect((await res.json()).error).toBeUndefined();
+      });
     });
 
     it('uses whatever id the counter returns, not a hardcoded value', async () => {

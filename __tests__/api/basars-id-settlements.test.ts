@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { adminToken, sellerToken } from '../helpers/tokens';
+import { dec } from '../helpers/decimal';
 
 const cookiesGetMock = vi.hoisted(() => vi.fn());
 vi.mock('next/headers', () => ({
@@ -36,7 +37,9 @@ function makePostRequest() {
   return new Request('http://localhost/api/basars/basar-1/settlements', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
 }
 
-const closedBasar = { id: 'basar-1', status: 'CLOSED', commissionPercent: 20, entryFee: 0 };
+// commissionPercent und entryFee sind im Schema Decimal – deshalb dec() statt 20 / 0.
+// Siehe helpers/decimal.ts: ein Mock mit plain numbers verhält sich hier anders als Postgres.
+const closedBasar = { id: 'basar-1', status: 'CLOSED', commissionPercent: dec(20), entryFee: dec(0) };
 const openBasar = { id: 'basar-1', status: 'OPEN' };
 
 describe('GET /api/basars/[id]/settlements', () => {
@@ -130,7 +133,7 @@ describe('POST /api/basars/[id]/settlements', () => {
       {
         id: 'bs-1', commissionOverride: null,
         articles: [
-          { status: 'SOLD', sales: [{ isCancelled: false, salePrice: 5.0 }] },
+          { status: 'SOLD', sales: [{ isCancelled: false, salePrice: dec(5.0) }] },
           { status: 'AVAILABLE', sales: [] },
         ],
       },
@@ -191,8 +194,8 @@ describe('POST /api/basars/[id]/settlements', () => {
           {
             status: 'SOLD',
             sales: [
-              { isCancelled: true, salePrice: 5.0 },
-              { isCancelled: false, salePrice: 7.0 },
+              { isCancelled: true, salePrice: dec(5.0) },
+              { isCancelled: false, salePrice: dec(7.0) },
             ],
           },
         ],
@@ -206,6 +209,73 @@ describe('POST /api/basars/[id]/settlements', () => {
         update: expect.objectContaining({ grossRevenue: 7.0 }),
       })
     );
+  });
+
+  // Regressionstest gegen Decimal-Verkettung. Prisma liefert für salePrice ein Decimal, dessen
+  // valueOf() eine Zeichenkette ist. Ohne Number() ergibt `0 + dec(2.50) + dec(3.00) + dec(10.00)`
+  // nicht 15.5, sondern den String "02.5310" – und genau der landete dann als Auszahlungsbetrag
+  // in der Datenbank. Mit number-Fixtures wäre das unsichtbar geblieben.
+  it('summiert mehrere Verkäufe eines Verkäufers numerisch, nicht als Zeichenkette', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.basar.findUnique.mockResolvedValue(closedBasar);
+    prismaMock.basarSeller.findMany.mockResolvedValue([
+      {
+        id: 'bs-1', commissionOverride: null,
+        articles: [
+          { status: 'SOLD', sales: [{ isCancelled: false, salePrice: dec('2.50') }] },
+          { status: 'SOLD', sales: [{ isCancelled: false, salePrice: dec('3.00') }] },
+          { status: 'SOLD', sales: [{ isCancelled: false, salePrice: dec('10.00') }] },
+        ],
+      },
+    ]);
+    prismaMock.settlement.upsert.mockResolvedValue({ id: 'set-1' });
+
+    const res = await POST(makePostRequest(), makeContext());
+
+    expect(res.status).toBe(200);
+    const [[args]] = prismaMock.settlement.upsert.mock.calls;
+    expect(args.update.grossRevenue).toBe(15.5);
+    expect(typeof args.update.grossRevenue).toBe('number'); // nicht "02.5310"
+    expect(args.update.commissionAmount).toBe(3.1);         // 20 % von 15,50 €
+    expect(args.update.netPayout).toBe(12.4);
+  });
+
+  it('rechnet mit der Provisionsabweichung des Verkäufers, wenn gesetzt', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.basar.findUnique.mockResolvedValue({ ...closedBasar, entryFee: dec('2.00') });
+    prismaMock.basarSeller.findMany.mockResolvedValue([
+      {
+        id: 'bs-1',
+        commissionOverride: dec(10), // statt der 20 % des Basars
+        articles: [{ status: 'SOLD', sales: [{ isCancelled: false, salePrice: dec('50.00') }] }],
+      },
+    ]);
+    prismaMock.settlement.upsert.mockResolvedValue({ id: 'set-1' });
+
+    await POST(makePostRequest(), makeContext());
+
+    const [[args]] = prismaMock.settlement.upsert.mock.calls;
+    expect(args.update.grossRevenue).toBe(50);
+    expect(args.update.commissionAmount).toBe(5);   // 10 %, nicht 20 %
+    expect(args.update.entryFeeAmount).toBe(2);     // Teilnahmegebühr als Zahl, nicht Decimal
+    expect(args.update.netPayout).toBe(43);         // 50 − 5 − 2
+  });
+
+  it('lässt die Auszahlung nicht negativ werden, wenn die Gebühr den Erlös übersteigt', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.basar.findUnique.mockResolvedValue({ ...closedBasar, entryFee: dec('5.00') });
+    prismaMock.basarSeller.findMany.mockResolvedValue([
+      {
+        id: 'bs-1', commissionOverride: null,
+        articles: [{ status: 'SOLD', sales: [{ isCancelled: false, salePrice: dec('1.00') }] }],
+      },
+    ]);
+    prismaMock.settlement.upsert.mockResolvedValue({ id: 'set-1' });
+
+    await POST(makePostRequest(), makeContext());
+
+    const [[args]] = prismaMock.settlement.upsert.mock.calls;
+    expect(args.update.netPayout).toBe(0);
   });
 
   it('returns 500 on DB error', async () => {

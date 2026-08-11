@@ -102,37 +102,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const stableQrCode = crypto.randomUUID();
 
     // Everything that must stay consistent under parallel requests (get-or-create BasarSeller,
-    // the maxSellers/maxArticles limit checks, and both writes) happens inside one transaction:
+    // the maxArticles limit check, and both writes) happens inside one transaction:
     //  - basarSeller.upsert instead of find-then-create: a double-click or two open tabs used
     //    to race two concurrent creates into a P2002 on [basarId, sellerId] → 500. upsert is a
     //    single atomic statement, so the second caller just gets the same row back.
-    //  - maxSellers/maxArticles are re-read here (not from a check made before the transaction
-    //    started) so the limits can't be exceeded by two requests that both passed the check
-    //    before either had written anything.
+    //  - maxArticles is re-read here (not from a check made before the transaction started) so
+    //    the limit can't be exceeded by two requests that both passed the check before either
+    //    had written anything.
     // Errors are returned as a discriminated result rather than thrown, mirroring the
     // conditional-update pattern already used in app/api/basars/[id]/sales/route.ts.
     const result = await prisma.$transaction(async (tx) => {
-      let basarSeller = await tx.basarSeller.findUnique({
+      // Artikel anlegen ist bewusst von der Teilnahme ENTKOPPELT: Ein Verkäufer darf seine
+      // Artikel vorbereiten, ohne für diesen Basar angemeldet zu sein. Deshalb wird eine
+      // fehlende Zeile hier inaktiv angelegt und maxSellers an dieser Stelle nicht geprüft –
+      // eine inaktive Zeile belegt keinen Teilnehmerplatz. Ein Platz entsteht ausschließlich
+      // über PUT /api/basars/[id]/participation, das dafür Aktivierungsfenster und maxSellers
+      // prüft. `update: {}` lässt eine bestehende Zeile unangetastet, aktiviert also weder
+      // versehentlich noch deaktiviert es einen bereits angemeldeten Teilnehmer.
+      const basarSeller = await tx.basarSeller.upsert({
         where: { basarId_sellerId: { basarId, sellerId } },
+        update: {},
+        create: { basarId, sellerId, isActive: false, activatedAt: null },
       });
-
-      if (!basarSeller) {
-        // Randfall: normalerweise entsteht BasarSeller schon bei der Registrierung
-        // für diesen Basar (app/api/register) oder bei der Teilnahme-Aktivierung
-        // (app/api/basars/[id]/participation). Dieser lazy-create-Pfad fängt
-        // Alt-Konten ohne diesen Schritt auf.
-        const sellerCount = await tx.basarSeller.count({ where: { basarId, isActive: true } });
-        if (sellerCount >= basar.maxSellers) {
-          return { error: 'MAX_SELLERS' as const };
-        }
-        basarSeller = await tx.basarSeller.upsert({
-          where: { basarId_sellerId: { basarId, sellerId } },
-          update: {},
-          create: { basarId, sellerId, isActive: true, activatedAt: new Date() },
-        });
-      } else if (!basarSeller.isActive) {
-        return { error: 'NOT_ACTIVE' as const };
-      }
 
       const maxArticles = basarSeller.maxArticlesOverride ?? basar.maxArticlesPerSeller;
       const articleCount = await tx.article.count({ where: { basarSellerId: basarSeller.id } });
@@ -170,12 +161,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
 
     if ('error' in result) {
-      if (result.error === 'MAX_SELLERS') {
-        return NextResponse.json({ error: 'Maximale Verkäuferanzahl erreicht' }, { status: 400 });
-      }
-      if (result.error === 'NOT_ACTIVE') {
-        return NextResponse.json({ error: 'Du bist für diesen Basar nicht als Teilnehmer aktiv' }, { status: 403 });
-      }
       return NextResponse.json({ error: `Maximale Artikelanzahl (${result.maxArticles}) erreicht` }, { status: 400 });
     }
 

@@ -115,13 +115,43 @@ describe('POST /api/basars/[id]/articles', () => {
     expect(res.status).toBe(403);
   });
 
-  it('returns 403 when seller has deactivated their participation in this basar', async () => {
+  it('lets a seller WITHOUT an active participation create articles', async () => {
+    // Artikelanlage ist von der Teilnahme entkoppelt: Verkäufer dürfen ihre Artikel
+    // vorbereiten, bevor sie sich anmelden. Früher gab es hier ein 403.
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);
-    prismaMock.basarSeller.findUnique.mockResolvedValue({ ...fakeBasarSeller, isActive: false });
+    prismaMock.basarSeller.upsert.mockResolvedValue({ ...fakeBasarSeller, isActive: false });
+    prismaMock.article.count.mockResolvedValue(0);
+    prismaMock.sellerArticle.create.mockResolvedValue({ id: 'sa-1', title: 'T', qrCode: 'uuid-1' });
+    prismaMock.article.create.mockResolvedValue({ id: 'art-1', title: 'T', qrCode: 'uuid-1', status: 'AVAILABLE' });
+
     const res = await POST(makePostRequest({ title: 'T', price: 1 }), makeContext());
-    expect(res.status).toBe(403);
-    expect((await res.json()).error).toMatch(/nicht als Teilnehmer aktiv/i);
+
+    expect(res.status).toBe(201);
+    // Der Artikel hängt an genau der inaktiven Zeile – die Teilnahme wird nicht nebenbei aktiviert.
+    expect(prismaMock.article.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ basarSellerId: 'bs-1', title: 'T' }) })
+    );
+  });
+
+  it('never flips an existing participation while creating an article', async () => {
+    // `update: {}` ist der Vertrag: eine vorhandene Zeile darf weder aktiviert noch
+    // deaktiviert werden, nur gelesen. Ohne Argumentprüfung wäre das ungetestet, weil
+    // das gemockte $transaction nichts ausführt.
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basar.findUnique.mockResolvedValue(openBasar);
+    prismaMock.basarSeller.upsert.mockResolvedValue({ ...fakeBasarSeller, isActive: false });
+    prismaMock.article.count.mockResolvedValue(0);
+    prismaMock.sellerArticle.create.mockResolvedValue({ id: 'sa-1', title: 'T', qrCode: 'uuid-1' });
+    prismaMock.article.create.mockResolvedValue({ id: 'art-1', title: 'T', qrCode: 'uuid-1', status: 'AVAILABLE' });
+
+    await POST(makePostRequest({ title: 'T', price: 1 }), makeContext());
+
+    expect(prismaMock.basarSeller.upsert).toHaveBeenCalledWith({
+      where: { basarId_sellerId: { basarId: 'basar-1', sellerId: 1234 } },
+      update: {},
+      create: { basarId: 'basar-1', sellerId: 1234, isActive: false, activatedAt: null },
+    });
   });
 
   it('returns 404 when basar not found', async () => {
@@ -138,20 +168,27 @@ describe('POST /api/basars/[id]/articles', () => {
     expect(res.status).toBe(400);
   });
 
-  it('returns 400 when max sellers reached (new basarSeller)', async () => {
+  it('does NOT apply the maxSellers limit to article creation', async () => {
+    // Eine inaktive BasarSeller-Zeile belegt keinen Teilnehmerplatz, deshalb darf ein
+    // ausgebuchter Basar das Anlegen von Artikeln nicht blockieren. Der Platz wird
+    // ausschließlich in PUT /api/basars/[id]/participation vergeben und dort limitiert.
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);
-    prismaMock.basarSeller.findUnique.mockResolvedValue(null);
     prismaMock.basarSeller.count.mockResolvedValue(100); // equals maxSellers
+    prismaMock.basarSeller.upsert.mockResolvedValue({ ...fakeBasarSeller, isActive: false });
+    prismaMock.article.count.mockResolvedValue(0);
+    prismaMock.sellerArticle.create.mockResolvedValue({ id: 'sa-1', title: 'T', qrCode: 'uuid-1' });
+    prismaMock.article.create.mockResolvedValue({ id: 'art-1', title: 'T', qrCode: 'uuid-1', status: 'AVAILABLE' });
+
     const res = await POST(makePostRequest({ title: 'T', price: 1 }), makeContext());
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toMatch(/Verkäufer/i);
+
+    expect(res.status).toBe(201);
   });
 
   it('returns 400 when article limit reached', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);
-    prismaMock.basarSeller.findUnique.mockResolvedValue(fakeBasarSeller);
+    prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
     prismaMock.article.count.mockResolvedValue(50); // equals maxArticlesPerSeller
     const res = await POST(makePostRequest({ title: 'T', price: 1 }), makeContext());
     expect(res.status).toBe(400);
@@ -161,7 +198,7 @@ describe('POST /api/basars/[id]/articles', () => {
   it('returns 400 when title missing', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);
-    prismaMock.basarSeller.findUnique.mockResolvedValue(fakeBasarSeller);
+    prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
     prismaMock.article.count.mockResolvedValue(0);
     const res = await POST(makePostRequest({ price: 2 }), makeContext());
     expect(res.status).toBe(400);
@@ -170,7 +207,7 @@ describe('POST /api/basars/[id]/articles', () => {
   it('returns 400 when price is 0 or negative', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);
-    prismaMock.basarSeller.findUnique.mockResolvedValue(fakeBasarSeller);
+    prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
     prismaMock.article.count.mockResolvedValue(0);
     const res = await POST(makePostRequest({ title: 'Shirt', price: 0 }), makeContext());
     expect(res.status).toBe(400);
@@ -179,7 +216,7 @@ describe('POST /api/basars/[id]/articles', () => {
   it('creates article successfully → 201', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);
-    prismaMock.basarSeller.findUnique.mockResolvedValue(fakeBasarSeller);
+    prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
     prismaMock.article.count.mockResolvedValue(5);
     prismaMock.sellerArticle.create.mockResolvedValue({ id: 'sa-1', title: 'Shirt', qrCode: 'uuid-1' });
     prismaMock.article.create.mockResolvedValue({ id: 'art-1', title: 'Shirt', qrCode: 'uuid-1', status: 'AVAILABLE' });
@@ -191,7 +228,7 @@ describe('POST /api/basars/[id]/articles', () => {
   it('the whole get-or-create + limit checks + writes run inside one transaction', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);
-    prismaMock.basarSeller.findUnique.mockResolvedValue(fakeBasarSeller);
+    prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
     prismaMock.article.count.mockResolvedValue(0);
     prismaMock.sellerArticle.create.mockResolvedValue({ id: 'sa-1', title: 'Shirt', qrCode: 'uuid-1' });
     prismaMock.article.create.mockResolvedValue({ id: 'art-1', title: 'Shirt', qrCode: 'uuid-1', status: 'AVAILABLE' });
@@ -199,12 +236,10 @@ describe('POST /api/basars/[id]/articles', () => {
     expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
   });
 
-  it('creates a new basarSeller via upsert (not create) when the seller has no row yet', async () => {
+  it('creates a new basarSeller via upsert (not create) and leaves it INACTIVE', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);
-    prismaMock.basarSeller.findUnique.mockResolvedValue(null); // no row yet
-    prismaMock.basarSeller.count.mockResolvedValue(0); // well under maxSellers
-    prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
+    prismaMock.basarSeller.upsert.mockResolvedValue({ ...fakeBasarSeller, isActive: false });
     prismaMock.article.count.mockResolvedValue(0);
     prismaMock.sellerArticle.create.mockResolvedValue({ id: 'sa-1', title: 'Shirt', qrCode: 'uuid-1' });
     prismaMock.article.create.mockResolvedValue({ id: 'art-1', title: 'Shirt', qrCode: 'uuid-1', status: 'AVAILABLE' });
@@ -213,21 +248,21 @@ describe('POST /api/basars/[id]/articles', () => {
 
     expect(res.status).toBe(201);
     expect(prismaMock.basarSeller.create).not.toHaveBeenCalled();
+    // isActive: false ist der Kern der Entkopplung – ein Artikel anzulegen darf keine
+    // Teilnahme und damit keinen Teilnehmerplatz erzeugen.
     expect(prismaMock.basarSeller.upsert).toHaveBeenCalledWith({
       where: { basarId_sellerId: { basarId: 'basar-1', sellerId: 1234 } },
       update: {},
-      create: { basarId: 'basar-1', sellerId: 1234, isActive: true, activatedAt: expect.any(Date) },
+      create: { basarId: 'basar-1', sellerId: 1234, isActive: false, activatedAt: null },
     });
   });
 
-  it('upsert keeps working across repeated calls that both see no existing basarSeller (double-click / two tabs)', async () => {
-    // Simulates the race the upsert fixes: two requests both read basarSeller.findUnique as
-    // null (neither has committed yet), then both call upsert. A real Postgres upsert never
-    // throws P2002 here (unlike the old find-then-create), so both calls succeed.
+  it('upsert keeps working across repeated calls (double-click / two tabs)', async () => {
+    // Simulates the race the upsert fixes: two concurrent requests both want to create the
+    // BasarSeller row. A real Postgres upsert never throws P2002 here (unlike the old
+    // find-then-create), so both calls succeed.
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);
-    prismaMock.basarSeller.findUnique.mockResolvedValue(null);
-    prismaMock.basarSeller.count.mockResolvedValue(0);
     prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
     prismaMock.article.count.mockResolvedValue(0);
     prismaMock.sellerArticle.create.mockResolvedValue({ id: 'sa-1', title: 'Shirt', qrCode: 'uuid-1' });

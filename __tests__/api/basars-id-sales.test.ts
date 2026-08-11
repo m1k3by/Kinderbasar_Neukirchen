@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { dec } from '../helpers/decimal';
 import { adminToken, sellerToken, cashierToken } from '../helpers/tokens';
 
 const cookiesGetMock = vi.hoisted(() => vi.fn());
@@ -31,7 +32,7 @@ function makeGetRequest() {
 }
 
 const activeBasar = { id: 'basar-1', status: 'ACTIVE' };
-const availableArticle = { id: 'art-1', status: 'AVAILABLE', price: 3.0, qrCode: 'QR1' };
+const availableArticle = { id: 'art-1', status: 'AVAILABLE', price: dec(3.0), qrCode: 'QR1' };
 
 // Interactive transaction: prisma.$transaction(async (tx) => {...}). The mocked tx client
 // reuses the same model mocks as the top-level prismaMock.
@@ -86,6 +87,24 @@ describe('POST /api/basars/[id]/sales', () => {
       where: { id: 'art-1', status: 'AVAILABLE' },
       data: expect.objectContaining({ status: 'SOLD' }),
     });
+  });
+
+  // Ohne Preisangabe fällt die Route auf den Artikelpreis zurück. Der kommt aus einer
+  // Decimal-Spalte und muss vor dem Schreiben in eine Zahl umgewandelt werden – sonst landet
+  // eine Zeichenkette in Sale.salePrice und die Abrechnung summiert später Text statt Beträge.
+  // Geprüft wird deshalb der *geschriebene* Wert, nicht nur der in der Antwort.
+  it('schreibt den Verkaufspreis als Zahl in die Datenbank, nicht als Decimal', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.basar.findUnique.mockResolvedValue(activeBasar);
+    prismaMock.article.findUnique.mockResolvedValue(availableArticle); // price: dec(3.0)
+    prismaMock.article.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.sale.create.mockResolvedValue({ id: 'sale-1' });
+
+    await POST(makePostRequest({ items: [{ articleId: 'art-1' }] }), makeContext());
+
+    const [[createArgs]] = prismaMock.sale.create.mock.calls;
+    expect(createArgs.data.salePrice).toBe(3.0);
+    expect(typeof createArgs.data.salePrice).toBe('number');
   });
 
   it('storno-then-resell: sale.create is called even though a cancelled sale already exists for the article', async () => {
@@ -233,7 +252,7 @@ describe('GET /api/basars/[id]/sales', () => {
 
   it('returns sales list → 200', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
-    prismaMock.sale.findMany.mockResolvedValue([{ id: 'sale-1', salePrice: 3.0 }]);
+    prismaMock.sale.findMany.mockResolvedValue([{ id: 'sale-1', salePrice: dec(3.0) }]);
     const res = await GET(makeGetRequest(), makeContext());
     expect(res.status).toBe(200);
     const data = await res.json();

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Header from '../../components/Header';
-import { getNavLinks, type NavUser } from '../../lib/navLinks';
+import { getNavLinks, basarsAdminActiveKey, type NavUser } from '../../lib/navLinks';
 import BasarFormFields, { EMPTY_BASAR_FORM, type BasarFormState } from './BasarFormFields';
 
 interface Basar {
@@ -132,7 +132,7 @@ export default function AdminBasarsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header links={getNavLinks(navUser, 'basare')} />
+      <Header links={getNavLinks(navUser, basarsAdminActiveKey(navUser))} />
       <div className="max-w-5xl mx-auto p-6">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold text-gray-800">Basare verwalten</h1>

@@ -27,7 +27,7 @@
     {
       "name": "Mein Basar",
       "short_name": "Artikel",
-      "url": "/seller/basars",
+      "url": "/seller",
       "description": "Artikel verwalten"
     }
   ]

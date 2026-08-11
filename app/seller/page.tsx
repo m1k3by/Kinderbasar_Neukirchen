@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Header from '../components/Header';
 import { getNavLinks } from '../lib/navLinks';
@@ -10,6 +11,9 @@ interface Basar {
   title: string;
   eventDate: string;
   location?: string;
+  maxArticlesPerSeller: number;
+  commissionPercent: number;
+  entryFee: number;
   status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
   isArchived: boolean;
   myParticipation: { isActive: boolean; activatedAt: string | null } | null;
@@ -18,6 +22,15 @@ interface Basar {
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Vorbereitung', OPEN: 'Anmeldung offen', ACTIVE: 'Läuft', CLOSED: 'Beendet',
 };
+const STATUS_COLORS: Record<string, string> = {
+  DRAFT: 'bg-gray-100 text-gray-600', OPEN: 'bg-blue-100 text-blue-700',
+  ACTIVE: 'bg-green-100 text-green-700', CLOSED: 'bg-gray-100 text-gray-500',
+};
+const CTA_LABELS: Record<string, string> = {
+  OPEN: 'Artikel anlegen', ACTIVE: 'Verkäufe ansehen', CLOSED: 'Abrechnung',
+};
+
+const fmt = (n: number) => n.toFixed(2).replace('.', ',');
 
 export default function SellerPage() {
   const router = useRouter();
@@ -27,6 +40,7 @@ export default function SellerPage() {
   const [isCashier, setIsCashier] = useState(false);
   const [loading, setLoading] = useState(true);
   const [basars, setBasars] = useState<Basar[]>([]);
+  const [closedBasars, setClosedBasars] = useState<Basar[]>([]);
   const [togglingBasarId, setTogglingBasarId] = useState<string | null>(null);
   const [deactivateConfirm, setDeactivateConfirm] = useState<Basar | null>(null);
   const [message, setMessage] = useState('');
@@ -73,8 +87,10 @@ export default function SellerPage() {
       }
       if (basarsRes.ok) {
         const data = await basarsRes.json();
-        const all: Basar[] = data.basars ?? [];
-        setBasars(all.filter(b => !b.isArchived && b.status !== 'DRAFT'));
+        const all: Basar[] = (data.basars ?? []).filter((b: Basar) => !b.isArchived);
+        // DRAFT ist für Verkäufer unsichtbar; CLOSED landet in "Vergangene Basare".
+        setBasars(all.filter(b => b.status === 'OPEN' || b.status === 'ACTIVE'));
+        setClosedBasars(all.filter(b => b.status === 'CLOSED'));
       }
     } catch (error) {
       console.error('Error loading seller info:', error);
@@ -204,74 +220,110 @@ export default function SellerPage() {
       />
 
       <main className="max-w-4xl mx-auto p-4 md:p-8">
-        {/* Mein Basar */}
-        <div className="mb-8 bg-yellow-50 border border-yellow-200 rounded-lg shadow-sm p-6 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">Mein Basar – Artikel erfassen</h2>
-            <p className="text-gray-900 mt-1 text-sm">
-              Lege Artikel für den Basar an, drucke Etiketten mit QR-Code und verfolge deine Verkäufe.
-            </p>
+        {message && (
+          <div className={`mb-6 px-6 py-3 rounded-lg font-medium text-center animate-fade-in ${
+            message.startsWith('Fehler') ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-green-100 text-green-800 border border-green-200'
+          }`}>
+            {message}
           </div>
-          <a
-            href="/seller/basars"
-            className="flex-shrink-0 px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold rounded-xl transition-colors shadow-sm"
-          >
-            Zu meinen Artikeln →
-          </a>
-        </div>
+        )}
 
+        {/* Teilnahme und Artikelerfassung liegen bewusst auf derselben Karte: vorher lagen
+            sie auf zwei Seiten (/seller und /seller/basars), sodass für den normalen Ablauf
+            "anmelden, dann Artikel anlegen" ein Tabwechsel nötig war. */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <h2 className="text-2xl font-bold mb-2 text-center text-gray-900">Deine Basare</h2>
+          <h2 className="text-2xl font-bold mb-2 text-center text-gray-900">Meine Basare</h2>
           <p className="text-center text-gray-600 mb-6 text-sm">
-            Melde dich für die Basare an oder ab, an denen du teilnehmen möchtest.
+            Melde dich für einen Basar an und lege dort deine Artikel an – inklusive Etiketten
+            mit QR-Code und Übersicht deiner Verkäufe.
           </p>
 
-          {message && (
-            <div className={`mb-6 px-6 py-3 rounded-lg font-medium text-center animate-fade-in ${
-              message.startsWith('Fehler') ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-green-100 text-green-800 border border-green-200'
-            }`}>
-              {message}
-            </div>
-          )}
-
           {basars.length === 0 ? (
-            <p className="text-center text-gray-400 py-6">Aktuell ist kein Basar für eine Teilnahme geöffnet.</p>
+            <p className="text-center text-gray-400 py-6">
+              {closedBasars.length > 0
+                ? 'Aktuell ist kein Basar für eine Teilnahme geöffnet.'
+                : 'Aktuell sind keine Basare verfügbar.'}
+            </p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {basars.map(basar => {
                 const isActive = basar.myParticipation?.isActive ?? false;
                 const canToggle = basar.status === 'OPEN' || basar.status === 'ACTIVE' || isActive;
                 return (
-                  <div key={basar.id} className="flex flex-col md:flex-row md:items-center justify-between gap-3 border border-gray-200 rounded-xl p-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-gray-900">{basar.title}</span>
-                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">
-                          {STATUS_LABELS[basar.status]}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-500 mt-0.5">
-                        {new Date(basar.eventDate).toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}
-                        {basar.location && ` · ${basar.location}`}
-                      </p>
+                  <div key={basar.id} className="border border-gray-200 rounded-xl p-4">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[basar.status]}`}>
+                        {STATUS_LABELS[basar.status]}
+                      </span>
+                      <span className="font-bold text-gray-900">{basar.title}</span>
                     </div>
-                    <button
-                      onClick={() => toggleParticipation(basar)}
-                      disabled={togglingBasarId === basar.id || (!canToggle && !isActive)}
-                      className={`flex-shrink-0 px-6 py-3 rounded-xl font-bold transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed ${
-                        isActive
-                          ? 'bg-green-500 hover:bg-green-600 text-white'
-                          : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300'
-                      }`}
-                    >
-                      {togglingBasarId === basar.id ? '…' : isActive ? 'Teilnahme: AKTIV' : 'Teilnahme: INAKTIV'}
-                    </button>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {new Date(basar.eventDate).toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}
+                      {basar.location && ` · ${basar.location}`}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      Max. {basar.maxArticlesPerSeller} Artikel · {Number(basar.commissionPercent).toFixed(0)}% Provision
+                      {Number(basar.entryFee) > 0 && ` · ${fmt(Number(basar.entryFee))} € Gebühr`}
+                    </p>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-4">
+                      <button
+                        onClick={() => toggleParticipation(basar)}
+                        disabled={togglingBasarId === basar.id || (!canToggle && !isActive)}
+                        className={`px-6 py-3 rounded-xl font-bold transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed ${
+                          isActive
+                            ? 'bg-green-500 hover:bg-green-600 text-white'
+                            : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300'
+                        }`}
+                      >
+                        {togglingBasarId === basar.id ? '…' : isActive ? 'Teilnahme: AKTIV' : 'Teilnahme: INAKTIV'}
+                      </button>
+                      {/* Auch für Nicht-Teilnehmer sichtbar – was ohne aktive Teilnahme
+                          erlaubt ist, entscheidet die Detailseite, nicht diese Karte. */}
+                      <Link
+                        href={`/seller/basars/${basar.id}`}
+                        className="px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold rounded-xl transition-colors shadow-sm text-center"
+                      >
+                        {CTA_LABELS[basar.status]} →
+                      </Link>
+                    </div>
                   </div>
                 );
               })}
             </div>
           )}
         </div>
+
+        {closedBasars.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-base font-semibold text-gray-500 mb-3">Vergangene Basare</h2>
+            <div className="space-y-3">
+              {closedBasars.map(basar => (
+                <div key={basar.id} className="bg-white rounded-xl border border-gray-200 p-4 opacity-80">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">
+                          {STATUS_LABELS.CLOSED}
+                        </span>
+                        <h3 className="text-sm font-bold text-gray-600 truncate">{basar.title}</h3>
+                      </div>
+                      <p className="text-xs text-gray-400">
+                        {new Date(basar.eventDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                        {basar.location && ` · ${basar.location}`}
+                      </p>
+                    </div>
+                    <Link
+                      href={`/seller/basars/${basar.id}`}
+                      className="flex-shrink-0 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors"
+                    >
+                      {CTA_LABELS.CLOSED}
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Password Change Section */}
         <div className="bg-white rounded-lg shadow-md p-6">

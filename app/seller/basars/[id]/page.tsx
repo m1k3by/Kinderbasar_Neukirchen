@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, use, useRef } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Header from '../../../components/Header';
 import { parseSizes } from '../../../lib/sizes';
@@ -124,8 +125,9 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
           setSellerName(`${me.firstName} ${me.lastName}`);
           setIsEmployee(me.isEmployee || false);
           setIsCashier(me.isCashier || false);
-          // Load archive for OPEN basars where user is an active participant
-          if (isActiveParticipant && basarData?.status === 'OPEN') {
+          // Archiv für jeden OPEN-Basar laden, unabhängig von der Teilnahme – die Übernahme
+          // aus dem Archiv ist Artikelanlage und setzt keine Anmeldung mehr voraus.
+          if (basarData?.status === 'OPEN') {
             const archRes = await fetch(`/api/seller-articles?basarId=${basarId}`);
             if (archRes.ok) {
               const archData = await archRes.json();
@@ -401,14 +403,14 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
 
   if (loading) return (
     <div className="min-h-screen bg-gray-50">
-      <Header links={getNavLinks({ role: isEmployee ? 'employee' : 'seller', isEmployee, isCashier }, 'basare')} />
+      <Header links={getNavLinks({ role: isEmployee ? 'employee' : 'seller', isEmployee, isCashier }, 'verkaeufer')} />
       <div className="text-center py-20 text-gray-500">Laden…</div>
     </div>
   );
 
   if (!basar) return (
     <div className="min-h-screen bg-gray-50">
-      <Header links={getNavLinks({ role: isEmployee ? 'employee' : 'seller', isEmployee, isCashier }, 'basare')} />
+      <Header links={getNavLinks({ role: isEmployee ? 'employee' : 'seller', isEmployee, isCashier }, 'verkaeufer')} />
       <div className="text-center py-20 text-red-500">Basar nicht gefunden</div>
     </div>
   );
@@ -416,17 +418,29 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   const maxArticles = basarSeller?.maxArticlesOverride ?? basar.maxArticlesPerSeller;
   const soldCount = articles.filter(a => a.status === 'SOLD').length;
   const soldRevenue = articles.filter(a => a.status === 'SOLD').reduce((s, a) => s + Number(a.price), 0);
-  const canAddArticles = basar.status === 'OPEN' && activeSellerStatus;
+  // Nur der Basar-Status entscheidet, nicht die Teilnahme: Artikel dürfen vorbereitet
+  // werden, bevor man sich anmeldet (die API sieht das genauso, siehe
+  // app/api/basars/[id]/articles/route.ts).
+  const canAddArticles = basar.status === 'OPEN';
   const isReadOnly = basar.status === 'ACTIVE' || basar.status === 'CLOSED';
   const archiveAvailable = archiveItems.filter(a => !a.alreadyInBasar && !a.soldPreviously);
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Header
-        links={getNavLinks({ role: isEmployee ? 'employee' : 'seller', isEmployee, isCashier }, 'basare')}
+        links={getNavLinks({ role: isEmployee ? 'employee' : 'seller', isEmployee, isCashier }, 'verkaeufer')}
         sellerInfo={sellerName && sellerId ? { name: sellerName, sellerId } : null}
       />
       <div className="max-w-3xl mx-auto p-4 md:p-6">
+
+        {/* Diese Seite ist eine Unterseite von /seller und hat keinen eigenen Tab mehr –
+            der Rücksprung muss deshalb auf der Seite selbst stehen. */}
+        <Link
+          href="/seller"
+          className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 transition-colors mb-4"
+        >
+          ← Zurück zum Verkäuferbereich
+        </Link>
 
         {/* Basar info */}
         <div className="bg-white rounded-xl shadow-sm p-5 mb-5">
@@ -453,11 +467,15 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
           </div>
         )}
 
-        {/* Not active warning */}
+        {/* Hinweis auf fehlende Teilnahme – ausdrücklich KEINE Sperre: Artikel dürfen auch
+            ohne aktive Anmeldung angelegt werden. Der Hinweis erinnert nur daran, dass zum
+            Verkaufen zusätzlich die Anmeldung nötig ist. Ziel ist immer /seller – die
+            Teilnahme-Umschaltung liegt ausschließlich dort, auch für Mitarbeiter. */}
         {basar.status === 'OPEN' && !activeSellerStatus && (
           <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-5 text-orange-800">
-            <strong>Hinweis:</strong> Du bist für diesen Basar aktuell nicht als Teilnehmer aktiv. Melde dich auf der{' '}
-            <a href={isEmployee ? '/employee' : '/seller'} className="underline font-semibold">Übersichtsseite</a> an, um Artikel anlegen zu können.
+            <strong>Hinweis:</strong> Du bist für diesen Basar aktuell nicht als Teilnehmer angemeldet.
+            Artikel kannst du trotzdem schon anlegen – damit sie verkauft werden können, melde dich im{' '}
+            <Link href="/seller" className="underline font-semibold">Verkäuferbereich</Link> für den Basar an.
           </div>
         )}
 
@@ -845,7 +863,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
           </div>
         )}
 
-        {articles.length === 0 && basar.status === 'OPEN' && activeSellerStatus && (
+        {articles.length === 0 && canAddArticles && (
           <div className="text-center py-12 text-gray-400">
             Noch keine Artikel. Füge deinen ersten Artikel oben hinzu!
           </div>

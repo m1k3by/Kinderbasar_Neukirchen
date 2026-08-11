@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { dec } from '../helpers/decimal';
 import { sellerToken, cashierToken, adminToken } from '../helpers/tokens';
 
 // ─── next/headers mock ────────────────────────────────────────────────────────
@@ -24,7 +25,7 @@ function makeContext(qrCode = 'QR_1234_Muster') {
 }
 
 const fakeArticle = {
-  id: 'art-1', title: 'T-Shirt blau', sizeLabel: '104', price: 5.0, status: 'AVAILABLE', qrCode: 'QR_1234_Muster',
+  id: 'art-1', title: 'T-Shirt blau', sizeLabel: '104', price: dec(5.0), status: 'AVAILABLE', qrCode: 'QR_1234_Muster',
   basarSeller: {
     sellerId: 1234,
     seller: { firstName: 'Max', lastName: 'Muster', sellerId: 1234 },

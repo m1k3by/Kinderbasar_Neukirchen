@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { dec } from '../helpers/decimal';
 import { adminToken, sellerToken } from '../helpers/tokens';
 
 // ─── next/headers mock ────────────────────────────────────────────────────────
@@ -30,7 +31,7 @@ function makePutRequest(body: object) {
   });
 }
 
-const fakeBasar = { id: 'basar-1', title: 'Basar 2025', status: 'DRAFT', eventDate: new Date(), description: null, location: null, maxSellers: 100, maxArticlesPerSeller: 50, commissionPercent: 20, entryFee: 0, _count: { basarSellers: 2, sales: 0 }, basarSellers: [] };
+const fakeBasar = { id: 'basar-1', title: 'Basar 2025', status: 'DRAFT', eventDate: new Date(), description: null, location: null, maxSellers: 100, maxArticlesPerSeller: 50, commissionPercent: dec(20), entryFee: dec(0), _count: { basarSellers: 2, sales: 0 }, basarSellers: [] };
 
 describe('GET /api/basars/[id]', () => {
   beforeEach(() => vi.clearAllMocks());
