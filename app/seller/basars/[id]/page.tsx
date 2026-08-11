@@ -260,114 +260,6 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
     setTimeout(() => setMessage(''), 4000);
   }
 
-  async function handlePrintLabels() {
-    if (articles.length === 0) return;
-    const win = window.open('', '_blank');
-    if (!win) return;
-    // Etikettenbogen: A4, 24 Etiketten à 70 x 36 mm (3 Spalten x 8 Reihen, z. B. Avery 3475)
-    const LABELS_PER_SHEET = 24;
-    const labelHtml = (a: Article) => `
-      <div class="label">
-        <div class="left">
-          <img src="/api/articles/${a.qrCode}/qr" alt="QR" class="qr" />
-          <div class="vknr">${basarSeller?.seller?.sellerId ?? basarSeller?.sellerId ?? '?'}</div>
-        </div>
-        <div class="info">
-          <div class="cell title"><span class="lbl">Bezeichnung</span>${escapeHtml(a.title)}</div>
-          <div class="row">
-            <div class="cell size"><span class="lbl">Größe</span>${a.sizeLabel ? escapeHtml(a.sizeLabel) : '–'}${a.gender ? `<span class="gender-badge">${escapeHtml(a.gender)}</span>` : ''}</div>
-            <div class="cell price"><span class="lbl">Preis</span>${fmt(Number(a.price))} €</div>
-          </div>
-        </div>
-      </div>`;
-    const sheets: string[] = [];
-    for (let i = 0; i < articles.length; i += LABELS_PER_SHEET) {
-      const chunk = articles.slice(i, i + LABELS_PER_SHEET);
-      sheets.push(`<div class="sheet">${chunk.map(labelHtml).join('')}</div>`);
-    }
-    win.document.write(`<!DOCTYPE html><html><head><title>Etiketten</title>
-    <style>
-      @page { size: A4; margin: 0; }
-      * { box-sizing: border-box; }
-      body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
-      .sheet {
-        width: 210mm;
-        padding: 4.5mm 0;
-        display: grid;
-        grid-template-columns: repeat(3, 70mm);
-        grid-auto-rows: 36mm;
-        page-break-after: always;
-      }
-      .sheet:last-child { page-break-after: auto; }
-      .label {
-        width: 70mm;
-        height: 36mm;
-        display: flex;
-        flex-direction: row;
-        align-items: flex-start;
-        gap: 2mm;
-        padding: 2.5mm;
-        overflow: hidden;
-        page-break-inside: avoid;
-      }
-      .left {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        flex-shrink: 0;
-        width: 17mm;
-      }
-      .qr {
-        width: 17mm;
-        height: 17mm;
-      }
-      .vknr {
-        font-size: 9pt;
-        color: #333;
-        font-weight: bold;
-        white-space: nowrap;
-        margin-top: 1mm;
-      }
-      .info {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        align-self: stretch;
-        min-width: 0;
-        overflow: hidden;
-      }
-      .row {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        column-gap: 2mm;
-        align-items: end;
-      }
-      .cell {
-        display: flex;
-        flex-direction: column;
-        min-width: 0;
-        overflow: hidden;
-      }
-      .lbl { font-size: 5pt; color: #aaa; display: block; margin-bottom: 0.3mm; white-space: nowrap; }
-      .title { font-size: 8pt; font-weight: bold; word-break: break-word; line-height: 1.2; max-height: 15mm; overflow: hidden; }
-      .size { font-size: 8pt; color: #333; white-space: nowrap; overflow: hidden; }
-      .price { font-size: 12pt; font-weight: bold; color: #000; white-space: nowrap; }
-      .gender-badge { font-size: 6pt; font-weight: bold; color: #1d4ed8; }
-      .hint { margin: 4mm; font-size: 11px; color: #666; }
-      @media print { button, .hint { display: none; } }
-    </style></head><body>
-    <button onclick="window.print()" style="margin:4mm;padding:6px 16px;font-size:13px;cursor:pointer;">🖨 Drucken</button>
-    <div class="hint">Etikettenbögen 70 × 36 mm, 24 pro Blatt (z. B. Avery 3475). Beim Drucken „Tatsächliche Größe" / 100 % wählen – nicht „An Seite anpassen".</div>
-    ${sheets.join('')}
-    </body></html>`);
-    win.document.close();
-  }
-
-  function escapeHtml(s: string) {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-
   async function handleExportPDF() {
     if (!settlement) return;
     try {
@@ -887,17 +779,32 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
         {/* Article list */}
         {articles.length > 0 && (
           <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+            <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-gray-100">
               <h2 className="font-semibold text-gray-700">Meine Artikel ({articles.length})</h2>
-              {basar.status === 'OPEN' && articles.length > 0 && (
-                <button
-                  onClick={handlePrintLabels}
-                  className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors"
+              {basar.status === 'OPEN' && (
+                <a
+                  href={`/api/basars/${basarId}/labels.pdf`}
+                  download
+                  className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
                 >
-                  🖨 Etiketten drucken
-                </button>
+                  🖨 Etiketten als PDF
+                </a>
               )}
             </div>
+            {basar.status === 'OPEN' && (
+              <p className="px-5 py-2.5 text-xs text-gray-700 bg-amber-50 border-b border-amber-100">
+                Beim Drucken <strong>{'„Tatsächliche Größe" / 100 %'}</strong> wählen – nicht{' '}
+                {'„An Seite anpassen".'} Papierformat A4, Etikettenbögen 70 × 36 mm (z. B. Avery
+                3475).{' '}
+                <a
+                  href={`/api/basars/${basarId}/labels.pdf?calibration=1`}
+                  download
+                  className="underline hover:no-underline"
+                >
+                  Testseite für Normalpapier
+                </a>
+              </p>
+            )}
             <div className="divide-y divide-gray-100">
               {articles.map(article => (
                 <div key={article.id} className="flex items-center gap-3 px-5 py-3">
