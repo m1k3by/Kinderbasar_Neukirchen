@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Header from '../components/Header';
 import { getNavLinks } from '../lib/navLinks';
+import { maxArticlesFor } from '../lib/articleLimits';
 
 interface Basar {
   id: string;
@@ -12,6 +13,7 @@ interface Basar {
   eventDate: string;
   location?: string;
   maxArticlesPerSeller: number;
+  maxArticlesPerEmployee?: number | null;
   commissionPercent: number;
   entryFee: number;
   status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
@@ -276,7 +278,7 @@ export default function SellerPage() {
                       {basar.location && ` · ${basar.location}`}
                     </p>
                     <p className="text-sm text-gray-500 mt-0.5">
-                      Max. {basar.maxArticlesPerSeller} Artikel · {Number(basar.commissionPercent).toFixed(0)}% Provision
+                      Max. {maxArticlesFor(basar, { isEmployee })} Artikel · {Number(basar.commissionPercent).toFixed(0)}% Provision
                       {Number(basar.entryFee) > 0 && ` · ${fmt(Number(basar.entryFee))} € Gebühr`}
                     </p>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-4">

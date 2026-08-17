@@ -300,3 +300,77 @@ describe('POST /api/basars/[id]/articles', () => {
     expect(prismaMock.basarSeller.upsert).toHaveBeenCalledTimes(2);
   });
 });
+
+// ─── Getrennte Artikellimits für Mitarbeiter/Orga und Verkäufer ──────────────
+// isEmployee kommt bewusst aus der Datenbank und nicht aus dem Token: nach einer
+// Rollenänderung durch die Orga behält ein Token den alten Wert bis zur nächsten
+// Anmeldung – der Nutzer bekäme sonst tagelang das falsche Limit.
+describe('POST /api/basars/[id]/articles – Limit je Gruppe', () => {
+  const body = { title: 'Jeans', price: '3.50' };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockTransactionSuccess();
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basarSeller.findUnique.mockResolvedValue(fakeBasarSeller);
+    prismaMock.sellerArticle.create.mockResolvedValue({ id: 'sa-1' });
+    prismaMock.article.create.mockResolvedValue({ id: 'art-1' });
+  });
+
+  /** Basar mit getrennten Limits + Rolle des Verkäufers laut Datenbank. */
+  function setup(isEmployee: boolean, count: number, maxArticlesPerEmployee: number | null = 80) {
+    prismaMock.basar.findUnique.mockResolvedValue({ ...openBasar, maxArticlesPerEmployee });
+    prismaMock.seller.findUnique.mockResolvedValue({ isEmployee });
+    prismaMock.article.count.mockResolvedValue(count);
+  }
+
+  it('lässt einen Mitarbeiter über das Verkäuferlimit hinaus anlegen', async () => {
+    setup(true, 60); // 60 > 50 (Verkäufer), aber < 80 (Mitarbeiter)
+    const res = await POST(makePostRequest(body), makeContext());
+    expect(res.status).toBe(201);
+    expect(prismaMock.article.create).toHaveBeenCalled();
+  });
+
+  it('blockiert denselben Stand bei einem Verkäufer', async () => {
+    setup(false, 60);
+    const res = await POST(makePostRequest(body), makeContext());
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain('50');
+    expect(prismaMock.article.create).not.toHaveBeenCalled();
+  });
+
+  it('blockiert den Mitarbeiter am Mitarbeiterlimit', async () => {
+    setup(true, 80);
+    const res = await POST(makePostRequest(body), makeContext());
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain('80');
+    expect(prismaMock.article.create).not.toHaveBeenCalled();
+  });
+
+  // Bestandsbasare haben kein Mitarbeiterlimit – dort muss sich nichts ändern.
+  it('nutzt ohne Mitarbeiterlimit weiterhin das Verkäuferlimit', async () => {
+    setup(true, 50, null);
+    const res = await POST(makePostRequest(body), makeContext());
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain('50');
+  });
+
+  it('liest die Rolle aus der Datenbank, nicht aus dem Token', async () => {
+    // Token sagt "Verkäufer", die Datenbank sagt "Mitarbeiter" – die Datenbank gewinnt.
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234, { isEmployee: false }) });
+    setup(true, 60);
+    const res = await POST(makePostRequest(body), makeContext());
+    expect(res.status).toBe(201);
+    expect(prismaMock.seller.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { sellerId: 1234 }, select: { isEmployee: true } })
+    );
+  });
+
+  it('lässt die Einzelfall-Ausnahme über dem Gruppenlimit stehen', async () => {
+    prismaMock.basarSeller.findUnique.mockResolvedValue({ ...fakeBasarSeller, maxArticlesOverride: 3 });
+    setup(true, 3); // Mitarbeiterlimit wäre 80, die Ausnahme sagt 3
+    const res = await POST(makePostRequest(body), makeContext());
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain('3');
+  });
+});

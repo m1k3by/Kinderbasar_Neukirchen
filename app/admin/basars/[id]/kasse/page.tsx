@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, use, useCallback } from 'react';
 import Header from '../../../../components/Header';
 import { getNavLinks, type NavUser } from '../../../../lib/navLinks';
 import { articleCacheKey, articleCacheEtagKey, staleArticleCacheKeys } from '../../../../lib/scanCache';
+import { buildScannerConfig, hasNativeBarcodeDetector, scannerRecoveryAction, scannerTuning, type ScannerTuning } from '../../../../lib/scannerConfig';
 
 interface ScannedArticle {
   id: string;
@@ -78,6 +79,9 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
     playScanError();
   }
   const scannerRef = useRef<any>(null);
+  // Wartezeit nach einem Treffer – hängt davon ab, wie teuer das Dekodieren auf diesem
+  // Gerät ist (siehe app/lib/scannerConfig.ts).
+  const tuningRef = useRef<ScannerTuning | null>(null);
   const scannerDivRef = useRef<HTMLDivElement>(null);
   // Ref-based Set tracks scanned codes independently of React state batching
   // This prevents duplicate scans from rapid re-fires of the scanner callback
@@ -286,9 +290,14 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
       const { Html5Qrcode } = await import('html5-qrcode');
       const scanner = new Html5Qrcode('qr-reader-container');
       scannerRef.current = scanner;
+      // Einstellungen richten sich danach, ob das Gerät einen nativen Decoder hat – ohne ihn
+      // (iOS Safari) läuft ZXing in JavaScript auf dem Hauptthread. Begründung der Werte in
+      // app/lib/scannerConfig.ts.
+      const tuning = scannerTuning(hasNativeBarcodeDetector());
+      tuningRef.current = tuning;
       await scanner.start(
         { facingMode: 'environment' },
-        { fps: 15, qrbox: (w, h) => { const s = Math.floor(Math.min(w, h) * 0.72); return { width: s, height: s }; } },
+        buildScannerConfig(tuning),
         async (decodedText: string) => {
           try { await scanner.pause(); } catch { /* ignore */ }
           const resumeDelay = await handleQrScan(decodedText);
@@ -312,6 +321,30 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
   }
 
   useEffect(() => { return () => { stopScanner(); }; }, []);
+
+  // iOS Safari hält den Kamerastream an, sobald die Seite in den Hintergrund geht (App-Wechsel,
+  // Sperrbildschirm, Anruf). Beim Zurückkehren bleibt das <video> pausiert oder der Track ist
+  // beendet – html5-qrcode merkt davon nichts und dekodiert weiter dasselbe Standbild.
+  // Ohne diese Behandlung bleibt die Kasse eingefroren, bis jemand die Seite neu lädt.
+  useEffect(() => {
+    async function recover() {
+      if (document.visibilityState !== 'visible') return;
+      if (!scannerRef.current) return; // Scanner gar nicht gestartet – nichts zu tun
+      const video = scannerDivRef.current?.querySelector('video');
+      switch (scannerRecoveryAction(video)) {
+        case 'ok':
+          return;
+        case 'resume':
+          try { await video!.play(); } catch { await stopScanner(); await startScanner(); }
+          return;
+        case 'restart':
+          await stopScanner();
+          await startScanner();
+      }
+    }
+    document.addEventListener('visibilitychange', recover);
+    return () => document.removeEventListener('visibilitychange', recover);
+  }, []);
 
   async function handleQrScan(qrCode: string): Promise<number> {
     // Deduplicate: code already in cart
@@ -341,7 +374,8 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
       setScanFlash('success');
       setTimeout(() => setScanFlash(null), 1400);
       playScanSuccess();
-      return 1500; // keep scanner paused so the same code doesn't re-fire
+      // Kurze Pause, damit derselbe Code nicht sofort erneut auslöst.
+      return tuningRef.current?.resumeDelayMs ?? 600;
     } catch {
       // When offline: try the local article cache first
       const cached = articleCacheRef.current.get(qrCode);
@@ -358,7 +392,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
         setScanFlash('success');
         setTimeout(() => setScanFlash(null), 1400);
         playScanSuccess();
-        return 1500;
+        return tuningRef.current?.resumeDelayMs ?? 600;
       } else if (!navigator.onLine) {
         setPendingManualQr(qrCode);
         showMessage('Offline: Artikel nicht im Cache – bitte manuell eingeben', 'info');

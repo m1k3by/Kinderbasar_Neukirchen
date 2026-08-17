@@ -1,6 +1,7 @@
 ﻿import { NextResponse } from 'next/server';
 import { prisma } from '../../../../../lib/prisma';
 import { requireAuth } from '../../../../../lib/apiAuth';
+import { maxArticlesFor } from '../../../../../lib/articleLimits';
 
 // POST /api/basars/:id/articles/import
 // Body: { sellerArticleIds: string[] }
@@ -28,7 +29,12 @@ export async function POST(
     }
 
     // Verify basar is OPEN
-    const basar = await prisma.basar.findUnique({ where: { id: basarId } });
+    // seller wird mitgeladen (nicht aus dem Token gelesen) – siehe POST
+    // /api/basars/[id]/articles: ein Token behält isEmployee bis zur nächsten Anmeldung.
+    const [basar, seller] = await Promise.all([
+      prisma.basar.findUnique({ where: { id: basarId } }),
+      prisma.seller.findUnique({ where: { sellerId }, select: { isEmployee: true } }),
+    ]);
     if (!basar) return NextResponse.json({ error: 'Basar nicht gefunden' }, { status: 404 });
     if (basar.status !== 'OPEN') {
       return NextResponse.json({ error: 'Artikel können nur bei offenem Basar importiert werden' }, { status: 400 });
@@ -50,7 +56,7 @@ export async function POST(
     });
 
     // Check article limit
-    const maxArticles = basarSeller.maxArticlesOverride ?? basar.maxArticlesPerSeller;
+    const maxArticles = maxArticlesFor(basar, seller ?? { isEmployee: false }, basarSeller.maxArticlesOverride);
     const currentCount = await prisma.article.count({ where: { basarSellerId: basarSeller.id } });
 
     // Filter: only articles owned by this seller and not already in this basar

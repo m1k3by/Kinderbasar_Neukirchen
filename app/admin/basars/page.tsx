@@ -14,6 +14,7 @@ interface Basar {
   location?: string;
   maxSellers: number;
   maxArticlesPerSeller: number;
+  maxArticlesPerEmployee?: number | null;
   commissionPercent: number;
   entryFee: number;
   status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
@@ -193,7 +194,7 @@ export default function AdminBasarsPage() {
                       {basar.location && ` · ${basar.location}`}
                     </p>
                     <p className="text-sm text-gray-500 mt-0.5">
-                      {basar._count?.basarSellers ?? 0} Verkäufer · Max. {basar.maxArticlesPerSeller} Artikel · {basar.commissionPercent}% Provision · {Number(basar.entryFee).toFixed(2)} € Gebühr
+                      {basar._count?.basarSellers ?? 0} Verkäufer · Max. {basar.maxArticlesPerSeller} Artikel{basar.maxArticlesPerEmployee != null && basar.maxArticlesPerEmployee !== basar.maxArticlesPerSeller ? ` (Mitarbeiter ${basar.maxArticlesPerEmployee})` : ''} · {basar.commissionPercent}% Provision · {Number(basar.entryFee).toFixed(2)} € Gebühr
                     </p>
                   </div>
                   {/* flex-1 nur auf dem Handy: dort teilen sich die Buttons die volle Breite

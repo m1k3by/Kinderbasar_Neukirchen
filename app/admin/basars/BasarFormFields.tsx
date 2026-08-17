@@ -21,6 +21,8 @@ export interface BasarFormState {
   location: string;
   maxSellers: string;
   maxArticlesPerSeller: string;
+  /** Leer = kein eigenes Limit, es gilt das Verkäuferlimit. */
+  maxArticlesPerEmployee: string;
   commissionPercent: string;
   entryFee: string;
   dateFriday: string;
@@ -43,7 +45,7 @@ export interface BasarFormState {
 
 export const EMPTY_BASAR_FORM: BasarFormState = {
   title: '', description: '', location: '',
-  maxSellers: '100', maxArticlesPerSeller: '50',
+  maxSellers: '100', maxArticlesPerSeller: '50', maxArticlesPerEmployee: '',
   commissionPercent: '20', entryFee: '0',
   dateFriday: '', dateSaturday: '', dateSunday: '',
   activationSellerStart: '', activationSellerEnd: '',
@@ -69,6 +71,8 @@ export function basarFormFromApi(data: Record<string, unknown>): BasarFormState 
   form.location = (data.location as string) ?? '';
   form.maxSellers = String(data.maxSellers ?? EMPTY_BASAR_FORM.maxSellers);
   form.maxArticlesPerSeller = String(data.maxArticlesPerSeller ?? EMPTY_BASAR_FORM.maxArticlesPerSeller);
+  // null bleibt leer – das Feld ist optional und bedeutet dann "wie Verkäufer".
+  form.maxArticlesPerEmployee = data.maxArticlesPerEmployee == null ? '' : String(data.maxArticlesPerEmployee);
   form.commissionPercent = String(data.commissionPercent ?? EMPTY_BASAR_FORM.commissionPercent);
   form.entryFee = String(data.entryFee ?? EMPTY_BASAR_FORM.entryFee);
 
@@ -104,7 +108,7 @@ export default function BasarFormFields({ form, setForm, economicsLocked = false
     key: keyof BasarFormState,
     label: string,
     type: string,
-    opts?: { min?: string; max?: string; step?: string; disabled?: boolean }
+    opts?: { min?: string; max?: string; step?: string; disabled?: boolean; placeholder?: string }
   ) => (
     <div>
       <label className={labelClass}>{label}</label>
@@ -116,6 +120,7 @@ export default function BasarFormFields({ form, setForm, economicsLocked = false
         min={opts?.min}
         max={opts?.max}
         step={opts?.step}
+        placeholder={opts?.placeholder}
         disabled={opts?.disabled}
       />
     </div>
@@ -192,6 +197,9 @@ export default function BasarFormFields({ form, setForm, economicsLocked = false
       </div>
       {field('maxSellers', 'Max. Verkäufer', 'number', { min: '1', disabled: economicsLocked })}
       {field('maxArticlesPerSeller', 'Max. Artikel/Verkäufer', 'number', { min: '1', disabled: economicsLocked })}
+      {field('maxArticlesPerEmployee', 'Max. Artikel/Mitarbeiter', 'number', {
+        min: '1', disabled: economicsLocked, placeholder: 'wie Verkäufer',
+      })}
       {field('commissionPercent', 'Provision (%)', 'number', { min: '0', max: '100', step: '0.5', disabled: economicsLocked })}
       {field('entryFee', 'Teilnahmegebühr (€)', 'number', { min: '0', step: '0.50', disabled: economicsLocked })}
 

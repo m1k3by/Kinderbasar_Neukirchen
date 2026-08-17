@@ -29,13 +29,22 @@ export const BASAR_WINDOW_FIELDS = [
 ] as const;
 
 /** Felder, die einen laufenden (ACTIVE) Basar wirtschaftlich verändern würden. */
-const LOCKED_WHILE_ACTIVE = ['maxSellers', 'maxArticlesPerSeller', 'commissionPercent', 'entryFee'] as const;
+const LOCKED_WHILE_ACTIVE = ['maxSellers', 'maxArticlesPerSeller', 'maxArticlesPerEmployee', 'commissionPercent', 'entryFee'] as const;
 
 const NUMERIC_FIELDS = [
   { key: 'maxSellers', label: 'Max. Verkäufer', integer: true, min: 1, max: 100000 },
   { key: 'maxArticlesPerSeller', label: 'Max. Artikel pro Verkäufer', integer: true, min: 1, max: 10000 },
   { key: 'commissionPercent', label: 'Provision', integer: false, min: 0, max: 100 },
   { key: 'entryFee', label: 'Standgebühr', integer: false, min: 0, max: 10000 },
+] as const;
+
+/**
+ * Zahlenfelder, die leer bleiben dürfen. Leer wird zu null gespeichert und bedeutet
+ * "keine eigene Vorgabe" – bei maxArticlesPerEmployee also: es gilt das Verkäuferlimit
+ * (siehe app/lib/articleLimits.ts).
+ */
+const OPTIONAL_NUMERIC_FIELDS = [
+  { key: 'maxArticlesPerEmployee', label: 'Max. Artikel pro Mitarbeiter', min: 1, max: 10000 },
 ] as const;
 
 type Body = Record<string, unknown>;
@@ -77,6 +86,23 @@ export function buildBasarData(
       return { ok: false, error: `${field.label} darf nicht leer sein` };
     }
     const value = field.integer ? parseInt(String(raw), 10) : parseFloat(String(raw));
+    if (!Number.isFinite(value)) {
+      return { ok: false, error: `${field.label} muss eine Zahl sein` };
+    }
+    if (value < field.min || value > field.max) {
+      return { ok: false, error: `${field.label} muss zwischen ${field.min} und ${field.max} liegen` };
+    }
+    data[field.key] = value;
+  }
+
+  for (const field of OPTIONAL_NUMERIC_FIELDS) {
+    const raw = body[field.key];
+    if (raw === undefined) continue;
+    if (raw === null || raw === '') {
+      data[field.key] = null;
+      continue;
+    }
+    const value = parseInt(String(raw), 10);
     if (!Number.isFinite(value)) {
       return { ok: false, error: `${field.label} muss eine Zahl sein` };
     }

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Header from '../../../components/Header';
 import { parseSizes } from '../../../lib/sizes';
 import { getNavLinks } from '../../../lib/navLinks';
+import { maxArticlesFor } from '../../../lib/articleLimits';
 
 interface Article {
   id: string;
@@ -32,6 +33,7 @@ interface BasarDetail {
   eventDate: string;
   location?: string;
   maxArticlesPerSeller: number;
+  maxArticlesPerEmployee?: number | null;
   commissionPercent: number;
   entryFee: number;
   status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
@@ -295,7 +297,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
     </div>
   );
 
-  const maxArticles = basarSeller?.maxArticlesOverride ?? basar.maxArticlesPerSeller;
+  const maxArticles = maxArticlesFor(basar, { isEmployee }, basarSeller?.maxArticlesOverride);
   const soldCount = articles.filter(a => a.status === 'SOLD').length;
   const soldRevenue = articles.filter(a => a.status === 'SOLD').reduce((s, a) => s + Number(a.price), 0);
   // Nur der Basar-Status entscheidet, nicht die Teilnahme: Artikel dürfen vorbereitet

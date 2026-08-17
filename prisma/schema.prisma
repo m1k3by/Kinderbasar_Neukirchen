@@ -87,6 +87,11 @@ model Basar {
   location             String?
   maxSellers           Int         @default(100)
   maxArticlesPerSeller Int         @default(50)
+  // Eigenes Artikellimit für Mitarbeiter/Orga (Seller.isEmployee). null = kein eigenes
+  // Limit, es gilt maxArticlesPerSeller. Bewusst nullable statt Pflichtfeld mit Vorgabewert:
+  // sonst würde ein Bestandsbasar mit 80 Artikeln pro Verkäufer das Mitarbeiterlimit
+  // stillschweigend auf den Vorgabewert senken. Siehe app/lib/articleLimits.ts.
+  maxArticlesPerEmployee Int?
   commissionPercent    Decimal     @db.Decimal(5, 2) @default(20)
   entryFee             Decimal     @db.Decimal(6, 2) @default(0)
   status               BasarStatus @default(DRAFT)

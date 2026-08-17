@@ -1,6 +1,7 @@
 ﻿import { NextResponse } from 'next/server';
 import { prisma } from '../../../../lib/prisma';
 import { requireAuth } from '../../../../lib/apiAuth';
+import { maxArticlesFor } from '../../../../lib/articleLimits';
 
 // GET /api/basars/:id/articles – get articles for calling seller in this basar
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -93,9 +94,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     // Beide Lesezugriffe hängen nicht voneinander ab und laufen deshalb parallel: ein
     // Roundtrip zur DB (eu-central-1) kostet ~90 ms, sequenziell wären es zwei.
-    const [basar, existingBasarSeller] = await Promise.all([
+    // seller wird mitgeladen (nicht aus dem Token gelesen): isEmployee entscheidet über das
+    // Artikellimit, und ein Token behält den alten Wert, bis sich der Nutzer neu anmeldet –
+    // nach einer Rollenänderung durch die Orga gälte sonst tagelang das falsche Limit.
+    const [basar, existingBasarSeller, seller] = await Promise.all([
       prisma.basar.findUnique({ where: { id: basarId } }),
       prisma.basarSeller.findUnique({ where: { basarId_sellerId: { basarId, sellerId } } }),
+      prisma.seller.findUnique({ where: { sellerId }, select: { isEmployee: true } }),
     ]);
     if (!basar) return NextResponse.json({ error: 'Basar nicht gefunden' }, { status: 404 });
     if (basar.status !== 'OPEN') {
@@ -132,7 +137,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         create: { basarId, sellerId, isActive: false, activatedAt: null },
       });
 
-      const maxArticles = basarSeller.maxArticlesOverride ?? basar.maxArticlesPerSeller;
+      const maxArticles = maxArticlesFor(basar, seller ?? { isEmployee: false }, basarSeller.maxArticlesOverride);
       const articleCount = await tx.article.count({ where: { basarSellerId: basarSeller.id } });
       if (articleCount >= maxArticles) {
         return { error: 'MAX_ARTICLES' as const, maxArticles };
