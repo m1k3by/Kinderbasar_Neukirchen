@@ -3,12 +3,21 @@
 import { useState, useEffect } from 'react';
 import Header from '../../components/Header';
 import { getNavLinks } from '../../lib/navLinks';
+import { consentSummary } from '../../lib/legalDocs';
 
 interface Seller {
   sellerId: number;
   // Teilnahme am unten gewählten Basar (via ?basarId= an /api/sellers). Ersetzt
   // das frühere globale Seller.sellerStatusActive.
-  participation?: { isActive: boolean; activatedAt: string | null } | null;
+  participation?: {
+    isActive: boolean;
+    activatedAt: string | null;
+    // Nachweis der Zustimmung zu AGB und Datenschutzerklärung. null = keine dokumentierte
+    // Zustimmung (Altbestand oder vom Admin stellvertretend aktiviert).
+    termsAcceptedAt?: string | null;
+    termsVersion?: string | null;
+    privacyVersion?: string | null;
+  } | null;
   firstName: string;
   lastName: string;
   email: string;
@@ -942,6 +951,9 @@ export default function AdminListPage() {
                   >
                     Teilnahme{getSortIcon('sellerStatusActive')}
                   </th>
+                  <th className="w-28 px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    AGB/DS
+                  </th>
                   <th 
                     className="w-20 px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort('active')}
@@ -999,6 +1011,25 @@ export default function AdminListPage() {
                           </span>
                         ) : (
                           <span className="text-gray-400">–</span>
+                        )}
+                      </td>
+                      {/* Zustimmung zu AGB und Datenschutzerklärung. Fehlt sie, ist das ein
+                          gültiger Zustand (Altbestand oder vom Admin aktiviert) – deshalb
+                          neutral „Keine" statt einer Fehlermeldung. */}
+                      <td className="px-2 py-2 whitespace-nowrap text-sm">
+                        {!selectedBasarId ? (
+                          <span className="text-gray-400">–</span>
+                        ) : seller.participation?.termsAcceptedAt ? (
+                          <span
+                            className="px-2 py-1 text-xs rounded font-medium bg-green-100 text-green-800"
+                            title={consentSummary(seller.participation)}
+                          >
+                            {new Date(seller.participation.termsAcceptedAt).toLocaleDateString('de-DE')}
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 text-xs rounded font-medium bg-gray-100 text-gray-600" title={consentSummary(seller.participation)}>
+                            Keine
+                          </span>
                         )}
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap text-sm">
@@ -1071,7 +1102,7 @@ export default function AdminListPage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
                       Keine Einträge gefunden
                     </td>
                   </tr>

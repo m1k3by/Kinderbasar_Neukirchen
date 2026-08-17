@@ -156,3 +156,63 @@ describe('GET /api/sellers', () => {
     expect(where.OR.some((c: any) => 'sellerId' in c)).toBe(false);
   });
 });
+
+// ─── Zustimmungsnachweis in der Admin-Verkäuferliste ─────────────────────────
+// Der Admin muss sehen, wer wann welcher Fassung von AGB und Datenschutzerklärung
+// zugestimmt hat – und wer gar nicht. Ohne diese Felder in der Projektion zeigt die
+// Liste die Spalte still als leer an, ohne dass irgendetwas fehlschlägt.
+describe('GET /api/sellers?basarId= – Zustimmungsnachweis', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+  });
+
+  it('fragt Zeitpunkt und beide Fassungen mit ab', async () => {
+    prismaMock.seller.findMany.mockResolvedValue([]);
+    await GET(makeRequest('?basarId=basar-1'));
+    const call = prismaMock.seller.findMany.mock.calls[0][0];
+    expect(call.select.basarSellers.where).toEqual({ basarId: 'basar-1' });
+    expect(call.select.basarSellers.select).toEqual({
+      isActive: true,
+      activatedAt: true,
+      termsAcceptedAt: true,
+      termsVersion: true,
+      privacyVersion: true,
+    });
+  });
+
+  it('reicht den Nachweis flach als participation nach außen', async () => {
+    const acceptedAt = new Date('2026-08-17T18:34:00.000Z');
+    prismaMock.seller.findMany.mockResolvedValue([
+      {
+        ...fakeSeller,
+        basarSellers: [
+          { isActive: true, activatedAt: acceptedAt, termsAcceptedAt: acceptedAt, termsVersion: '2025-11-01', privacyVersion: '2025-11-01' },
+        ],
+      },
+    ]);
+    const json = await (await GET(makeRequest('?basarId=basar-1'))).json();
+    expect(json.sellers[0].participation).toMatchObject({
+      isActive: true,
+      termsAcceptedAt: acceptedAt.toISOString(),
+      termsVersion: '2025-11-01',
+      privacyVersion: '2025-11-01',
+    });
+    expect(json.sellers[0].basarSellers).toBeUndefined();
+  });
+
+  // Ein Verkäufer ohne Zustimmung darf nicht aussehen wie einer mit.
+  it('liefert null, wenn für diesen Basar keine Teilnahme existiert', async () => {
+    prismaMock.seller.findMany.mockResolvedValue([{ ...fakeSeller, basarSellers: [] }]);
+    const json = await (await GET(makeRequest('?basarId=basar-1'))).json();
+    expect(json.sellers[0].participation).toBeNull();
+  });
+
+  it('lässt termsAcceptedAt null, wenn eine Teilnahme ohne Zustimmung existiert', async () => {
+    prismaMock.seller.findMany.mockResolvedValue([
+      { ...fakeSeller, basarSellers: [{ isActive: true, activatedAt: new Date(), termsAcceptedAt: null, termsVersion: null, privacyVersion: null }] },
+    ]);
+    const json = await (await GET(makeRequest('?basarId=basar-1'))).json();
+    expect(json.sellers[0].participation.termsAcceptedAt).toBeNull();
+  });
+});

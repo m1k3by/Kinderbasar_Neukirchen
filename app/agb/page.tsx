@@ -1,4 +1,5 @@
 import LegalFooter from '../components/LegalFooter';
+import { TERMS_VERSION, legalVersionLabel } from '../lib/legalDocs';
 
 export default function AGBPage() {
   return (
@@ -203,7 +204,7 @@ export default function AGBPage() {
           </section>
 
           <div className="text-sm text-gray-500 border-t pt-6">
-            Stand: November 2025
+            Stand: {legalVersionLabel(TERMS_VERSION)}
           </div>
         </div>
       </div>

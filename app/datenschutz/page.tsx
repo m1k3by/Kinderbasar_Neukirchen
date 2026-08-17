@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { PRIVACY_VERSION, legalVersionLabel } from '../lib/legalDocs';
 
 export default function DatenschutzPage() {
   return (
@@ -203,8 +204,11 @@ export default function DatenschutzPage() {
               </p>
             </section>
 
+            {/* Feste Fassung statt new Date(): der Stand sprang bisher täglich auf „heute",
+                wodurch nicht mehr feststellbar war, welchem Text ein Verkäufer zugestimmt hat.
+                Der Wert kommt aus derselben Konstante, die bei der Zustimmung gespeichert wird. */}
             <p className="mt-8 text-sm text-gray-600">
-              <strong>Stand:</strong> {new Date().toLocaleDateString('de-DE', { year: 'numeric', month: 'long', day: 'numeric' })}
+              <strong>Stand:</strong> {legalVersionLabel(PRIVACY_VERSION)}
             </p>
           </div>
         </div>

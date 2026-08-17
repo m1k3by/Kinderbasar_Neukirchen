@@ -1,4 +1,6 @@
 {
+  "//": "Functions nach Frankfurt, weil die Datenbank dort liegt (Supabase eu-central-1). Ohne Angabe deployt Vercel nach iad1 (Washington) – dann kostet JEDER der 4-5 DB-Roundtrips pro Artikel-POST einen Atlantiküberquerung statt ~1 ms im selben Rechenzentrum.",
+  "regions": ["fra1"],
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
   "installCommand": "npm install",

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '../../../../lib/prisma';
 import { requireAuth } from '../../../../lib/apiAuth';
 import { isActivationOpen } from '../../../../lib/basarWindows';
+import { TERMS_VERSION, PRIVACY_VERSION } from '../../../../lib/legalDocs';
 
 // PUT /api/basars/:id/participation – seller/employee an- oder abmelden für genau
 // diesen Basar. Ersetzt PUT /api/sellers/seller-status, das ein globales
@@ -104,19 +105,28 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       );
     }
 
+    // Zustimmungsnachweis: Zeitpunkt *und* Fassung der beiden Dokumente. Die Fassungen kommen
+    // aus der Serverkonstante, nicht aus dem Request – ein Client könnte sonst behaupten, einer
+    // beliebigen (etwa längst ersetzten) Fassung zugestimmt zu haben.
+    const consent = {
+      termsAcceptedAt: new Date(),
+      termsVersion: TERMS_VERSION,
+      privacyVersion: PRIVACY_VERSION,
+    };
+
     const basarSeller = await prisma.basarSeller.upsert({
       where: { basarId_sellerId: { basarId, sellerId } },
       update: {
         isActive,
         ...(isActive ? { activatedAt: new Date() } : {}),
-        ...(isSelfActivation ? { termsAcceptedAt: new Date() } : {}),
+        ...(isSelfActivation ? consent : {}),
       },
       create: {
         basarId,
         sellerId,
         isActive,
         activatedAt: isActive ? new Date() : null,
-        termsAcceptedAt: isSelfActivation ? new Date() : null,
+        ...(isSelfActivation ? consent : { termsAcceptedAt: null, termsVersion: null, privacyVersion: null }),
       },
     });
 

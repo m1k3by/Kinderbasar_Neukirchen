@@ -139,6 +139,11 @@ model BasarSeller {
   // bestätigt hat (Dialog beim Aktivieren der Teilnahme). Bleibt null, wenn ein Admin
   // die Teilnahme stellvertretend aktiviert – dann liegt keine eigene Zustimmung vor.
   termsAcceptedAt     DateTime?
+  // Fassungen, denen dabei zugestimmt wurde (siehe app/lib/legalDocs.ts). Ohne sie belegt
+  // termsAcceptedAt nur "hat irgendwann geklickt", nicht wozu – nach der ersten Textänderung
+  // wäre der Nachweis wertlos. Werden serverseitig gesetzt, nie aus dem Request übernommen.
+  termsVersion        String?   @db.VarChar(32)
+  privacyVersion      String?   @db.VarChar(32)
   createdAt           DateTime  @default(now())
   basar               Basar     @relation(fields: [basarId], references: [id], onDelete: Cascade)
   seller              Seller    @relation(fields: [sellerId], references: [sellerId], onDelete: Cascade)

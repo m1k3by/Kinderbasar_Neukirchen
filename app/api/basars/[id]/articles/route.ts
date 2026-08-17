@@ -91,8 +91,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const titleTrimmed = String(title).substring(0, 120);
     const sizeLabelTrimmed = sizeLabel ? String(sizeLabel).substring(0, 40) : null;
 
-    // Check basar is OPEN
-    const basar = await prisma.basar.findUnique({ where: { id: basarId } });
+    // Beide Lesezugriffe hängen nicht voneinander ab und laufen deshalb parallel: ein
+    // Roundtrip zur DB (eu-central-1) kostet ~90 ms, sequenziell wären es zwei.
+    const [basar, existingBasarSeller] = await Promise.all([
+      prisma.basar.findUnique({ where: { id: basarId } }),
+      prisma.basarSeller.findUnique({ where: { basarId_sellerId: { basarId, sellerId } } }),
+    ]);
     if (!basar) return NextResponse.json({ error: 'Basar nicht gefunden' }, { status: 404 });
     if (basar.status !== 'OPEN') {
       return NextResponse.json({ error: 'Artikel können nur bei offenem Basar angelegt werden' }, { status: 400 });
@@ -119,7 +123,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       // über PUT /api/basars/[id]/participation, das dafür Aktivierungsfenster und maxSellers
       // prüft. `update: {}` lässt eine bestehende Zeile unangetastet, aktiviert also weder
       // versehentlich noch deaktiviert es einen bereits angemeldeten Teilnehmer.
-      const basarSeller = await tx.basarSeller.upsert({
+      // Ab dem zweiten Artikel existiert die Zeile bereits – dann entfällt das Statement
+      // ganz und die Transaktion ist einen Roundtrip kürzer. Der Upsert bleibt für den
+      // Erstanlage-Fall: zwei parallele Requests liefen sonst in einen P2002.
+      const basarSeller = existingBasarSeller ?? await tx.basarSeller.upsert({
         where: { basarId_sellerId: { basarId, sellerId } },
         update: {},
         create: { basarId, sellerId, isActive: false, activatedAt: null },

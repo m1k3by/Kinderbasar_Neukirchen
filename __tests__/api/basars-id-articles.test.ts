@@ -101,6 +101,10 @@ describe('POST /api/basars/[id]/articles', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockTransactionSuccess();
+    // Standardfall: noch keine Teilnahmezeile. clearAllMocks löscht nur die Aufrufe, nicht
+    // die Implementierung – ohne diese Zeile wirkt das mockResolvedValue aus den GET-Tests
+    // weiter und der Upsert-Pfad würde nie durchlaufen.
+    prismaMock.basarSeller.findUnique.mockResolvedValue(null);
   });
 
   it('returns 401 when no token', async () => {
@@ -152,6 +156,26 @@ describe('POST /api/basars/[id]/articles', () => {
       update: {},
       create: { basarId: 'basar-1', sellerId: 1234, isActive: false, activatedAt: null },
     });
+  });
+
+  it('writes nothing to BasarSeller when the participation row already exists', async () => {
+    // Ab dem zweiten Artikel ist die Zeile schon da – dann entfällt der Upsert und die
+    // Transaktion ist einen Roundtrip kürzer. Nebeneffekt: die Teilnahme kann dabei gar
+    // nicht mehr versehentlich umgeschaltet werden, weil überhaupt nicht geschrieben wird.
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basar.findUnique.mockResolvedValue(openBasar);
+    prismaMock.basarSeller.findUnique.mockResolvedValue({ ...fakeBasarSeller, isActive: true });
+    prismaMock.article.count.mockResolvedValue(3);
+    prismaMock.sellerArticle.create.mockResolvedValue({ id: 'sa-1', title: 'T', qrCode: 'uuid-1' });
+    prismaMock.article.create.mockResolvedValue({ id: 'art-1', title: 'T', qrCode: 'uuid-1', status: 'AVAILABLE' });
+
+    const res = await POST(makePostRequest({ title: 'T', price: 1 }), makeContext());
+
+    expect(res.status).toBe(201);
+    expect(prismaMock.basarSeller.upsert).not.toHaveBeenCalled();
+    expect(prismaMock.article.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ basarSellerId: 'bs-1' }) })
+    );
   });
 
   it('returns 404 when basar not found', async () => {

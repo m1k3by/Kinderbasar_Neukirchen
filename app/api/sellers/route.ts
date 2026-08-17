@@ -57,7 +57,21 @@ export async function GET(request: Request) {
         createdAt: true,
         _count: { select: { taskSignups: true, cakes: true } },
         ...(basarId
-          ? { basarSellers: { where: { basarId }, select: { isActive: true, activatedAt: true } } }
+          ? {
+              basarSellers: {
+                where: { basarId },
+                // termsAcceptedAt/-Version: Nachweis der Zustimmung zu AGB und
+                // Datenschutzerklärung, damit der Admin in der Verkäuferliste sieht, wer
+                // wann welcher Fassung zugestimmt hat – und wer gar nicht.
+                select: {
+                  isActive: true,
+                  activatedAt: true,
+                  termsAcceptedAt: true,
+                  termsVersion: true,
+                  privacyVersion: true,
+                },
+              },
+            }
           : {}),
       },
       orderBy: { sellerId: 'asc' },
@@ -73,9 +87,17 @@ export async function GET(request: Request) {
 
     // Flatten basarSellers[0] into a single field so the client doesn't need to
     // know about the relation shape.
+    type ParticipationRow = {
+      isActive: boolean;
+      activatedAt: Date | null;
+      termsAcceptedAt: Date | null;
+      termsVersion: string | null;
+      privacyVersion: string | null;
+    };
+
     const sellers = basarId
       ? rows.map((r) => {
-          const { basarSellers, ...rest } = r as typeof r & { basarSellers?: { isActive: boolean; activatedAt: Date | null }[] };
+          const { basarSellers, ...rest } = r as typeof r & { basarSellers?: ParticipationRow[] };
           return { ...rest, participation: basarSellers?.[0] ?? null };
         })
       : rows;

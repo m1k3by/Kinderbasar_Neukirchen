@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { adminToken, sellerToken } from '../helpers/tokens';
+import { TERMS_VERSION, PRIVACY_VERSION } from '@/app/lib/legalDocs';
 
 const cookiesGetMock = vi.hoisted(() => vi.fn());
 vi.mock('next/headers', () => ({
@@ -124,13 +125,21 @@ describe('PUT /api/basars/[id]/participation', () => {
     expect((await res.json()).isActive).toBe(true);
     expect(prismaMock.basarSeller.upsert).toHaveBeenCalledWith({
       where: { basarId_sellerId: { basarId: 'basar-1', sellerId: 1234 } },
-      update: { isActive: true, activatedAt: expect.any(Date), termsAcceptedAt: expect.any(Date) },
+      update: {
+        isActive: true,
+        activatedAt: expect.any(Date),
+        termsAcceptedAt: expect.any(Date),
+        termsVersion: TERMS_VERSION,
+        privacyVersion: PRIVACY_VERSION,
+      },
       create: {
         basarId: 'basar-1',
         sellerId: 1234,
         isActive: true,
         activatedAt: expect.any(Date),
         termsAcceptedAt: expect.any(Date),
+        termsVersion: TERMS_VERSION,
+        privacyVersion: PRIVACY_VERSION,
       },
     });
   });
@@ -310,5 +319,65 @@ describe('PUT /api/basars/[id]/participation', () => {
     prismaMock.basar.findUnique.mockRejectedValue(new Error('DB error'));
     const res = await PUT(makeRequest({ isActive: true }), makeContext());
     expect(res.status).toBe(500);
+  });
+});
+
+// ─── Zustimmungsnachweis: Fassung der Dokumente ──────────────────────────────
+// Ein Zeitstempel allein belegt nur "hat irgendwann geklickt". Erst zusammen mit der
+// Fassung von AGB und Datenschutzerklärung ist die Zustimmung nachweisbar (DSGVO Art. 7
+// Abs. 1) – nach der ersten Textänderung wäre ein Nachweis ohne Fassung wertlos.
+describe('PUT /api/basars/[id]/participation – Fassungen im Zustimmungsnachweis', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prismaMock.basar.findUnique.mockResolvedValue(openBasar);
+    prismaMock.seller.findUnique.mockResolvedValue(seller);
+    prismaMock.basarSeller.findUnique.mockResolvedValue(null);
+    prismaMock.basarSeller.count.mockResolvedValue(0);
+    prismaMock.basarSeller.upsert.mockResolvedValue(activeBasarSeller);
+    prismaMock.mailQueue.create.mockResolvedValue({ id: 'mail-1' });
+  });
+
+  it('schreibt bei Selbstanmeldung Zeitpunkt und beide Fassungen', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    await PUT(makeRequest({ isActive: true, acceptedTerms: true }), makeContext());
+    const call = prismaMock.basarSeller.upsert.mock.calls[0][0];
+    expect(call.update.termsAcceptedAt).toBeInstanceOf(Date);
+    expect(call.update.termsVersion).toBe(TERMS_VERSION);
+    expect(call.update.privacyVersion).toBe(PRIVACY_VERSION);
+  });
+
+  // Sonst könnte ein manipulierter Client behaupten, einer längst ersetzten Fassung
+  // zugestimmt zu haben – und der Nachweis wäre wertlos.
+  it('übernimmt keine vom Client gesendeten Fassungen', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    await PUT(
+      makeRequest({ isActive: true, acceptedTerms: true, termsVersion: '1999-01-01', privacyVersion: '1999-01-01' }),
+      makeContext()
+    );
+    const call = prismaMock.basarSeller.upsert.mock.calls[0][0];
+    expect(call.update.termsVersion).toBe(TERMS_VERSION);
+    expect(call.update.privacyVersion).toBe(PRIVACY_VERSION);
+  });
+
+  // Ein Admin kann die Zustimmung eines anderen nicht abgeben. Statt eine fremde
+  // Zustimmung zu fingieren, bleibt der Nachweis leer.
+  it('legt bei Admin-Aktivierung für einen Dritten keinen Nachweis an', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    await PUT(makeRequest({ isActive: true, sellerId: 1234 }), makeContext());
+    const call = prismaMock.basarSeller.upsert.mock.calls[0][0];
+    expect(call.update).not.toHaveProperty('termsVersion');
+    expect(call.create.termsVersion).toBeNull();
+    expect(call.create.privacyVersion).toBeNull();
+    expect(call.create.termsAcceptedAt).toBeNull();
+  });
+
+  it('lässt den Nachweis beim Abmelden unangetastet', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basarSeller.findUnique.mockResolvedValue({ isActive: true });
+    await PUT(makeRequest({ isActive: false }), makeContext());
+    const call = prismaMock.basarSeller.upsert.mock.calls[0][0];
+    expect(call.update).not.toHaveProperty('termsVersion');
+    expect(call.update).not.toHaveProperty('privacyVersion');
+    expect(call.update).not.toHaveProperty('termsAcceptedAt');
   });
 });
