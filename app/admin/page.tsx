@@ -205,13 +205,16 @@ export default function AdminPage() {
         {/* Helferliste */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h2 className="text-2xl font-bold text-gray-800">Helferliste (Admin)</h2>
+          {/* Ohne Breitenbegrenzung richtet sich ein select nach seiner längsten Option –
+              "Herbstbasar 2026 Neukirchen (Geschlossen)" macht daraus 388 px, die auf dem
+              Handy 146 px über den rechten Rand hinausragen. */}
           {basars.length > 1 && (
-            <label className="text-sm text-gray-600 flex items-center gap-2">
-              Termine von:
+            <label className="w-full sm:w-auto min-w-0 text-sm text-gray-600 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+              <span className="flex-shrink-0">Termine von:</span>
               <select
                 value={helferlisteBasarId}
                 onChange={(e) => setHelferlisteBasarId(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                className="w-full sm:w-auto sm:max-w-xs min-w-0 truncate border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
               >
                 {basars.map(b => (
                   <option key={b.id} value={b.id}>{b.title} ({STATUS_LABELS[b.status]})</option>

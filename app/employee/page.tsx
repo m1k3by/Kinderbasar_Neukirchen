@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Header from '../components/Header';
 import { dateForWeekday } from '../lib/basarWindows';
 import { getNavLinks } from '../lib/navLinks';
+import { shiftsOverlap } from '../lib/time';
 
 interface Task {
   id: string;
@@ -171,16 +172,12 @@ export default function EmployeePage() {
 
         // Prüfe auf Überschneidungen
         for (const signedTask of mySignedUpTasks) {
-          if (signedTask.day === task.day && signedTask.timeFrom && signedTask.timeTo) {
-            // Zeitüberschneidung: start1 < end2 UND start2 < end1
-            const hasOverlap = 
-              task.timeFrom < signedTask.timeTo && 
-              signedTask.timeFrom < task.timeTo;
-
-            if (hasOverlap) {
-              alert(`Eintragung nicht möglich!\n\nDu bist bereits für "${signedTask.title}" (${signedTask.timeFrom} - ${signedTask.timeTo}) am ${signedTask.day} eingetragen.`);
-              return; // Abbrechen
-            }
+          // Gleiche Regel wie serverseitig in app/api/task-signups/route.ts – beide rufen
+          // shiftsOverlap auf, damit die Vorabprüfung hier nicht strenger sein kann als das,
+          // was der Server tatsächlich akzeptiert.
+          if (signedTask.day === task.day && shiftsOverlap(task, signedTask)) {
+            alert(`Eintragung nicht möglich!\n\nDu bist bereits für "${signedTask.title}" (${signedTask.timeFrom} - ${signedTask.timeTo}) am ${signedTask.day} eingetragen.`);
+            return; // Abbrechen
           }
         }
       }

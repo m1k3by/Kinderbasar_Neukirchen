@@ -61,6 +61,50 @@ export function formatAsGermanDate(value: Date | string | null | undefined): str
   return shifted ? shifted.toISOString().slice(0, 10) : '';
 }
 
+/** "HH:MM" → Minuten seit Mitternacht. null, wenn der Wert keine Uhrzeit ist. */
+export function parseHhMm(value: string | null | undefined): number | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec((value ?? '').trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+/**
+ * Kulanz beim Eintragen in Helferschichten: so viele Minuten Überschneidung bleiben erlaubt.
+ * Wer zwei Minuten früher an der nächsten Station steht, soll sich nicht aussperren.
+ */
+export const SHIFT_OVERLAP_TOLERANCE_MIN = 3;
+
+export interface Shift {
+  timeFrom?: string | null;
+  timeTo?: string | null;
+}
+
+/**
+ * Überschneiden sich zwei Schichten *mehr* als die erlaubte Kulanz?
+ *
+ * Gerechnet wird in Minuten, nicht auf den rohen Zeichenketten: "9:00" < "10:00" ist als
+ * Zeichenkettenvergleich falsch, und nur mit Minuten lässt sich die Dauer der Überschneidung
+ * überhaupt bestimmen. Aneinandergrenzende Schichten (16–18 Uhr und 18–20 Uhr) ergeben eine
+ * Überschneidung von 0 Minuten und sind damit erlaubt.
+ *
+ * Fehlt eine Zeitangabe oder ist sie unlesbar, wird nicht blockiert – die Schichtzeit ist
+ * dann unbekannt, und eine Sperre auf Verdacht wäre für die Helfer schlimmer als eine
+ * Doppelbuchung. Gleiches gilt für über Mitternacht laufende Schichten, die es hier nicht gibt.
+ */
+export function shiftsOverlap(a: Shift, b: Shift, toleranceMin = SHIFT_OVERLAP_TOLERANCE_MIN): boolean {
+  const aFrom = parseHhMm(a.timeFrom);
+  const aTo = parseHhMm(a.timeTo);
+  const bFrom = parseHhMm(b.timeFrom);
+  const bTo = parseHhMm(b.timeTo);
+  if (aFrom === null || aTo === null || bFrom === null || bTo === null) return false;
+
+  const overlapMinutes = Math.min(aTo, bTo) - Math.max(aFrom, bFrom);
+  return overlapMinutes > toleranceMin;
+}
+
 function shiftToGermanTime(value: Date | string | null | undefined): Date | null {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);

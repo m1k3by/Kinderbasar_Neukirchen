@@ -192,3 +192,67 @@ describe('DELETE /api/task-signups', () => {
     expect(res.status).toBe(500);
   });
 });
+
+// ─── Zeitüberschneidung: Kulanzregel ─────────────────────────────────────────
+// Gemeldeter Fall: eine Schicht endet um 18:00, die nächste beginnt um 18:00 – das muss
+// gehen. Geprüft wird jeweils, ob tatsächlich ein Signup *geschrieben* wird; der Statuscode
+// allein würde eine stillschweigend verweigerte Eintragung nicht auffallen lassen.
+describe('POST /api/task-signups – Überschneidung mit Kulanz', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockTransactionSuccess();
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.taskSignup.findUnique.mockResolvedValue(null);
+    prismaMock.taskSignup.count.mockResolvedValue(0);
+    prismaMock.taskSignup.create.mockResolvedValue({ id: 'signup-neu' });
+  });
+
+  /** Zielaufgabe + eine bereits belegte Aufgabe am selben Tag. */
+  function setup(target: { timeFrom: string; timeTo: string }, existing: { timeFrom: string; timeTo: string }) {
+    prismaMock.task.findUnique.mockResolvedValue({ ...fakeTask, id: 'task-neu', day: 'Freitag', ...target });
+    prismaMock.taskSignup.findMany.mockResolvedValue([
+      { task: { ...fakeTask, id: 'task-alt', title: 'Preiszettel abziehen', day: 'Freitag', ...existing } },
+    ]);
+  }
+
+  it('lässt eine Schicht zu, die genau beim Ende der vorherigen beginnt', async () => {
+    setup({ timeFrom: '18:00', timeTo: '20:00' }, { timeFrom: '16:00', timeTo: '18:00' });
+    const res = await POST(makePostRequest({ taskId: 'task-neu', sellerId: 1234 }));
+    expect(res.status).toBe(200);
+    expect(prismaMock.taskSignup.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { taskId: 'task-neu', sellerId: 1234 } })
+    );
+  });
+
+  it('lässt 3 Minuten Überschneidung durch', async () => {
+    setup({ timeFrom: '17:57', timeTo: '20:00' }, { timeFrom: '16:00', timeTo: '18:00' });
+    const res = await POST(makePostRequest({ taskId: 'task-neu', sellerId: 1234 }));
+    expect(res.status).toBe(200);
+    expect(prismaMock.taskSignup.create).toHaveBeenCalled();
+  });
+
+  it('blockiert ab 4 Minuten Überschneidung', async () => {
+    setup({ timeFrom: '17:56', timeTo: '20:00' }, { timeFrom: '16:00', timeTo: '18:00' });
+    const res = await POST(makePostRequest({ taskId: 'task-neu', sellerId: 1234 }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/Preiszettel abziehen/);
+    expect(prismaMock.taskSignup.create).not.toHaveBeenCalled();
+  });
+
+  it('blockiert eine echte Doppelbuchung weiterhin', async () => {
+    setup({ timeFrom: '16:00', timeTo: '20:00' }, { timeFrom: '16:00', timeTo: '18:00' });
+    const res = await POST(makePostRequest({ taskId: 'task-neu', sellerId: 1234 }));
+    expect(res.status).toBe(400);
+    expect(prismaMock.taskSignup.create).not.toHaveBeenCalled();
+  });
+
+  it('prüft nur denselben Tag', async () => {
+    prismaMock.task.findUnique.mockResolvedValue({ ...fakeTask, id: 'task-neu', day: 'Samstag', timeFrom: '16:00', timeTo: '20:00' });
+    prismaMock.taskSignup.findMany.mockResolvedValue([
+      { task: { ...fakeTask, id: 'task-alt', day: 'Freitag', timeFrom: '16:00', timeTo: '20:00' } },
+    ]);
+    const res = await POST(makePostRequest({ taskId: 'task-neu', sellerId: 1234 }));
+    expect(res.status).toBe(200);
+    expect(prismaMock.taskSignup.create).toHaveBeenCalled();
+  });
+});

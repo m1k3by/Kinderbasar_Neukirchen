@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '../../lib/prisma';
 import { requireAuth } from '../../lib/apiAuth';
+import { shiftsOverlap } from '../../lib/time';
 
 function parseSellerId(value: unknown): number | null {
   const num = typeof value === 'string' ? parseInt(value, 10) : (value as number);
@@ -78,24 +79,14 @@ export async function POST(req: NextRequest) {
       for (const signup of userSignups) {
         const existingTask = signup.task;
 
-        // Prüfen: Gleicher Tag?
-        if (existingTask.day === targetTask.day) {
-          // Prüfen: Zeitüberschneidung?
-          if (existingTask.timeFrom && existingTask.timeTo) {
-            // Zwei Zeiträume überschneiden sich wenn: start1 < end2 UND start2 < end1
-            const hasOverlap =
-              targetTask.timeFrom < existingTask.timeTo &&
-              existingTask.timeFrom < targetTask.timeTo;
-
-            if (hasOverlap) {
-              return NextResponse.json(
-                {
-                  error: `Eintragung nicht möglich! Du hast dich bereits für "${existingTask.title}" (${existingTask.timeFrom} - ${existingTask.timeTo}) am ${existingTask.day} eingetragen.`
-                },
-                { status: 400 }
-              );
-            }
-          }
+        // Prüfen: Gleicher Tag und mehr als die erlaubte Kulanz Überschneidung?
+        if (existingTask.day === targetTask.day && shiftsOverlap(targetTask, existingTask)) {
+          return NextResponse.json(
+            {
+              error: `Eintragung nicht möglich! Du hast dich bereits für "${existingTask.title}" (${existingTask.timeFrom} - ${existingTask.timeTo}) am ${existingTask.day} eingetragen.`
+            },
+            { status: 400 }
+          );
         }
       }
     }

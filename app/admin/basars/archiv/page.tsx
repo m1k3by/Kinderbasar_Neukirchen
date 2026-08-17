@@ -75,10 +75,10 @@ export default function BasarArchivPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Header links={getNavLinks(navUser, 'archiv')} />
-      <div className="max-w-5xl mx-auto p-6">
-        <div className="flex items-center justify-between mb-6">
+      <div className="max-w-5xl mx-auto p-4 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-800">Basare – Archiv</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Basare – Archiv</h1>
             <p className="text-sm text-gray-500 mt-1">Archivierte Basare sind in der Hauptliste nicht mehr sichtbar.</p>
           </div>
           <Link href="/admin/basars"
@@ -100,14 +100,16 @@ export default function BasarArchivPage() {
         ) : (
           <div className="space-y-3">
             {basars.map(basar => (
-              <div key={basar.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 opacity-80">
-                <div className="flex items-center justify-between gap-4">
+              <div key={basar.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-5 opacity-80">
+                {/* Gleiche Aufteilung wie in der Basarliste: auf dem Handy untereinander,
+                    sonst drängen die drei Buttons den Titel auf wenige Pixel zusammen. */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 mb-0.5">
-                      <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">
+                    <div className="flex flex-col items-start sm:flex-row sm:items-center gap-1 sm:gap-3 mb-0.5 min-w-0">
+                      <span className="flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">
                         {STATUS_LABELS[basar.status]}
                       </span>
-                      <h2 className="text-base font-bold text-gray-600 truncate">{basar.title}</h2>
+                      <h2 className="w-full sm:w-auto text-base font-bold text-gray-600 break-words sm:truncate">{basar.title}</h2>
                     </div>
                     <p className="text-sm text-gray-400">
                       {new Date(basar.eventDate).toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}
@@ -115,17 +117,17 @@ export default function BasarArchivPage() {
                       {` · ${basar._count?.basarSellers ?? 0} Verkäufer`}
                     </p>
                   </div>
-                  <div className="flex gap-2 flex-shrink-0">
+                  <div className="flex flex-wrap gap-2 sm:flex-shrink-0 sm:justify-end">
                     <Link href={`/admin/basars/${basar.id}`}
-                      className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">
+                      className="flex-1 sm:flex-none text-center whitespace-nowrap px-3 py-3 sm:py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">
                       Details
                     </Link>
                     <Link href={`/admin/basars/${basar.id}/abrechnung`}
-                      className="px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-sm font-medium rounded-lg transition-colors">
+                      className="flex-1 sm:flex-none text-center whitespace-nowrap px-3 py-3 sm:py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-sm font-medium rounded-lg transition-colors">
                       Abrechnung
                     </Link>
                     <button onClick={() => handleUnarchive(basar)}
-                      className="px-3 py-1.5 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 text-sm font-medium rounded-lg transition-colors">
+                      className="flex-1 sm:flex-none text-center whitespace-nowrap px-3 py-3 sm:py-1.5 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 text-sm font-medium rounded-lg transition-colors">
                       Wiederherstellen
                     </button>
                   </div>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isDST, parseAsGermanTime } from '@/app/lib/time';
+import { isDST, parseAsGermanTime, parseHhMm, shiftsOverlap } from '@/app/lib/time';
 
 describe('isDST', () => {
   it('returns false in January (MEZ)', () => {
@@ -84,5 +84,69 @@ describe('parseAsGermanTime', () => {
   it('malformed string without date parts falls through to Date constructor', () => {
     const d = parseAsGermanTime('invalid-date');
     expect(d.toString()).toContain('Invalid Date');
+  });
+});
+
+describe('parseHhMm', () => {
+  it('rechnet Uhrzeiten in Minuten seit Mitternacht um', () => {
+    expect(parseHhMm('00:00')).toBe(0);
+    expect(parseHhMm('16:30')).toBe(990);
+    expect(parseHhMm('23:59')).toBe(1439);
+  });
+
+  it('akzeptiert einstellige Stunden', () => {
+    expect(parseHhMm('9:00')).toBe(540);
+  });
+
+  it('liefert null für unbrauchbare Werte', () => {
+    for (const bad of ['', null, undefined, 'abc', '25:00', '10:75', '1000', '10-30']) {
+      expect(parseHhMm(bad)).toBeNull();
+    }
+  });
+});
+
+describe('shiftsOverlap', () => {
+  const shift = (timeFrom: string, timeTo: string) => ({ timeFrom, timeTo });
+
+  // Der gemeldete Fall: eine Schicht endet um 18:00, die nächste beginnt um 18:00.
+  it('erlaubt direkt aneinandergrenzende Schichten', () => {
+    expect(shiftsOverlap(shift('16:00', '18:00'), shift('18:00', '20:00'))).toBe(false);
+    expect(shiftsOverlap(shift('18:00', '20:00'), shift('16:00', '18:00'))).toBe(false);
+  });
+
+  // Kulanzgrenze: bis einschließlich 3 Minuten wird durchgelassen, ab 4 blockiert.
+  it('erlaubt bis zu 3 Minuten Überschneidung und blockiert ab 4', () => {
+    expect(shiftsOverlap(shift('16:00', '18:00'), shift('17:57', '20:00'))).toBe(false);
+    expect(shiftsOverlap(shift('16:00', '18:00'), shift('17:56', '20:00'))).toBe(true);
+  });
+
+  it('blockiert echte Doppelbuchungen', () => {
+    // Screenshot-Fall: 16-18 Uhr und 16-20 Uhr sind zwei Stunden parallel.
+    expect(shiftsOverlap(shift('16:00', '20:00'), shift('16:00', '18:00'))).toBe(true);
+    // Vollständig enthalten
+    expect(shiftsOverlap(shift('17:00', '17:30'), shift('16:00', '20:00'))).toBe(true);
+    // Identisch
+    expect(shiftsOverlap(shift('16:00', '18:00'), shift('16:00', '18:00'))).toBe(true);
+  });
+
+  it('erkennt weit auseinanderliegende Schichten als überschneidungsfrei', () => {
+    expect(shiftsOverlap(shift('08:00', '10:00'), shift('16:00', '18:00'))).toBe(false);
+  });
+
+  // Regression: der frühere Zeichenkettenvergleich hielt "9:00" für größer als "10:00",
+  // eine echte Überschneidung wäre dadurch unbemerkt durchgerutscht.
+  it('vergleicht einstellige Stunden korrekt, nicht als Zeichenkette', () => {
+    expect(shiftsOverlap(shift('9:00', '11:00'), shift('10:00', '12:00'))).toBe(true);
+    expect('9:00' < '10:00').toBe(false); // so war es vorher kaputt
+  });
+
+  it('blockiert nicht, wenn eine Zeitangabe fehlt oder unlesbar ist', () => {
+    expect(shiftsOverlap(shift('16:00', '18:00'), { timeFrom: null, timeTo: null })).toBe(false);
+    expect(shiftsOverlap(shift('16:00', '18:00'), { timeFrom: 'ganztags', timeTo: '18:00' })).toBe(false);
+  });
+
+  it('erlaubt eine abweichende Kulanz als Parameter', () => {
+    expect(shiftsOverlap(shift('16:00', '18:00'), shift('17:50', '20:00'), 15)).toBe(false);
+    expect(shiftsOverlap(shift('16:00', '18:00'), shift('17:50', '20:00'), 0)).toBe(true);
   });
 });

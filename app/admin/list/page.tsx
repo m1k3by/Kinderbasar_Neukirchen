@@ -517,13 +517,15 @@ export default function AdminListPage() {
         <div className="mb-8 bg-white rounded-lg shadow-md p-6">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <h2 className="text-2xl font-bold text-gray-800">Globale Aktionen</h2>
+            {/* Ein select ohne Breitenbegrenzung wird so breit wie seine längste Option
+                und ragt damit auf dem Handy rechts aus der Karte heraus. */}
             {basars.length > 0 && (
-              <label className="text-sm text-gray-600 flex items-center gap-2">
-                Teilnahme-Basar:
+              <label className="w-full sm:w-auto min-w-0 text-sm text-gray-600 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                <span className="flex-shrink-0">Teilnahme-Basar:</span>
                 <select
                   value={selectedBasarId}
                   onChange={(e) => setSelectedBasarId(e.target.value)}
-                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full sm:w-auto sm:max-w-xs min-w-0 truncate border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   {basars.map(b => (
                     <option key={b.id} value={b.id}>{b.title} ({STATUS_LABELS[b.status]})</option>
@@ -860,13 +862,15 @@ export default function AdminListPage() {
           </div>
         )}
         
-        <div className="mb-6 flex items-center gap-4">
-          <div>
+        {/* flex-wrap + volle Breite je Filter: nebeneinander passen drei Selects plus Button
+            auf ein Handy nicht und schieben die Zeile über den rechten Rand. */}
+        <div className="mb-6 flex flex-wrap items-end gap-4">
+          <div className="w-full sm:w-auto min-w-0">
             <label className="block text-sm font-medium text-gray-700 mb-2">Rolle</label>
             <select
               value={filter}
               onChange={(e) => setFilter(e.target.value as any)}
-              className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full sm:w-auto p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">Alle</option>
               <option value="seller">Verkäufer</option>
@@ -874,12 +878,12 @@ export default function AdminListPage() {
             </select>
           </div>
 
-          <div>
+          <div className="w-full sm:w-auto min-w-0">
             <label className="block text-sm font-medium text-gray-700 mb-2">Teilnahme</label>
             <select
               value={sellerStatusFilter}
               onChange={(e) => setSellerStatusFilter(e.target.value as any)}
-              className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full sm:w-auto p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">Alle</option>
               <option value="active">Aktiv</option>
@@ -887,12 +891,12 @@ export default function AdminListPage() {
             </select>
           </div>
 
-          <div>
+          <div className="w-full sm:w-auto min-w-0">
             <label className="block text-sm font-medium text-gray-700 mb-2">Aktiv (MA in eine Liste eingetragen?)</label>
             <select
               value={activeFilter}
               onChange={(e) => setActiveFilter(e.target.value as any)}
-              className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full sm:w-auto p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">Alle</option>
               <option value="active">Aktiv</option>
@@ -900,10 +904,10 @@ export default function AdminListPage() {
             </select>
           </div>
 
-          <div className="ml-auto">
+          <div className="w-full sm:w-auto sm:ml-auto">
             <button
               onClick={copyEmails}
-              className="bg-yellow-500 hover:bg-yellow-600 text-gray-800 px-4 py-2 rounded font-medium shadow"
+              className="w-full sm:w-auto bg-yellow-500 hover:bg-yellow-600 text-gray-800 px-4 py-2 rounded font-medium shadow"
             >
               E-Mails kopieren
             </button>

@@ -610,7 +610,14 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
               {isClothing && (
               <div className="md:col-span-3">
                 <span className="block text-xs font-medium text-gray-600 mb-1">Für wen?</span>
-                <div className="flex gap-5">
+                {/* Die drei Optionen und „Auswahl aufheben" standen früher in einer gemeinsamen
+                    Flex-Zeile. Zusammen sind sie breiter als ein iPhone-Viewport, wodurch der
+                    Knopf aus der Zeile herausgedrückt wurde und am rechten Rand klebte.
+                    Der Knopf steht deshalb jetzt grundsätzlich in einer eigenen Zeile unter den
+                    Optionen – das hängt an keiner Breitenberechnung und kann auf keinem Gerät
+                    danebengehen. Die Optionen selbst dürfen zusätzlich umbrechen, falls die
+                    Schrift durch Systemeinstellungen größer gerendert wird. */}
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
                   {(['Junge', 'Mädchen', 'Unisex'] as const).map(g => (
                     <label key={g} className="flex items-center gap-2 cursor-pointer select-none">
                       <input
@@ -619,21 +626,21 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
                         value={g}
                         checked={form.gender === g}
                         onChange={() => setForm(f => ({ ...f, gender: g }))}
-                        className="accent-yellow-500 w-4 h-4"
+                        className="accent-yellow-500 w-4 h-4 shrink-0"
                       />
                       <span className="text-sm text-gray-700">{g}</span>
                     </label>
                   ))}
-                  {form.gender && (
-                    <button
-                      type="button"
-                      onClick={() => setForm(f => ({ ...f, gender: '' }))}
-                      className="text-xs text-gray-400 hover:text-gray-600 underline"
-                    >
-                      Auswahl aufheben
-                    </button>
-                  )}
                 </div>
+                {form.gender && (
+                  <button
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, gender: '' }))}
+                    className="mt-2 text-xs text-gray-400 hover:text-gray-600 underline"
+                  >
+                    Auswahl aufheben
+                  </button>
+                )}
               </div>
               )}
               {isClothing && (
