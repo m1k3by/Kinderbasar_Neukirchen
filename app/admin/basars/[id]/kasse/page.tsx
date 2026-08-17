@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, use, useCallback } from 'react';
 import Header from '../../../../components/Header';
 import { getNavLinks, type NavUser } from '../../../../lib/navLinks';
+import { articleCacheKey, articleCacheEtagKey, staleArticleCacheKeys } from '../../../../lib/scanCache';
 
 interface ScannedArticle {
   id: string;
@@ -128,6 +129,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
   // Track online status + keep article cache warm
   useEffect(() => {
     setIsOnline(navigator.onLine);
+    purgeForeignCaches();
     loadArticleCache();
     if (navigator.onLine) cacheBasarArticles();
     const handleOnline = () => { setIsOnline(true); syncPending(); cacheBasarArticles(); };
@@ -181,8 +183,21 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
   async function loadArticleCache() {
     try {
       const { get } = await import('idb-keyval');
-      const cached = await get<Array<Omit<ScannedArticle, 'salePrice'>>>(`basar-articles-${basarId}`);
+      const cached = await get<Array<Omit<ScannedArticle, 'salePrice'>>>(articleCacheKey(basarId));
       if (cached) articleCacheRef.current = new Map(cached.map(a => [a.qrCode, a]));
+    } catch { /* ignore */ }
+  }
+
+  // Artikelcaches vergangener Basare löschen – sie werden nie wieder gelesen, enthalten aber
+  // die Verkäufernamen und liegen auf dem Privatgerät eines Helfers.
+  // ponytail: läuft beim Öffnen der Kasse. Wer die Kasse nach dem letzten Basar nie wieder
+  // öffnet, behält dessen Cache – dafür bräuchte es einen Service Worker oder eine
+  // Ablauf-Prüfung beim Login.
+  async function purgeForeignCaches() {
+    try {
+      const { keys, del } = await import('idb-keyval');
+      const stale = staleArticleCacheKeys((await keys()).map(String), basarId);
+      for (const key of stale) await del(key);
     } catch { /* ignore */ }
   }
 
@@ -194,7 +209,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
   async function cacheBasarArticles() {
     try {
       const { get, set } = await import('idb-keyval');
-      const storedEtag = await get<string>(`basar-articles-etag-${basarId}`);
+      const storedEtag = await get<string>(articleCacheEtagKey(basarId));
       const res = await fetch(`/api/basars/${basarId}/scan-cache`, {
         headers: storedEtag ? { 'If-None-Match': storedEtag } : {},
       });
@@ -212,9 +227,9 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
         basarId,
         status: a.status,
       }));
-      await set(`basar-articles-${basarId}`, articles);
+      await set(articleCacheKey(basarId), articles);
       const newEtag = res.headers.get('etag');
-      if (newEtag) await set(`basar-articles-etag-${basarId}`, newEtag);
+      if (newEtag) await set(articleCacheEtagKey(basarId), newEtag);
       articleCacheRef.current = new Map(articles.map(a => [a.qrCode, a]));
     } catch { /* ignore */ }
   }

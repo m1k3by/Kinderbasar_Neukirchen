@@ -133,9 +133,9 @@ export default function AdminBasarsPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Header links={getNavLinks(navUser, basarsAdminActiveKey(navUser))} />
-      <div className="max-w-5xl mx-auto p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold text-gray-800">Basare verwalten</h1>
+      <div className="max-w-5xl mx-auto p-4 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Basare verwalten</h1>
           {navUser.role === 'admin' && (
             <button
               onClick={() => setShowForm(!showForm)}
@@ -174,14 +174,19 @@ export default function AdminBasarsPage() {
         ) : (
           <div className="space-y-4">
             {basars.map(basar => (
-              <div key={basar.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-                <div className="flex items-start justify-between gap-4">
+              <div key={basar.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-5">
+                {/* Auf dem Handy untereinander: nebeneinander drängen die Buttons den Titel
+                    auf wenige Pixel zusammen und er ist nur noch abgeschnitten zu sehen. */}
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 mb-1">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[basar.status]}`}>
+                    {/* Badge auf dem Handy über den Titel: nebeneinander bleiben von einem
+                        Titel wie "Herbstbasar 2026 Neukirchen" nur ~210 px übrig, er wird
+                        abgeschnitten. Untereinander darf er über die volle Breite umbrechen. */}
+                    <div className="flex flex-col items-start sm:flex-row sm:items-center gap-1 sm:gap-3 mb-1 min-w-0">
+                      <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[basar.status]}`}>
                         {STATUS_LABELS[basar.status]}
                       </span>
-                      <h2 className="text-lg font-bold text-gray-800 truncate">{basar.title}</h2>
+                      <h2 className="w-full sm:w-auto text-lg font-bold text-gray-800 break-words sm:truncate">{basar.title}</h2>
                     </div>
                     <p className="text-sm text-gray-500">
                       {new Date(basar.eventDate).toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}
@@ -191,32 +196,34 @@ export default function AdminBasarsPage() {
                       {basar._count?.basarSellers ?? 0} Verkäufer · Max. {basar.maxArticlesPerSeller} Artikel · {basar.commissionPercent}% Provision · {Number(basar.entryFee).toFixed(2)} € Gebühr
                     </p>
                   </div>
-                  <div className="flex flex-shrink-0 gap-2 flex-wrap justify-end">
+                  {/* flex-1 nur auf dem Handy: dort teilen sich die Buttons die volle Breite
+                      und bleiben mit py-2.5 auch als Tap-Ziel groß genug. */}
+                  <div className="flex flex-wrap gap-2 sm:flex-shrink-0 sm:justify-end">
                     <Link href={`/admin/basars/${basar.id}`}
-                      className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors">
+                      className="flex-1 sm:flex-none text-center whitespace-nowrap px-3 py-3 sm:py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors">
                       Details
                     </Link>
                     {basar.status === 'ACTIVE' && (
                       <Link href={`/admin/basars/${basar.id}/kasse`}
-                        className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white text-sm font-medium rounded-lg transition-colors">
+                        className="flex-1 sm:flex-none text-center whitespace-nowrap px-3 py-3 sm:py-1.5 bg-green-500 hover:bg-green-600 text-white text-sm font-medium rounded-lg transition-colors">
                         Kasse
                       </Link>
                     )}
                     {basar.status === 'CLOSED' && (
                       <Link href={`/admin/basars/${basar.id}/abrechnung`}
-                        className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors">
+                        className="flex-1 sm:flex-none text-center whitespace-nowrap px-3 py-3 sm:py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors">
                         Abrechnung
                       </Link>
                     )}
                     {navUser.role === 'admin' && NEXT_STATUS_LABEL[basar.status] && (
                       <button onClick={() => handleAdvanceStatus(basar)}
-                        className="px-3 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-gray-900 text-sm font-medium rounded-lg transition-colors">
+                        className="flex-1 sm:flex-none text-center whitespace-nowrap px-3 py-3 sm:py-1.5 bg-yellow-500 hover:bg-yellow-600 text-gray-900 text-sm font-medium rounded-lg transition-colors">
                         {NEXT_STATUS_LABEL[basar.status]}
                       </button>
                     )}
                     {navUser.role === 'admin' && basar.status === 'CLOSED' && (
                       <button onClick={() => handleArchive(basar)}
-                        className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-600 text-sm font-medium rounded-lg transition-colors">
+                        className="flex-1 sm:flex-none text-center whitespace-nowrap px-3 py-3 sm:py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-600 text-sm font-medium rounded-lg transition-colors">
                         Archivieren
                       </button>
                     )}
