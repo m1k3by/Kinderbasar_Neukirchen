@@ -33,63 +33,89 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const items: { articleId?: string; qrCode?: string; salePrice?: number }[] = body.items ?? [body];
     const clientTxId: string | undefined = body.clientTxId;
 
-    const results = [];
-    for (const item of items) {
-      let article;
-      if (item.qrCode) {
-        // qrCode is no longer unique on Article (same code reused across basars); narrow by basarId
-        article = await prisma.article.findFirst({ where: { qrCode: item.qrCode, basarSeller: { basarId } } });
-      } else if (item.articleId) {
-        article = await prisma.article.findUnique({ where: { id: item.articleId } });
-      }
+    // Ein Warenkorb kann 20+ Artikel haben. Pro Artikel einzeln aufzulösen und einzeln in
+    // einer interaktiven Transaktion zu schreiben wären ~5 sequentielle DB-Round-Trips je
+    // Artikel – bei 15 Artikeln landet das im Sekundenbereich bis Function-Timeout, und die
+    // Kasse steht. Deshalb: alles auflösen in einem Rutsch, alles schreiben in einer
+    // Transaktion. Round-Trips sind damit konstant, unabhängig von der Warenkorbgröße.
+    const results: Record<string, unknown>[] = new Array(items.length);
 
+    // qrCode ist auf Article nicht unique (gleicher Code über Basare hinweg wiederverwendet),
+    // deshalb getrennt abfragen und über basarSeller auf diesen Basar einschränken.
+    const qrCodes = items.filter((i) => i.qrCode).map((i) => i.qrCode!);
+    const ids = items.filter((i) => !i.qrCode && i.articleId).map((i) => i.articleId!);
+    const [byQrList, byIdList] = await Promise.all([
+      qrCodes.length
+        ? prisma.article.findMany({ where: { qrCode: { in: qrCodes }, basarSeller: { basarId } } })
+        : Promise.resolve([]),
+      ids.length ? prisma.article.findMany({ where: { id: { in: ids } } }) : Promise.resolve([]),
+    ]);
+    const byQr = new Map(byQrList.map((a) => [a.qrCode, a]));
+    const byId = new Map(byIdList.map((a) => [a.id, a]));
+
+    // Artikel auflösen, Preise validieren, Duplikate innerhalb des Warenkorbs abfangen.
+    const toSell: { articleId: string; salePrice: number; idx: number }[] = [];
+    const seen = new Set<string>();
+    items.forEach((item, idx) => {
+      const article = item.qrCode ? byQr.get(item.qrCode) : item.articleId ? byId.get(item.articleId) : undefined;
       if (!article) {
-        results.push({ error: 'Artikel nicht gefunden', item });
-        continue;
+        results[idx] = { error: 'Artikel nicht gefunden', item };
+        return;
       }
-
       let salePrice: number;
       if (item.salePrice === undefined || item.salePrice === null) {
         salePrice = Number(article.price);
       } else {
         const normalized = normalizeSalePrice(item.salePrice);
         if (normalized === null) {
-          results.push({ error: 'Ungültiger Preis', articleId: article.id });
-          continue;
+          results[idx] = { error: 'Ungültiger Preis', articleId: article.id };
+          return;
         }
         salePrice = normalized;
       }
+      if (seen.has(article.id)) {
+        // Derselbe Artikel zweimal im selben Request – der zweite kann nicht mehr verkauft werden.
+        results[idx] = { error: 'Bereits verkauft', articleId: article.id };
+        return;
+      }
+      seen.add(article.id);
+      toSell.push({ articleId: article.id, salePrice, idx });
+    });
 
-      // Conditional update: only proceed if the article is still AVAILABLE. This is race-safe
-      // for concurrent cashiers and also allows re-selling an article after its previous sale
-      // was cancelled (Sale.articleId is no longer unique – see schema).
-      const { sale } = await prisma.$transaction(async (tx) => {
-        const updateResult = await tx.article.updateMany({
-          where: { id: article.id, status: 'AVAILABLE' },
-          data: { status: 'SOLD', soldAt: new Date() },
+    if (toSell.length > 0) {
+      const priceByArticle = new Map(toSell.map((t) => [t.articleId, t.salePrice]));
+      const now = new Date();
+      // Bedingtes Update: nur Artikel, die noch AVAILABLE sind. Race-sicher gegenüber
+      // parallelen Kassen und erlaubt den Wiederverkauf nach einem Storno (Sale.articleId
+      // ist nicht unique – siehe schema). updateManyAndReturn liefert genau die Zeilen, die
+      // wirklich umgestellt wurden; alle anderen waren schon weg.
+      const saleIdByArticle = await prisma.$transaction(async (tx) => {
+        const updated = await tx.article.updateManyAndReturn({
+          where: { id: { in: toSell.map((t) => t.articleId) }, status: 'AVAILABLE' },
+          data: { status: 'SOLD', soldAt: now },
+          select: { id: true },
         });
-        if (updateResult.count !== 1) {
-          return { sale: null };
-        }
-        const sale = await tx.sale.create({
-          data: {
+        if (updated.length === 0) return new Map<string, string>();
+        const sales = await tx.sale.createManyAndReturn({
+          data: updated.map((a) => ({
             basarId,
-            articleId: article.id,
+            articleId: a.id,
             cashierId,
-            salePrice,
-            syncedAt: new Date(),
+            salePrice: priceByArticle.get(a.id)!,
+            syncedAt: now,
             clientTxId: clientTxId ?? null,
-          },
+          })),
+          select: { id: true, articleId: true },
         });
-        return { sale };
+        return new Map(sales.map((s) => [s.articleId, s.id]));
       });
 
-      if (!sale) {
-        results.push({ error: 'Bereits verkauft', articleId: article.id });
-        continue;
+      for (const t of toSell) {
+        const saleId = saleIdByArticle.get(t.articleId);
+        results[t.idx] = saleId
+          ? { success: true, articleId: t.articleId, saleId, salePrice: t.salePrice }
+          : { error: 'Bereits verkauft', articleId: t.articleId };
       }
-
-      results.push({ success: true, articleId: article.id, saleId: sale.id, salePrice });
     }
 
     return NextResponse.json({ results });

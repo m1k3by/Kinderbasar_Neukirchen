@@ -138,9 +138,20 @@ function RateTable({ title, rows }: { title: string; rows: RateRow[] }) {
   );
 }
 
+const TX_SCOPES = [
+  { key: 'all', label: 'Alles', placeholder: 'Kassenvorgänge durchsuchen (Artikel, QR-Code, Verkäufer, Kassierer)…' },
+  { key: 'article', label: 'Artikel', placeholder: 'Artikel durchsuchen – mehrere Wörter möglich, z. B. „jeans blau 128“' },
+  { key: 'cashier', label: 'Kassierer', placeholder: 'Kassierer durchsuchen (Name oder Nummer)…' },
+] as const;
+
 function TransactionList({ transactions, onStorno, showCashier }: {
   transactions: Transaction[]; onStorno: (saleId: string) => void; showCashier?: boolean;
 }) {
+  // Zweistufiges Storno: der erste Klick fragt nur nach und nennt Artikel und Betrag,
+  // erst der zweite storniert. Ersetzt den generischen confirm()-Dialog, der nicht sagte,
+  // welche Position getroffen wird.
+  const [pendingSaleId, setPendingSaleId] = useState<string | null>(null);
+
   if (transactions.length === 0) {
     return <div className="text-center py-4 text-gray-400">Keine Kassenvorgänge</div>;
   }
@@ -161,7 +172,7 @@ function TransactionList({ transactions, onStorno, showCashier }: {
           <table className="w-full text-sm">
             <tbody className="divide-y divide-gray-100">
               {t.items.map(i => (
-                <tr key={i.saleId}>
+                <tr key={i.saleId} className={pendingSaleId === i.saleId ? 'bg-red-50' : ''}>
                   <td className={`px-3 py-2 text-gray-800 ${i.isCancelled ? 'line-through text-gray-400' : ''}`}>
                     {i.articleTitle}{i.sizeLabel && <span className="text-gray-400"> ({i.sizeLabel})</span>}
                   </td>
@@ -171,11 +182,26 @@ function TransactionList({ transactions, onStorno, showCashier }: {
                   <td className={`px-3 py-2 text-right text-gray-700 ${i.isCancelled ? 'line-through text-gray-400' : ''}`}>
                     {fmt(i.salePrice)}
                   </td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
                     {i.isCancelled ? (
                       <span className="text-xs text-gray-400 font-medium">storniert</span>
+                    ) : pendingSaleId === i.saleId ? (
+                      <span className="inline-flex items-center gap-2 text-xs">
+                        <span className="text-red-800">
+                          „{i.articleTitle}“ für {fmt(i.salePrice)} stornieren?
+                        </span>
+                        <button type="button"
+                          onClick={() => { setPendingSaleId(null); onStorno(i.saleId); }}
+                          className="px-2 py-1 rounded bg-red-600 text-white font-semibold hover:bg-red-700">
+                          Ja, stornieren
+                        </button>
+                        <button type="button" onClick={() => setPendingSaleId(null)}
+                          className="px-2 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">
+                          Abbrechen
+                        </button>
+                      </span>
                     ) : (
-                      <button type="button" onClick={() => onStorno(i.saleId)}
+                      <button type="button" onClick={() => setPendingSaleId(i.saleId)}
                         className="text-xs text-red-600 hover:underline font-medium">
                         Stornieren
                       </button>
@@ -212,6 +238,7 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
   const [cashierTx, setCashierTx] = useState<Record<string, Transaction[]>>({});
   const [cashierTxLoading, setCashierTxLoading] = useState<Record<string, boolean>>({});
   const [txSearch, setTxSearch] = useState('');
+  const [txScope, setTxScope] = useState<'all' | 'article' | 'cashier'>('all');
   const [txSearchResults, setTxSearchResults] = useState<Transaction[] | null>(null);
   const [txSearchLoading, setTxSearchLoading] = useState(false);
   const [txError, setTxError] = useState('');
@@ -270,13 +297,13 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
     if (!q) { setTxSearchResults(null); return; }
     setTxSearchLoading(true);
     const timer = setTimeout(() => {
-      fetch(`/api/basars/${id}/transactions?q=${encodeURIComponent(q)}`)
+      fetch(`/api/basars/${id}/transactions?q=${encodeURIComponent(q)}&scope=${txScope}`)
         .then(res => res.ok ? res.json() : null)
         .then(data => setTxSearchResults(data ? data.transactions : []))
         .finally(() => setTxSearchLoading(false));
     }, 300);
     return () => clearTimeout(timer);
-  }, [txSearch, id]);
+  }, [txSearch, txScope, id]);
 
   function toggleCashier(c: CashierStat) {
     const key = c.cashierId === null ? 'null' : String(c.cashierId);
@@ -300,9 +327,8 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
     });
   }
 
+  // Bestätigung passiert zweistufig in TransactionList – hier kein confirm() mehr.
   async function handleStorno(saleId: string) {
-    if (!confirm('Diesen Verkauf wirklich stornieren?')) return;
-
     const prevCashierTx = cashierTx;
     const prevSearchResults = txSearchResults;
 
@@ -545,9 +571,20 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
                   ))}
                 </div>
 
-                <input value={txSearch} onChange={e => setTxSearch(e.target.value)}
-                  placeholder="Kassenvorgänge durchsuchen (Artikel, QR-Code, Verkäufer, Kassierer)…"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-yellow-500" />
+                <div className="flex flex-col sm:flex-row gap-2 mb-4">
+                  <input value={txSearch} onChange={e => setTxSearch(e.target.value)}
+                    placeholder={TX_SCOPES.find(s => s.key === txScope)!.placeholder}
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500" />
+                  <div className="flex rounded-lg border border-gray-300 overflow-hidden shrink-0">
+                    {TX_SCOPES.map(s => (
+                      <button key={s.key} type="button" onClick={() => setTxScope(s.key)}
+                        aria-pressed={txScope === s.key}
+                        className={`px-3 py-2 text-sm font-medium ${txScope === s.key ? 'bg-yellow-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
                 {txError && (
                   <div className="mb-4 px-4 py-3 rounded-lg font-medium bg-red-100 text-red-800">{txError}</div>

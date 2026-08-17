@@ -23,6 +23,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const url = new URL(request.url);
     const cashierIdParam = url.searchParams.get('cashierId');
     const q = url.searchParams.get('q')?.trim() || undefined;
+    const scopeParam = url.searchParams.get('scope');
+    if (scopeParam !== null && scopeParam !== 'article' && scopeParam !== 'cashier' && scopeParam !== 'all') {
+      return NextResponse.json({ error: 'Ungültiger scope' }, { status: 400 });
+    }
+    const scope = scopeParam ?? 'all';
     const cursor = url.searchParams.get('cursor');
     const limitParam = parseInt(url.searchParams.get('limit') || '50', 10);
     const limit = Math.min(Math.max(Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 50, 1), 200);
@@ -42,16 +47,32 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }
 
     if (q) {
-      const qAsNumber = /^\d+$/.test(q) ? parseInt(q, 10) : undefined;
-      where.OR = [
-        { article: { title: { contains: q, mode: 'insensitive' } } },
-        { article: { qrCode: { contains: q, mode: 'insensitive' } } },
-        { article: { basarSeller: { seller: { firstName: { contains: q, mode: 'insensitive' } } } } },
-        { article: { basarSeller: { seller: { lastName: { contains: q, mode: 'insensitive' } } } } },
-        { cashier: { firstName: { contains: q, mode: 'insensitive' } } },
-        { cashier: { lastName: { contains: q, mode: 'insensitive' } } },
-        ...(qAsNumber !== undefined ? [{ article: { basarSeller: { sellerId: { equals: qAsNumber } } } }] : []),
-      ];
+      // Wortweise UND-Verknüpfung: "jeans blau" findet "Jeans blau" wie auch "Blaue Jeanshose".
+      // ponytail: kein Postgres-tsvector/GIN – `contains` je Token reicht bei ein paar tausend
+      // Sales pro Basar und braucht weder Preview-Feature noch Migration. Wird die Suche
+      // spürbar langsam, ist der Umstieg auf Full-Text-Index der nächste Schritt.
+      const tokens = q.split(/\s+/).filter(Boolean).slice(0, 6);
+      where.AND = tokens.map((token) => {
+        const asNumber = /^\d+$/.test(token) ? parseInt(token, 10) : undefined;
+        const articleClauses: Prisma.SaleWhereInput[] = [
+          { article: { title: { contains: token, mode: 'insensitive' } } },
+          { article: { qrCode: { contains: token, mode: 'insensitive' } } },
+          { article: { sizeLabel: { contains: token, mode: 'insensitive' } } },
+          { article: { basarSeller: { seller: { firstName: { contains: token, mode: 'insensitive' } } } } },
+          { article: { basarSeller: { seller: { lastName: { contains: token, mode: 'insensitive' } } } } },
+          ...(asNumber !== undefined ? [{ article: { basarSeller: { sellerId: { equals: asNumber } } } }] : []),
+        ];
+        const cashierClauses: Prisma.SaleWhereInput[] = [
+          { cashier: { firstName: { contains: token, mode: 'insensitive' } } },
+          { cashier: { lastName: { contains: token, mode: 'insensitive' } } },
+          ...(asNumber !== undefined ? [{ cashierId: { equals: asNumber } }] : []),
+        ];
+        return {
+          OR: scope === 'article' ? articleClauses
+            : scope === 'cashier' ? cashierClauses
+            : [...articleClauses, ...cashierClauses],
+        };
+      });
     }
 
     const sales = await prisma.sale.findMany({

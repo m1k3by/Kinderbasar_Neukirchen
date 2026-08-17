@@ -141,7 +141,8 @@ describe('GET /api/basars/[id]/transactions', () => {
     await GET(makeRequest('?q=Hose'), makeContext());
 
     const args = prismaMock.sale.findMany.mock.calls[0][0];
-    expect(args.where.OR).toEqual(
+    expect(args.where.AND).toHaveLength(1);
+    expect(args.where.AND[0].OR).toEqual(
       expect.arrayContaining([{ article: { title: { contains: 'Hose', mode: 'insensitive' } } }])
     );
   });
@@ -153,9 +154,58 @@ describe('GET /api/basars/[id]/transactions', () => {
     await GET(makeRequest('?q=1234'), makeContext());
 
     const args = prismaMock.sale.findMany.mock.calls[0][0];
-    expect(args.where.OR).toEqual(
+    expect(args.where.AND[0].OR).toEqual(
       expect.arrayContaining([{ article: { basarSeller: { sellerId: { equals: 1234 } } } }])
     );
+  });
+
+  // Mehrwortsuche: jedes Token muss irgendwo treffen (UND), nicht irgendeines (ODER) –
+  // sonst liefert "jeans blau" jede blaue Jacke mit.
+  it('verknüpft mehrere Suchwörter mit UND', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.sale.findMany.mockResolvedValue([]);
+
+    await GET(makeRequest('?q=jeans%20blau'), makeContext());
+
+    const args = prismaMock.sale.findMany.mock.calls[0][0];
+    expect(args.where.AND).toHaveLength(2);
+    expect(args.where.AND[0].OR).toEqual(
+      expect.arrayContaining([{ article: { title: { contains: 'jeans', mode: 'insensitive' } } }])
+    );
+    expect(args.where.AND[1].OR).toEqual(
+      expect.arrayContaining([{ article: { title: { contains: 'blau', mode: 'insensitive' } } }])
+    );
+  });
+
+  it('scope=article sucht nicht in Kassiererfeldern', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.sale.findMany.mockResolvedValue([]);
+
+    await GET(makeRequest('?q=Anna&scope=article'), makeContext());
+
+    const or = prismaMock.sale.findMany.mock.calls[0][0].where.AND[0].OR;
+    expect(JSON.stringify(or)).not.toContain('cashier');
+    expect(or).toEqual(
+      expect.arrayContaining([{ article: { sizeLabel: { contains: 'Anna', mode: 'insensitive' } } }])
+    );
+  });
+
+  it('scope=cashier sucht nicht in Artikelfeldern und trifft die Kassierernummer', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.sale.findMany.mockResolvedValue([]);
+
+    await GET(makeRequest('?q=9004&scope=cashier'), makeContext());
+
+    const or = prismaMock.sale.findMany.mock.calls[0][0].where.AND[0].OR;
+    expect(JSON.stringify(or)).not.toContain('article');
+    expect(or).toEqual(expect.arrayContaining([{ cashierId: { equals: 9004 } }]));
+  });
+
+  it('returns 400 bei unbekanntem scope', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    const res = await GET(makeRequest('?q=x&scope=quatsch'), makeContext());
+    expect(res.status).toBe(400);
+    expect(prismaMock.sale.findMany).not.toHaveBeenCalled();
   });
 
   it('löst Verkäufername/-nummer und Kassierername je Position korrekt auf', async () => {
