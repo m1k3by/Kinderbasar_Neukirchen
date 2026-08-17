@@ -85,8 +85,7 @@ Umsetzungsdetails für den Etikettenbogen: **[docs/spec-etiketten-pdf.md](docs/s
 | Ort | Zweck | Status |
 |---|---|---|
 | `app/lib/labels.ts` + `app/api/basars/[id]/labels.pdf/route.ts` | Etikettenbogen | ✅ serverseitig, absolute mm, Vektor-QR |
-| `app/seller/basars/[id]/page.tsx` → `handleExportPDF()` | Abrechnung Verkäufer | ✅ jsPDF, absolute mm |
-| `app/admin/basars/[id]/abrechnung/page.tsx` | Abrechnung Admin | ✅ jsPDF, absolute mm |
+| `app/lib/settlementPdf.ts` + `app/api/basars/[id]/settlements/[sellerIdParam]/abrechnung.pdf/route.ts` | Abrechnung (Verkäufer + Admin, ein gemeinsamer Generator) | ✅ serverseitig, absolute mm |
 | `app/api/articles/[qrCode]/qr/route.ts` | QR als PNG (Bildschirmanzeige) | ✅ – für PDF stattdessen Vektor zeichnen |
 
 ### Prüfung bei Änderungen an PDFs
@@ -105,3 +104,4 @@ Nach jeder Änderung an einer PDF-Ausgabe: Datei erzeugen und die Geometrie mess
 - Beträge über `fmt()` formatieren, Währung `€` mit schmalem Abstand davor.
 - Verkäufernummer (`sellerId`) ist permanent und basarübergreifend stabil; QR-Codes von Artikeln dürfen sich bei Wiederverwendung über Basare hinweg **nicht** ändern (sonst müsste neu gedruckt werden).
 - Fehler in Route Handlern: `console.error` mit Routenpfad als Präfix, nach außen generische Meldung.
+- **Artikel-Archiv (`SellerArticle`) überlebt das Basar-Ende.** Ob ein Archiv-Eintrag beim nächsten Basar wieder übernehmbar ist, entscheidet ausschließlich, ob ein damit verknüpfter `Article` den Status `SOLD` erreicht hat (`app/api/seller-articles/route.ts`, `soldPreviously`): nicht verkaufte Artikel (`AVAILABLE`/`RETURNED`) bleiben übernehmbar, verkaufte Artikel dauerhaft nicht – unabhängig davon, in wie vielen weiteren Basaren der Eintrag seitdem aufgetaucht ist.

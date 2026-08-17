@@ -26,7 +26,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     // Body: { items: [{ articleId, salePrice? }] } or { qrCode, salePrice? } for single scan.
-    // clientTxId is an optional idempotency key sent by the cashier UI (live checkout or offline sync) – logged for correlation only.
+    // clientTxId is an optional idempotency/grouping key sent by the cashier UI (live checkout
+    // or offline sync) – persisted on each Sale so the admin transactions view can group items
+    // sold in the same checkout.
     const body = await request.json();
     const items: { articleId?: string; qrCode?: string; salePrice?: number }[] = body.items ?? [body];
     const clientTxId: string | undefined = body.clientTxId;
@@ -76,6 +78,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             cashierId,
             salePrice,
             syncedAt: new Date(),
+            clientTxId: clientTxId ?? null,
           },
         });
         return { sale };
@@ -84,10 +87,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (!sale) {
         results.push({ error: 'Bereits verkauft', articleId: article.id });
         continue;
-      }
-
-      if (clientTxId) {
-        console.log('[SALES] clientTxId:', clientTxId, 'articleId:', article.id, 'saleId:', sale.id);
       }
 
       results.push({ success: true, articleId: article.id, saleId: sale.id, salePrice });

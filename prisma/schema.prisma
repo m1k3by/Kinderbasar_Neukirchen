@@ -187,12 +187,16 @@ model Sale {
   soldAt      DateTime @default(now())
   syncedAt    DateTime?
   isCancelled Boolean  @default(false)
+  // Idempotenz-/Gruppierungsschlüssel eines Kassiervorgangs (siehe app/admin/basars/[id]/kasse/page.tsx).
+  // Nullable, additiv – Altbestand bleibt null und wird als Einzelvorgang behandelt.
+  clientTxId  String?
   basar       Basar    @relation(fields: [basarId], references: [id])
   article     Article  @relation(fields: [articleId], references: [id])
   cashier     Seller?  @relation("CashierSales", fields: [cashierId], references: [sellerId])
 
   @@index([basarId, soldAt])
   @@index([articleId])
+  @@index([basarId, clientTxId])
 }
 
 model Settlement {

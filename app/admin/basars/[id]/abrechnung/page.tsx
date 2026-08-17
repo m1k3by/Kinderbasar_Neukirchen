@@ -90,42 +90,6 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
     }
   }
 
-  async function handleExportPDF(settlement: Settlement) {
-    try {
-      const { jsPDF } = await import('jspdf');
-      const doc = new jsPDF({ orientation: 'portrait', format: 'a4' });
-      const { seller } = settlement.basarSeller;
-
-      doc.setFontSize(20);
-      doc.text('Abrechnung Kinderbasar', 20, 20);
-      doc.setFontSize(12);
-      doc.text(basar?.title ?? '', 20, 30);
-      doc.text(`Verkäufer #${seller.sellerId}: ${seller.firstName} ${seller.lastName}`, 20, 40);
-      doc.text(`Erstellt: ${new Date(settlement.generatedAt).toLocaleDateString('de-DE')}`, 20, 48);
-
-      doc.setFillColor(240, 240, 240);
-      doc.rect(15, 55, 180, 50, 'F');
-      doc.setFontSize(11);
-      doc.text('Brutto-Erlös:', 20, 67);
-      doc.text(`${Number(settlement.grossRevenue).toFixed(2)} €`, 170, 67, { align: 'right' });
-      doc.text(`Provision (${basar?.commissionPercent ?? 0}%):`, 20, 78);
-      doc.text(`- ${Number(settlement.commissionAmount).toFixed(2)} €`, 170, 78, { align: 'right' });
-      doc.text('Teilnahmegebühr:', 20, 89);
-      doc.text(`- ${Number(settlement.entryFeeAmount).toFixed(2)} €`, 170, 89, { align: 'right' });
-
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Netto-Auszahlung:', 20, 108);
-      doc.text(`${Number(settlement.netPayout).toFixed(2)} €`, 170, 108, { align: 'right' });
-
-      doc.save(`Abrechnung-${seller.sellerId}-${seller.lastName}.pdf`);
-    } catch (err) {
-      console.error('PDF error:', err);
-      setMessage('Fehler beim Erstellen des PDFs');
-      setTimeout(() => setMessage(''), 3000);
-    }
-  }
-
   const totalGross = settlements.reduce((s, x) => s + Number(x.grossRevenue), 0);
   const totalCommission = settlements.reduce((s, x) => s + Number(x.commissionAmount), 0);
   const totalPayout = settlements.reduce((s, x) => s + Number(x.netPayout), 0);
@@ -204,10 +168,13 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
                       <td className="px-4 py-3 text-right text-orange-600 hidden md:table-cell">- {Number(s.commissionAmount).toFixed(2)} €</td>
                       <td className="px-4 py-3 text-right font-bold text-green-600">{Number(s.netPayout).toFixed(2)} €</td>
                       <td className="px-4 py-3 text-right">
-                        <button onClick={() => handleExportPDF(s)}
-                          className="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs rounded transition-colors">
+                        <a
+                          href={`/api/basars/${basarId}/settlements/${s.basarSeller.seller.sellerId}/abrechnung.pdf`}
+                          download
+                          className="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs rounded transition-colors"
+                        >
                           ↓ PDF
-                        </button>
+                        </a>
                       </td>
                     </tr>
                   ))}

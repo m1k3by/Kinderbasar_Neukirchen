@@ -79,6 +79,12 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   const [allowedSizes, setAllowedSizes] = useState<string[]>([]);
   const [sizeError, setSizeError] = useState('');
   const [showSizeTooltip, setShowSizeTooltip] = useState(false);
+  // Oberkategorie des Eingabeformulars. Sie wird NICHT gespeichert – sie steuert nur, welche
+  // Felder sichtbar sind. Ein Nicht-Kleidungsstück ist dadurch schlicht ein Artikel ohne
+  // Größe und ohne Geschlecht; dafür braucht es keine Schemaänderung.
+  // Bewusst nicht Teil von `form`: nach dem Absenden wird das Formular geleert, die Kategorie
+  // bleibt aber stehen – wer zehn Spielsachen erfasst, will nicht zehnmal umschalten.
+  const [isClothing, setIsClothing] = useState(true);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -180,6 +186,17 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
     }
   }
 
+  function selectCategory(clothing: boolean) {
+    setIsClothing(clothing);
+    if (!clothing) {
+      // Größe und Geschlecht sofort verwerfen statt nur auszublenden – sonst würde ein vorher
+      // getippter Wert unsichtbar im State liegen und beim Absenden mitgeschickt.
+      setForm(f => ({ ...f, sizeLabel: '', gender: '' }));
+      setSizeError('');
+      setShowSizeTooltip(false);
+    }
+  }
+
   async function handleAddArticle(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title || !form.price) return;
@@ -191,8 +208,8 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
       return;
     }
 
-    // Validate size
-    const trimmedSize = form.sizeLabel.trim();
+    // Validate size – nur bei Kleidung, sonst gibt es gar keine Größe zu prüfen.
+    const trimmedSize = isClothing ? form.sizeLabel.trim() : '';
     if (trimmedSize && allowedSizes.length > 0 && !allowedSizes.includes(trimmedSize)) {
       setSizeError(`"${trimmedSize}" ist keine gültige Größe. Bitte ⓘ klicken für alle Optionen.`);
       return;
@@ -203,8 +220,10 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
     const tempArticle: Article = {
       id: tempId,
       title: form.title,
-      sizeLabel: form.sizeLabel || undefined,
-      gender: form.gender || undefined,
+      // Bei „Keine Kleidung" bleiben beide Felder leer – unabhängig davon, was vor dem
+      // Umschalten im Formular stand.
+      sizeLabel: isClothing ? (form.sizeLabel || undefined) : undefined,
+      gender: isClothing ? (form.gender || undefined) : undefined,
       price: parseFloat(form.price),
       qrCode: '',
       status: 'AVAILABLE',
@@ -260,145 +279,6 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
     setMessage(text);
     setMessageOk(ok);
     setTimeout(() => setMessage(''), 4000);
-  }
-
-  async function handleExportPDF() {
-    if (!settlement) return;
-    try {
-      const { jsPDF } = await import('jspdf');
-      const doc = new jsPDF({ orientation: 'portrait', format: 'a4' });
-      const mL = 18;   // left margin
-      const mR = 192;  // right margin
-      const soldArticles = articles.filter(a => a.status === 'SOLD');
-      const sellerId = basarSeller?.seller?.sellerId ?? basarSeller?.sellerId;
-
-      // ── Header ──────────────────────────────────────────────
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(18);
-      doc.text('Abrechnung Kinderbasar', mL, 22);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(12);
-      doc.text(basar?.title ?? '', mL, 32);
-      doc.text(`Verkäufer #${sellerId}: ${sellerName}`, mL, 40);
-
-      doc.setFontSize(9);
-      doc.setTextColor(140);
-      doc.text(`Erstellt: ${new Date().toLocaleDateString('de-DE')}`, mL, 48);
-      doc.setTextColor(0);
-
-      doc.setDrawColor(210);
-      doc.line(mL, 53, mR, 53);
-
-      // ── Zusammenfassung ─────────────────────────────────────
-      let y = 63;
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(130);
-      doc.text('ZUSAMMENFASSUNG', mL, y);
-      doc.setTextColor(0);
-      y += 7;
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(11);
-      const summaryRows: [string, string][] = [
-        ['Brutto-Erlös:', `${fmt(Number(settlement.grossRevenue))} €`],
-        [`Provision (${basar?.commissionPercent ?? 0}%):`, `– ${fmt(Number(settlement.commissionAmount))} €`],
-        ['Teilnahmegebühr:', `– ${fmt(Number(settlement.entryFeeAmount))} €`],
-      ];
-      for (const [label, value] of summaryRows) {
-        doc.text(label, mL, y);
-        doc.text(value, mR, y, { align: 'right' });
-        y += 8;
-      }
-      doc.setDrawColor(180);
-      doc.line(mL, y, mR, y);
-      y += 7;
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(13);
-      doc.text('Netto-Auszahlung:', mL, y);
-      doc.text(`${fmt(Number(settlement.netPayout))} €`, mR, y, { align: 'right' });
-      y += 14;
-
-      // ── Artikelliste ────────────────────────────────────────
-      doc.setDrawColor(210);
-      doc.line(mL, y, mR, y);
-      y += 9;
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.setTextColor(130);
-      doc.text(`VERKAUFTE ARTIKEL (${soldArticles.length})`, mL, y);
-      doc.setTextColor(0);
-      y += 7;
-
-      if (soldArticles.length === 0) {
-        doc.setFont('helvetica', 'italic');
-        doc.setFontSize(10);
-        doc.setTextColor(160);
-        doc.text('Keine Artikel verkauft.', mL, y);
-        doc.setTextColor(0);
-      } else {
-        // Table header row
-        const colNr   = mL + 2;
-        const colDesc = mL + 12;
-        const colSize = mL + 108;
-        const colTime = mL + 138;
-        const colPrice = mR - 2;
-
-        doc.setFillColor(243, 244, 246);
-        doc.rect(mL, y - 5, mR - mL, 7, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8.5);
-        doc.text('#', colNr, y);
-        doc.text('Beschreibung', colDesc, y);
-        doc.text('Größe', colSize, y);
-        doc.text('Uhrzeit', colTime, y);
-        doc.text('Preis', colPrice, y, { align: 'right' });
-        y += 2;
-        doc.setDrawColor(200);
-        doc.line(mL, y, mR, y);
-        y += 5;
-
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-
-        soldArticles.forEach((a, i) => {
-          if (y > 272) {
-            doc.addPage();
-            y = 20;
-          }
-          if (i % 2 === 0) {
-            doc.setFillColor(249, 250, 251);
-            doc.rect(mL, y - 4.5, mR - mL, 7, 'F');
-          }
-          doc.text(String(i + 1), colNr, y);
-          const title = a.title.length > 40 ? a.title.substring(0, 38) + '…' : a.title;
-          doc.text(title, colDesc, y);
-          doc.text(a.sizeLabel ?? '–', colSize, y);
-          const t = a.soldAt
-            ? new Date(a.soldAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
-            : '–';
-          doc.text(t, colTime, y);
-          doc.text(`${fmt(Number(a.price))} €`, colPrice, y, { align: 'right' });
-          y += 7;
-        });
-
-        // Totals footer
-        doc.setDrawColor(180);
-        doc.line(mL, y, mR, y);
-        y += 6;
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(10);
-        doc.text(`${soldArticles.length} Artikel gesamt`, colDesc, y);
-        doc.text(`${fmt(Number(settlement.grossRevenue))} €`, colPrice, y, { align: 'right' });
-      }
-
-      doc.save(`Abrechnung-${sellerName.replace(/\s+/g, '-')}.pdf`);
-    } catch (err) {
-      console.error(err);
-      showMsg('Fehler beim PDF-Export', false);
-    }
   }
 
   if (loading) return (
@@ -516,9 +396,13 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
           <div className="bg-white rounded-xl shadow-md p-5 mb-5 border-l-4 border-green-500">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-gray-800">Deine Abrechnung</h2>
-              <button onClick={handleExportPDF} className="px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-sm rounded-lg transition-colors">
+              <a
+                href={`/api/basars/${basarId}/settlements/${basarSeller?.seller?.sellerId ?? basarSeller?.sellerId ?? sellerId}/abrechnung.pdf`}
+                download
+                className="px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-sm rounded-lg transition-colors"
+              >
                 ↓ PDF
-              </button>
+              </a>
             </div>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-gray-600">Brutto-Erlös</span><span className="font-medium">{fmt(Number(settlement.grossRevenue))} €</span></div>
@@ -654,9 +538,63 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
           <div className="bg-white rounded-xl shadow-sm p-5 mb-5">
             <h2 className="font-semibold text-gray-700 mb-3">
               Neuen Artikel hinzufügen
-              <span className="ml-2 text-sm font-normal text-gray-400">({articles.length}/{maxArticles})</span>
+              <span className={`ml-2 text-sm font-normal ${articles.length >= maxArticles ? 'text-orange-600 font-semibold' : 'text-gray-400'}`}>
+                ({articles.length}/{maxArticles})
+              </span>
             </h2>
+
+            {/* Erklärt den ausgegrauten Knopf. Bewusst dauerhaft sichtbar statt als
+                Meldung beim Klick: ein disabled-Button feuert kein onClick, die
+                Erklärung käme also nie an. */}
+            {articles.length >= maxArticles && (
+              <div className="mb-3 px-4 py-3 rounded-lg bg-orange-50 border border-orange-200 text-sm text-orange-800">
+                <strong>Maximale Artikelanzahl erreicht.</strong> Du hast alle {maxArticles} Artikel
+                angelegt, die für diesen Basar erlaubt sind. Zum Anlegen eines weiteren Artikels
+                musst du unten einen vorhandenen löschen.
+              </div>
+            )}
             <form onSubmit={handleAddArticle} className="grid md:grid-cols-3 gap-3">
+              {/* Oberkategorie: steuert nur die Sichtbarkeit von Größe und Geschlecht. */}
+              <div className="md:col-span-3">
+                <span className="block text-xs font-medium text-gray-600 mb-1">Art des Artikels</span>
+                <div
+                  role="radiogroup"
+                  aria-label="Art des Artikels"
+                  className="relative flex w-full max-w-xs bg-gray-100 rounded-xl p-1 select-none"
+                >
+                  {/* Gleitender Knopf. Er ist genau so breit wie eine Hälfte abzüglich des
+                      Innenabstands – dadurch entspricht `translate-x-full` exakt dem Weg zur
+                      rechten Position, ohne feste Pixelwerte. */}
+                  <span
+                    aria-hidden="true"
+                    className={`absolute top-1 bottom-1 left-1 w-[calc(50%-0.25rem)] rounded-lg bg-yellow-500 shadow-sm transition-transform duration-200 ease-out ${
+                      isClothing ? 'translate-x-0' : 'translate-x-full'
+                    }`}
+                  />
+                  {([
+                    { clothing: true, label: '👕 Kleidung' },
+                    { clothing: false, label: '🧸 Keine Kleidung' },
+                  ] as const).map(opt => (
+                    <button
+                      key={opt.label}
+                      type="button"
+                      role="radio"
+                      aria-checked={isClothing === opt.clothing}
+                      onClick={() => selectCategory(opt.clothing)}
+                      className={`relative z-10 flex-1 py-2 px-2 text-sm font-semibold rounded-lg transition-colors ${
+                        isClothing === opt.clothing ? 'text-gray-900' : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                {!isClothing && (
+                  <p className="text-xs text-gray-500 mt-1.5">
+                    Für Spielsachen, Kindersitze und Sonstiges – Größe und Geschlecht entfallen.
+                  </p>
+                )}
+              </div>
               <div className="md:col-span-3">
                 <label className="block text-xs font-medium text-gray-600 mb-1">Beschreibung * (max. 30 Zeichen)</label>
                 <input
@@ -664,11 +602,12 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
                   required maxLength={30}
                   value={form.title}
                   onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                  placeholder="z.B. Jeans blau, Winterjacke…"
+                  placeholder={isClothing ? 'z.B. Jeans blau, Winterjacke…' : 'z.B. Holzeisenbahn, Kindersitz…'}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
                 />
                 <div className={`text-right text-xs mt-0.5 ${form.title.length >= 28 ? 'text-orange-500 font-medium' : 'text-gray-400'}`}>{form.title.length}/30</div>
               </div>
+              {isClothing && (
               <div className="md:col-span-3">
                 <span className="block text-xs font-medium text-gray-600 mb-1">Für wen?</span>
                 <div className="flex gap-5">
@@ -696,6 +635,8 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
                   )}
                 </div>
               </div>
+              )}
+              {isClothing && (
               <div>
                 <div className="flex items-center gap-1.5 mb-1">
                   <label className="block text-xs font-medium text-gray-600">Größe</label>
@@ -771,7 +712,9 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
                 </datalist>
                 {sizeError && <p className="text-xs text-red-600 mt-1">{sizeError}</p>}
               </div>
-              <div>
+              )}
+              {/* Ohne Größenfeld bliebe in der 3-Spalten-Zeile eine Lücke – der Preis füllt sie. */}
+              <div className={isClothing ? undefined : 'md:col-span-2'}>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Preis (€) *</label>
                 <input
                   required type="number" min="0.50" step="0.50"

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, use, Fragment } from 'react';
 import Link from 'next/link';
 import Header from '../../../components/Header';
 import { getNavLinks, basarsAdminActiveKey, type NavUser } from '../../../lib/navLinks';
@@ -40,13 +40,181 @@ const NEXT_STATUS_LABEL: Record<string, string> = {
   DRAFT: '→ Öffnen', OPEN: '→ Aktivieren', ACTIVE: '→ Schließen',
 };
 
+interface CashierStat {
+  cashierId: number | null;
+  name: string;
+  salesCount: number;
+  revenue: number;
+  firstScan: string | null;
+  lastScan: string | null;
+}
+interface RateRow {
+  label: string;
+  offered: number;
+  sold: number;
+}
+interface Stats {
+  totals: {
+    salesCount: number; revenue: number; cancelledCount: number;
+    articlesOffered: number; articlesSold: number; activeSellers: number;
+  };
+  cashiers: CashierStat[];
+  priceBands: RateRow[];
+  sizes: RateRow[];
+  categories: RateRow[];
+}
+
+interface TxItem {
+  saleId: string;
+  articleTitle: string;
+  sizeLabel: string | null;
+  qrCode: string;
+  salePrice: number;
+  isCancelled: boolean;
+  sellerId: number;
+  sellerName: string;
+}
+interface Transaction {
+  txId: string | null;
+  cashierId: number | null;
+  cashierName: string;
+  soldAt: string;
+  total: number;
+  items: TxItem[];
+}
+
+function fmt(n: number) {
+  return `${n.toFixed(2).replace('.', ',')} €`;
+}
+
+function quote(offered: number, sold: number) {
+  return offered > 0 ? Math.round((sold / offered) * 100) : 0;
+}
+
+function quoteColor(pct: number) {
+  if (pct >= 60) return 'text-green-600 bg-green-500';
+  if (pct >= 30) return 'text-yellow-600 bg-yellow-500';
+  return 'text-red-600 bg-red-500';
+}
+
+function RateTable({ title, rows }: { title: string; rows: RateRow[] }) {
+  return (
+    <div className="bg-white rounded-xl shadow-sm overflow-hidden mt-4">
+      <div className="px-4 py-3 border-b border-gray-200 font-semibold text-gray-700">{title}</div>
+      {rows.length === 0 ? (
+        <div className="text-center py-8 text-gray-400">Keine Artikel</div>
+      ) : (
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th className="text-left px-4 py-3 font-semibold text-gray-600">Bezeichnung</th>
+              <th className="text-right px-4 py-3 font-semibold text-gray-600">Angeboten</th>
+              <th className="text-right px-4 py-3 font-semibold text-gray-600">Verkauft</th>
+              <th className="text-right px-4 py-3 font-semibold text-gray-600">Quote</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {rows.map((r) => {
+              const pct = quote(r.offered, r.sold);
+              const [textColor, barColor] = quoteColor(pct).split(' ');
+              return (
+                <tr key={r.label} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 text-gray-800">
+                    {r.label}
+                    <div className="h-1.5 bg-gray-100 rounded-full mt-1.5 w-32">
+                      <div className={`h-1.5 rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-right text-gray-700">{r.offered}</td>
+                  <td className="px-4 py-3 text-right text-gray-700">{r.sold}</td>
+                  <td className={`px-4 py-3 text-right font-medium ${textColor}`}>{pct} %</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+function TransactionList({ transactions, onStorno, showCashier }: {
+  transactions: Transaction[]; onStorno: (saleId: string) => void; showCashier?: boolean;
+}) {
+  if (transactions.length === 0) {
+    return <div className="text-center py-4 text-gray-400">Keine Kassenvorgänge</div>;
+  }
+  return (
+    <div className="space-y-3">
+      {transactions.map(t => (
+        <div key={t.txId ?? t.items[0]?.saleId} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200 text-sm">
+            <span className="text-gray-600">
+              {new Date(t.soldAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+              {' · '}{t.items.length} {t.items.length === 1 ? 'Position' : 'Positionen'}
+              {showCashier && (
+                <span className="text-gray-400"> · {t.cashierName}{t.cashierId !== null && ` #${t.cashierId}`}</span>
+              )}
+            </span>
+            <span className="font-semibold text-gray-800">{fmt(t.total)}</span>
+          </div>
+          <table className="w-full text-sm">
+            <tbody className="divide-y divide-gray-100">
+              {t.items.map(i => (
+                <tr key={i.saleId}>
+                  <td className={`px-3 py-2 text-gray-800 ${i.isCancelled ? 'line-through text-gray-400' : ''}`}>
+                    {i.articleTitle}{i.sizeLabel && <span className="text-gray-400"> ({i.sizeLabel})</span>}
+                  </td>
+                  <td className={`px-3 py-2 text-gray-500 ${i.isCancelled ? 'line-through text-gray-400' : ''}`}>
+                    {i.sellerName} <span className="text-gray-400">#{i.sellerId}</span>
+                  </td>
+                  <td className={`px-3 py-2 text-right text-gray-700 ${i.isCancelled ? 'line-through text-gray-400' : ''}`}>
+                    {fmt(i.salePrice)}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    {i.isCancelled ? (
+                      <span className="text-xs text-gray-400 font-medium">storniert</span>
+                    ) : (
+                      <button type="button" onClick={() => onStorno(i.saleId)}
+                        className="text-xs text-red-600 hover:underline font-medium">
+                        Stornieren
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function formatDuration(fromIso: string, toIso: string) {
+  const ms = new Date(toIso).getTime() - new Date(fromIso).getTime();
+  const totalMinutes = Math.max(0, Math.round(ms / 60000));
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return h > 0 ? `${h} h ${m} min` : `${m} min`;
+}
+
 export default function AdminBasarDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [basar, setBasar] = useState<Basar | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [search, setSearch] = useState('');
-  const [tab, setTab] = useState<'overview' | 'sellers'>('overview');
+  const [tab, setTab] = useState<'overview' | 'sellers' | 'stats'>('overview');
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [expandedCashier, setExpandedCashier] = useState<string | null>(null);
+  const [cashierTx, setCashierTx] = useState<Record<string, Transaction[]>>({});
+  const [cashierTxLoading, setCashierTxLoading] = useState<Record<string, boolean>>({});
+  const [txSearch, setTxSearch] = useState('');
+  const [txSearchResults, setTxSearchResults] = useState<Transaction[] | null>(null);
+  const [txSearchLoading, setTxSearchLoading] = useState(false);
+  const [txError, setTxError] = useState('');
   const [editMode, setEditMode] = useState(false);
   const [form, setForm] = useState<BasarFormState>(EMPTY_BASAR_FORM);
   const [saving, setSaving] = useState(false);
@@ -80,6 +248,85 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
       }
     } finally {
       setLoading(false);
+    }
+  }
+
+  function handleTabChange(t: 'overview' | 'sellers' | 'stats') {
+    setTab(t);
+    if (t === 'stats' && !stats && !statsLoading) {
+      setStatsLoading(true);
+      fetch(`/api/basars/${id}/stats`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => { if (data) setStats(data); })
+        .finally(() => setStatsLoading(false));
+    }
+  }
+
+  // Suche über alle Kassiervorgänge – debounced, damit nicht pro Tastendruck eine Anfrage
+  // rausgeht. Leeres Suchfeld → null, dann zeigt die stats-Tab wieder die normale
+  // Kassiereransicht statt der flachen Trefferliste.
+  useEffect(() => {
+    const q = txSearch.trim();
+    if (!q) { setTxSearchResults(null); return; }
+    setTxSearchLoading(true);
+    const timer = setTimeout(() => {
+      fetch(`/api/basars/${id}/transactions?q=${encodeURIComponent(q)}`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => setTxSearchResults(data ? data.transactions : []))
+        .finally(() => setTxSearchLoading(false));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [txSearch, id]);
+
+  function toggleCashier(c: CashierStat) {
+    const key = c.cashierId === null ? 'null' : String(c.cashierId);
+    if (expandedCashier === key) { setExpandedCashier(null); return; }
+    setExpandedCashier(key);
+    if (!cashierTx[key]) {
+      setCashierTxLoading(prev => ({ ...prev, [key]: true }));
+      fetch(`/api/basars/${id}/transactions?cashierId=${key}`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => { if (data) setCashierTx(prev => ({ ...prev, [key]: data.transactions })); })
+        .finally(() => setCashierTxLoading(prev => ({ ...prev, [key]: false })));
+    }
+  }
+
+  function patchTransactions(list: Transaction[], saleId: string): Transaction[] {
+    return list.map(t => {
+      if (!t.items.some(i => i.saleId === saleId)) return t;
+      const items = t.items.map(i => i.saleId === saleId ? { ...i, isCancelled: true } : i);
+      const total = items.filter(i => !i.isCancelled).reduce((sum, i) => sum + i.salePrice, 0);
+      return { ...t, items, total };
+    });
+  }
+
+  async function handleStorno(saleId: string) {
+    if (!confirm('Diesen Verkauf wirklich stornieren?')) return;
+
+    const prevCashierTx = cashierTx;
+    const prevSearchResults = txSearchResults;
+
+    setCashierTx(prev => {
+      const next: Record<string, Transaction[]> = {};
+      for (const [key, list] of Object.entries(prev)) next[key] = patchTransactions(list, saleId);
+      return next;
+    });
+    setTxSearchResults(prev => prev ? patchTransactions(prev, saleId) : prev);
+
+    try {
+      const res = await fetch(`/api/sales/${saleId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setCashierTx(prevCashierTx);
+        setTxSearchResults(prevSearchResults);
+        setTxError(data.error || 'Storno fehlgeschlagen');
+        setTimeout(() => setTxError(''), 6000);
+      }
+    } catch {
+      setCashierTx(prevCashierTx);
+      setTxSearchResults(prevSearchResults);
+      setTxError('Storno fehlgeschlagen – Netzwerkfehler');
+      setTimeout(() => setTxError(''), 6000);
     }
   }
 
@@ -120,6 +367,12 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
     if (res.ok) loadBasar();
     else { const data = await res.json(); setMessage(data.error || 'Fehler'); setTimeout(() => setMessage(''), 4000); }
   }
+
+  const tabLabels: Record<'overview' | 'sellers' | 'stats', string> = {
+    overview: 'Übersicht',
+    sellers: `Verkäufer (${basar?._count?.basarSellers ?? 0})`,
+    stats: 'Statistik',
+  };
 
   const filteredSellers = (basar?.basarSellers ?? []).filter(bs =>
     search === '' ||
@@ -201,10 +454,10 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
         {/* Tabs – "Verkäufer" nur für Admins: GET /api/basars/[id] liefert die Verkäuferliste
             (Namen, E-Mails) nur an role==='admin', für alle anderen wäre der Tab immer leer. */}
         <div className="flex gap-1 mb-4 bg-gray-100 rounded-xl p-1 w-fit">
-          {(navUser.role === 'admin' ? (['overview', 'sellers'] as const) : (['overview'] as const)).map(t => (
-            <button key={t} onClick={() => setTab(t)}
+          {(navUser.role === 'admin' ? (['overview', 'sellers', 'stats'] as const) : (['overview'] as const)).map(t => (
+            <button key={t} onClick={() => handleTabChange(t)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
-              {t === 'overview' ? 'Übersicht' : `Verkäufer (${basar._count?.basarSellers ?? 0})`}
+              {tabLabels[t]}
             </button>
           ))}
         </div>
@@ -257,6 +510,122 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
                   </tbody>
                 </table>
               </div>
+            )}
+          </div>
+        )}
+
+        {tab === 'stats' && navUser.role === 'admin' && (
+          <div>
+            {statsLoading ? (
+              <div className="text-center py-8 text-gray-400">Laden…</div>
+            ) : !stats || (stats.totals.salesCount === 0 && stats.totals.articlesOffered === 0) ? (
+              // Nur ausblenden, wenn es wirklich nichts zu zeigen gibt. Preis- und
+              // Größenverteilung beziehen sich auf ANGEBOTENE Artikel und sind gerade
+              // vor dem ersten Verkauf am nützlichsten – etwa um zu sehen, welche
+              // Größen im laufenden Anmeldezeitraum noch fehlen.
+              <div className="text-center py-8 text-gray-400">Noch keine Artikel und keine Verkäufe</div>
+            ) : (
+              <>
+                <div className="grid md:grid-cols-3 gap-4 mb-4">
+                  {[
+                    { label: 'Verkäufe', value: stats.totals.salesCount, sub: '' },
+                    { label: 'Umsatz', value: fmt(stats.totals.revenue), sub: '' },
+                    { label: 'Stornos', value: stats.totals.cancelledCount, sub: '' },
+                    {
+                      label: 'Artikel angeboten', value: stats.totals.articlesOffered,
+                      sub: `davon ${stats.totals.articlesSold} verkauft (${stats.totals.articlesOffered > 0 ? Math.round((stats.totals.articlesSold / stats.totals.articlesOffered) * 100) : 0} %)`,
+                    },
+                    { label: 'Aktive Verkäufer', value: stats.totals.activeSellers, sub: '' },
+                  ].map(card => (
+                    <div key={card.label} className="bg-white rounded-xl shadow-sm p-5 text-center">
+                      <div className="text-3xl font-bold text-gray-800">{card.value}</div>
+                      <div className="text-sm text-gray-500 mt-1">{card.label}</div>
+                      {card.sub && <div className="text-xs text-gray-400 mt-1">{card.sub}</div>}
+                    </div>
+                  ))}
+                </div>
+
+                <input value={txSearch} onChange={e => setTxSearch(e.target.value)}
+                  placeholder="Kassenvorgänge durchsuchen (Artikel, QR-Code, Verkäufer, Kassierer)…"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-yellow-500" />
+
+                {txError && (
+                  <div className="mb-4 px-4 py-3 rounded-lg font-medium bg-red-100 text-red-800">{txError}</div>
+                )}
+
+                {txSearch.trim() ? (
+                  <div className="bg-white rounded-xl shadow-sm p-4">
+                    {txSearchLoading ? (
+                      <div className="text-center py-8 text-gray-400">Suche…</div>
+                    ) : (
+                      <TransactionList transactions={txSearchResults ?? []} onStorno={handleStorno} showCashier />
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          <th className="text-left px-4 py-3 font-semibold text-gray-600">Kassierer</th>
+                          <th className="text-right px-4 py-3 font-semibold text-gray-600">Scans</th>
+                          <th className="text-right px-4 py-3 font-semibold text-gray-600">Umsatz</th>
+                          <th className="text-right px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Erster Scan</th>
+                          <th className="text-right px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Letzter Scan</th>
+                          <th className="text-right px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Dauer</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {stats.cashiers.map(c => {
+                          const key = c.cashierId === null ? 'null' : String(c.cashierId);
+                          const isOpen = expandedCashier === key;
+                          return (
+                            <Fragment key={key}>
+                              <tr className="hover:bg-gray-50">
+                                <td className="px-4 py-3 text-gray-800">
+                                  <button type="button" onClick={() => toggleCashier(c)} aria-expanded={isOpen}
+                                    className="flex items-center gap-1.5 text-left">
+                                    <span className={`inline-block text-gray-400 transition-transform ${isOpen ? 'rotate-90' : ''}`}>▶</span>
+                                    <span>{c.name}{c.cashierId !== null && <span className="text-gray-400"> #{c.cashierId}</span>}</span>
+                                  </button>
+                                  <div className="h-1.5 bg-gray-100 rounded-full mt-1.5 w-32 ml-5">
+                                    <div className="h-1.5 bg-yellow-500 rounded-full"
+                                      style={{ width: `${stats.totals.salesCount > 0 ? (c.salesCount / stats.totals.salesCount) * 100 : 0}%` }} />
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-right text-gray-700 font-medium">{c.salesCount}</td>
+                                <td className="px-4 py-3 text-right text-gray-700">{fmt(c.revenue)}</td>
+                                <td className="px-4 py-3 text-right text-gray-500 hidden md:table-cell">
+                                  {c.firstScan ? new Date(c.firstScan).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '–'}
+                                </td>
+                                <td className="px-4 py-3 text-right text-gray-500 hidden md:table-cell">
+                                  {c.lastScan ? new Date(c.lastScan).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '–'}
+                                </td>
+                                <td className="px-4 py-3 text-right text-gray-500 hidden md:table-cell">
+                                  {c.firstScan && c.lastScan ? formatDuration(c.firstScan, c.lastScan) : '–'}
+                                </td>
+                              </tr>
+                              {isOpen && (
+                                <tr>
+                                  <td colSpan={6} className="px-4 py-3 bg-gray-50">
+                                    {cashierTxLoading[key] ? (
+                                      <div className="text-center py-4 text-gray-400">Laden…</div>
+                                    ) : (
+                                      <TransactionList transactions={cashierTx[key] ?? []} onStorno={handleStorno} />
+                                    )}
+                                  </td>
+                                </tr>
+                              )}
+                            </Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                <RateTable title="Preisverteilung" rows={stats.priceBands} />
+                <RateTable title="Größen & Kategorien" rows={[...stats.categories, ...stats.sizes]} />
+              </>
             )}
           </div>
         )}

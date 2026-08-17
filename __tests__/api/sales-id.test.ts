@@ -8,6 +8,7 @@ vi.mock('next/headers', () => ({
 
 const articleUpdateMock = vi.hoisted(() => vi.fn());
 const saleUpdateMock = vi.hoisted(() => vi.fn());
+const settlementFindUniqueMock = vi.hoisted(() => vi.fn());
 const prismaMock = vi.hoisted(() => ({
   sale: {
     findUnique: vi.fn(),
@@ -16,9 +17,26 @@ const prismaMock = vi.hoisted(() => ({
   article: {
     update: articleUpdateMock,
   },
+  settlement: {
+    findUnique: settlementFindUniqueMock,
+  },
   $transaction: vi.fn(),
 }));
 vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
+
+// Zeilen, die den Storno-Check bis zur Settlement-Prüfung durchlaufen, brauchen die
+// article-Relation (basarSellerId) aus dem include – ohne sie würde sale.article.basarSellerId
+// mit TypeError durchfallen. Default: keine Abrechnung vorhanden, Storno also nicht blockiert.
+function mockSale(overrides: Partial<{ id: string; isCancelled: boolean; soldAt: Date; articleId: string }> = {}) {
+  return {
+    id: 'sale-1',
+    isCancelled: false,
+    soldAt: new Date(),
+    articleId: 'art-1',
+    article: { basarSellerId: 'bs-1' },
+    ...overrides,
+  };
+}
 
 import { DELETE } from '@/app/api/sales/[id]/route';
 
@@ -30,7 +48,10 @@ function makeRequest() {
 }
 
 describe('DELETE /api/sales/[id]', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    settlementFindUniqueMock.mockResolvedValue(null);
+  });
 
   it('returns 401 when no token', async () => {
     cookiesGetMock.mockReturnValue(undefined);
@@ -59,10 +80,11 @@ describe('DELETE /api/sales/[id]', () => {
     expect((await res.json()).error).toMatch(/storniert/i);
   });
 
-  it('returns 400 when outside 10 min window', async () => {
-    cookiesGetMock.mockReturnValue({ value: adminToken() });
+  // Die 10-Minuten-Frist gilt weiterhin für Kassierer – nur Admins sind davon ausgenommen.
+  it('Kassierer darf außerhalb der 10-Minuten-Frist NICHT stornieren (400)', async () => {
+    cookiesGetMock.mockReturnValue({ value: cashierToken(5555) });
     const oldDate = new Date(Date.now() - 11 * 60 * 1000);
-    prismaMock.sale.findUnique.mockResolvedValue({ id: 'sale-1', isCancelled: false, soldAt: oldDate, articleId: 'art-1' });
+    prismaMock.sale.findUnique.mockResolvedValue(mockSale({ soldAt: oldDate }));
     const res = await DELETE(makeRequest(), makeContext());
     expect(res.status).toBe(400);
     expect((await res.json()).error).toMatch(/10 Minuten/i);
@@ -71,11 +93,42 @@ describe('DELETE /api/sales/[id]', () => {
   it('stornos sale successfully for admin', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     const recentDate = new Date(Date.now() - 60 * 1000);
-    prismaMock.sale.findUnique.mockResolvedValue({ id: 'sale-1', isCancelled: false, soldAt: recentDate, articleId: 'art-1' });
+    prismaMock.sale.findUnique.mockResolvedValue(mockSale({ soldAt: recentDate }));
     prismaMock.$transaction.mockResolvedValue([{}, {}]);
     const res = await DELETE(makeRequest(), makeContext());
     expect(res.status).toBe(200);
     expect((await res.json()).success).toBe(true);
+  });
+
+  // Admins sind von der 10-Minuten-Frist ausgenommen, damit auch spätere Korrekturen möglich
+  // sind. Vorher hätte diese Anfrage 400 geliefert (siehe alter Kommentar "Admin only, within
+  // 10 minutes" über der Route, der das genaue Gegenteil des jetzigen Verhaltens beschrieb).
+  it('Admin darf auch nach mehr als 10 Minuten stornieren', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    const oldDate = new Date(Date.now() - 11 * 60 * 1000);
+    prismaMock.sale.findUnique.mockResolvedValue(mockSale({ soldAt: oldDate }));
+    prismaMock.$transaction.mockResolvedValue([{}, {}]);
+
+    const res = await DELETE(makeRequest(), makeContext());
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).success).toBe(true);
+  });
+
+  // Ein Storno nach bereits erzeugter Abrechnung würde deren Zahlen falsch machen – die
+  // Abrechnung müsste zuerst neu erzeugt werden. Gilt für Admins genauso wie für Kassierer.
+  it('409, wenn für den Verkäufer bereits eine Abrechnung existiert', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.sale.findUnique.mockResolvedValue(mockSale({ soldAt: new Date(Date.now() - 60 * 1000) }));
+    settlementFindUniqueMock.mockResolvedValue({ id: 'settlement-1' });
+
+    const res = await DELETE(makeRequest(), makeContext());
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/Abrechnung/i);
+    expect(saleUpdateMock).not.toHaveBeenCalled();
+    expect(articleUpdateMock).not.toHaveBeenCalled();
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });
 
   // Ein Storno besteht aus zwei Wirkungen: Der Verkauf wird als storniert markiert UND der
@@ -86,7 +139,7 @@ describe('DELETE /api/sales/[id]', () => {
   it('storniert den Verkauf und gibt den Artikel wieder frei', async () => {
     cookiesGetMock.mockReturnValue({ value: cashierToken(5555) });
     const recentDate = new Date(Date.now() - 30 * 1000);
-    prismaMock.sale.findUnique.mockResolvedValue({ id: 'sale-1', isCancelled: false, soldAt: recentDate, articleId: 'art-1' });
+    prismaMock.sale.findUnique.mockResolvedValue(mockSale({ soldAt: recentDate }));
     prismaMock.$transaction.mockResolvedValue([{}, {}]);
 
     const res = await DELETE(makeRequest(), makeContext());
@@ -106,9 +159,7 @@ describe('DELETE /api/sales/[id]', () => {
 
   it('führt beide Änderungen in einer einzigen Transaktion aus', async () => {
     cookiesGetMock.mockReturnValue({ value: cashierToken(5555) });
-    prismaMock.sale.findUnique.mockResolvedValue({
-      id: 'sale-1', isCancelled: false, soldAt: new Date(Date.now() - 30 * 1000), articleId: 'art-1',
-    });
+    prismaMock.sale.findUnique.mockResolvedValue(mockSale({ soldAt: new Date(Date.now() - 30 * 1000) }));
     prismaMock.$transaction.mockResolvedValue([{}, {}]);
 
     await DELETE(makeRequest(), makeContext());
