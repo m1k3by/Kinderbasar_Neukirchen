@@ -43,8 +43,18 @@ export async function DELETE(
       );
     }
 
+    // Storno protokollieren: Admins haben keine sellerId, dort bleibt cancelledById null –
+    // das gesetzte cancelledAt unterscheidet den Admin-Storno vom nicht protokollierten
+    // Altbestand (siehe app/api/basars/[id]/cancellations/route.ts).
     await prisma.$transaction([
-      prisma.sale.update({ where: { id }, data: { isCancelled: true } }),
+      prisma.sale.update({
+        where: { id },
+        data: {
+          isCancelled: true,
+          cancelledAt: new Date(),
+          cancelledById: auth.role === 'admin' ? null : auth.sellerId ?? null,
+        },
+      }),
       prisma.article.update({ where: { id: sale.articleId }, data: { status: 'AVAILABLE', soldAt: null } }),
     ]);
 

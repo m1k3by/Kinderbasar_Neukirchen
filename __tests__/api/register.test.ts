@@ -125,6 +125,29 @@ describe('POST /api/register', () => {
     expect(data.sellerId).toBe(1000); // allocateSellerId() resolves to the mocked 1000
   });
 
+  // Leerzeichen aus Copy&Paste/Autofill dürfen nicht in die Datenbank gelangen: " a@b.de "
+  // wird gespeichert, der spätere Login sendet "a@b.de" und findet die Zeile nicht mehr.
+  it('trims surrounding whitespace from email and names before storing', async () => {
+    prismaMock.seller.findUnique.mockResolvedValue(null);
+    prismaMock.seller.create.mockResolvedValue(createdSeller);
+    const res = await POST(makeNextRequest({ email: '  Test@Example.com \n', firstName: ' Max ', lastName: ' Muster ' }));
+    expect(res.status).toBe(200);
+    expect(prismaMock.seller.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ email: 'test@example.com', firstName: 'Max', lastName: 'Muster' }),
+      })
+    );
+    // Auch die Eindeutigkeitsprüfung muss auf der getrimmten Adresse laufen, sonst legt
+    // " a@b.de " eine zweite Zeile neben dem bestehenden "a@b.de" an.
+    expect(prismaMock.seller.findUnique).toHaveBeenCalledWith({ where: { email: 'test@example.com' } });
+  });
+
+  it('rejects whitespace-only names as missing fields', async () => {
+    const res = await POST(makeNextRequest({ email: 'test@example.com', firstName: '   ', lastName: 'Muster' }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/Pflichtfelder/i);
+  });
+
   it('registration has no notion of a basar at all – no basar/basarSeller lookups happen', async () => {
     prismaMock.seller.findUnique.mockResolvedValue(null);
     prismaMock.seller.create.mockResolvedValue(createdSeller);

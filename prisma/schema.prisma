@@ -25,6 +25,7 @@ model Seller {
   cakes              Cake[]
   basarSellers       BasarSeller[]
   cashierSales       Sale[]         @relation("CashierSales")
+  cancelledSales     Sale[]         @relation("CancelledSales")
   sellerArticles     SellerArticle[]
 }
 
@@ -134,6 +135,10 @@ model BasarSeller {
   // Artikel mit onDelete: Cascade.
   isActive            Boolean   @default(true)
   activatedAt         DateTime?
+  // Zeitpunkt, zu dem der Verkäufer AGB und Datenschutzerklärung für diesen Basar
+  // bestätigt hat (Dialog beim Aktivieren der Teilnahme). Bleibt null, wenn ein Admin
+  // die Teilnahme stellvertretend aktiviert – dann liegt keine eigene Zustimmung vor.
+  termsAcceptedAt     DateTime?
   createdAt           DateTime  @default(now())
   basar               Basar     @relation(fields: [basarId], references: [id], onDelete: Cascade)
   seller              Seller    @relation(fields: [sellerId], references: [sellerId], onDelete: Cascade)
@@ -190,13 +195,20 @@ model Sale {
   // Idempotenz-/Gruppierungsschlüssel eines Kassiervorgangs (siehe app/admin/basars/[id]/kasse/page.tsx).
   // Nullable, additiv – Altbestand bleibt null und wird als Einzelvorgang behandelt.
   clientTxId  String?
+  // Storno-Protokoll. cancelledAt ist der Marker: ist es gesetzt und cancelledById null,
+  // hat ein Admin storniert (Admins haben keine sellerId). Beides null bei Altbestand –
+  // dort ist nur isCancelled bekannt, nicht wer und wann.
+  cancelledAt   DateTime?
+  cancelledById Int?
   basar       Basar    @relation(fields: [basarId], references: [id])
   article     Article  @relation(fields: [articleId], references: [id])
   cashier     Seller?  @relation("CashierSales", fields: [cashierId], references: [sellerId])
+  cancelledBy Seller?  @relation("CancelledSales", fields: [cancelledById], references: [sellerId])
 
   @@index([basarId, soldAt])
   @@index([articleId])
   @@index([basarId, clientTxId])
+  @@index([basarId, cancelledAt])
 }
 
 model Settlement {

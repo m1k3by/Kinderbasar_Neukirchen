@@ -7,6 +7,7 @@ import { rateLimit } from '../../lib/rateLimit';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { getAuth } from '../../lib/apiAuth';
+import { normalizeEmail } from '../../lib/auth';
 
 // Legt die Zählerzeile an, falls sie fehlt. Startwert ist eins über der höchsten bereits
 // vergebenen sellerId, damit bestehende Installationen nicht mit registrierten Verkäufern
@@ -61,8 +62,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { email: emailInput, firstName, lastName, isEmployee: isEmployeeInput } = body;
-    email = emailInput;
+    const { email: emailInput, firstName: firstNameInput, lastName: lastNameInput, isEmployee: isEmployeeInput } = body;
+    // Trimmen vor jeder Prüfung: sonst wird " " als ausgefülltes Pflichtfeld gewertet und
+    // landet als Name im QR-Code/auf den Etiketten.
+    email = normalizeEmail(emailInput);
+    const firstName = String(firstNameInput ?? '').trim();
+    const lastName = String(lastNameInput ?? '').trim();
     // Strict boolean coercion – nothing else in the body may influence privileges
     // (isCashier in particular is never settable through registration).
     const isEmployee = isEmployeeInput === true;
@@ -76,9 +81,6 @@ export async function POST(request: NextRequest) {
       userAgent: userAgent.substring(0, 50),
       timestamp: new Date().toISOString()
     });
-
-    // Normalize email to lowercase for case-insensitive comparison
-    email = email?.toLowerCase();
 
     // Check if request is from admin (skip validations)
     const auth = await getAuth();

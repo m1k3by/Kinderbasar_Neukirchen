@@ -52,6 +52,14 @@ describe('POST /api/login', () => {
     expect((await res.json()).error).toBeDefined();
   });
 
+  it('trims surrounding whitespace from the email before the lookup', async () => {
+    prismaMock.seller.findUnique.mockResolvedValue({ sellerId: 1234, email: 'seller@test.de', password: 'hashed', isEmployee: false, isCashier: false });
+    bcryptCompareMock.mockResolvedValue(true);
+    const res = await POST(makeRequest({ email: '  Seller@Test.de  ', password: 'pw' }));
+    expect(res.status).toBe(200);
+    expect(prismaMock.seller.findUnique).toHaveBeenCalledWith({ where: { email: 'seller@test.de' } });
+  });
+
   it('returns 401 when seller has no password set', async () => {
     prismaMock.seller.findUnique.mockResolvedValue({ sellerId: 1001, email: 'a@b.com', password: null, isEmployee: false, isCashier: false });
     const res = await POST(makeRequest({ email: 'a@b.com', password: 'anything' }));

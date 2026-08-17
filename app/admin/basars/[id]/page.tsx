@@ -83,8 +83,31 @@ interface Transaction {
   items: TxItem[];
 }
 
+interface Cancellation {
+  saleId: string;
+  articleTitle: string;
+  sizeLabel: string | null;
+  qrCode: string;
+  articleStatus: 'AVAILABLE' | 'SOLD' | 'RETURNED';
+  salePrice: number;
+  sellerId: number;
+  sellerName: string;
+  cashierId: number | null;
+  cashierName: string | null;
+  cancelledById: number | null;
+  cancelledByName: string | null;
+  soldAt: string;
+  cancelledAt: string | null;
+}
+
 function fmt(n: number) {
   return `${n.toFixed(2).replace('.', ',')} €`;
+}
+
+function dateTime(iso: string) {
+  return new Date(iso).toLocaleString('de-DE', {
+    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+  });
 }
 
 function quote(offered: number, sold: number) {
@@ -217,6 +240,57 @@ function TransactionList({ transactions, onStorno, showCashier }: {
   );
 }
 
+function CancellationTable({ rows }: { rows: Cancellation[] }) {
+  if (rows.length === 0) {
+    return <div className="text-center py-8 text-gray-400">Keine Stornos in diesem Basar</div>;
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="bg-gray-50 border-b border-gray-200">
+          <tr>
+            <th className="text-left px-4 py-3 font-semibold text-gray-600">Artikel</th>
+            <th className="text-left px-4 py-3 font-semibold text-gray-600">Angeboten von</th>
+            <th className="text-left px-4 py-3 font-semibold text-gray-600">Gescannt von</th>
+            <th className="text-left px-4 py-3 font-semibold text-gray-600">Storniert von</th>
+            <th className="text-right px-4 py-3 font-semibold text-gray-600">Betrag</th>
+            <th className="text-left px-4 py-3 font-semibold text-gray-600">Danach</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {rows.map(c => (
+            <tr key={c.saleId} className="hover:bg-gray-50 align-top">
+              <td className="px-4 py-3 text-gray-800">
+                {c.articleTitle}{c.sizeLabel && <span className="text-gray-400"> ({c.sizeLabel})</span>}
+                <div className="text-xs text-gray-400">{c.qrCode} · verkauft {dateTime(c.soldAt)}</div>
+              </td>
+              <td className="px-4 py-3 text-gray-700">
+                {c.sellerName} <span className="text-gray-400">#{c.sellerId}</span>
+              </td>
+              <td className="px-4 py-3 text-gray-700">
+                {c.cashierName ? <>{c.cashierName} <span className="text-gray-400">#{c.cashierId}</span></> : <span className="text-gray-400">Ohne Zuordnung</span>}
+              </td>
+              <td className="px-4 py-3 text-gray-700">
+                {c.cancelledByName ?? <span className="text-gray-400">unbekannt (vor Protokollierung)</span>}
+                {c.cancelledById !== null && <span className="text-gray-400"> #{c.cancelledById}</span>}
+                {c.cancelledAt && <div className="text-xs text-gray-400">{dateTime(c.cancelledAt)}</div>}
+              </td>
+              <td className="px-4 py-3 text-right text-gray-700">{fmt(c.salePrice)}</td>
+              <td className="px-4 py-3">
+                {c.articleStatus === 'SOLD' ? (
+                  <span className="text-xs text-green-700">erneut verkauft</span>
+                ) : (
+                  <span className="text-xs text-gray-500">nicht wieder verkauft</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function formatDuration(fromIso: string, toIso: string) {
   const ms = new Date(toIso).getTime() - new Date(fromIso).getTime();
   const totalMinutes = Math.max(0, Math.round(ms / 60000));
@@ -242,6 +316,9 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
   const [txSearchResults, setTxSearchResults] = useState<Transaction[] | null>(null);
   const [txSearchLoading, setTxSearchLoading] = useState(false);
   const [txError, setTxError] = useState('');
+  const [cancellations, setCancellations] = useState<Cancellation[] | null>(null);
+  const [cancellationsOpen, setCancellationsOpen] = useState(false);
+  const [cancellationsLoading, setCancellationsLoading] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [form, setForm] = useState<BasarFormState>(EMPTY_BASAR_FORM);
   const [saving, setSaving] = useState(false);
@@ -318,6 +395,20 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
     }
   }
 
+  function loadCancellations() {
+    setCancellationsLoading(true);
+    fetch(`/api/basars/${id}/cancellations`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data) setCancellations(data.cancellations); })
+      .finally(() => setCancellationsLoading(false));
+  }
+
+  function toggleCancellations() {
+    const next = !cancellationsOpen;
+    setCancellationsOpen(next);
+    if (next && !cancellations && !cancellationsLoading) loadCancellations();
+  }
+
   function patchTransactions(list: Transaction[], saleId: string): Transaction[] {
     return list.map(t => {
       if (!t.items.some(i => i.saleId === saleId)) return t;
@@ -341,6 +432,11 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
 
     try {
       const res = await fetch(`/api/sales/${saleId}`, { method: 'DELETE' });
+      if (res.ok) {
+        // Storno-Liste ist jetzt veraltet: offen → nachladen, sonst beim nächsten Öffnen.
+        if (cancellationsOpen) loadCancellations();
+        else setCancellations(null);
+      }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setCashierTx(prevCashierTx);
@@ -659,6 +755,19 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
                     </table>
                   </div>
                 )}
+
+                <div className="bg-white rounded-xl shadow-sm overflow-hidden mt-4">
+                  <button type="button" onClick={toggleCancellations} aria-expanded={cancellationsOpen}
+                    className="w-full flex items-center gap-1.5 px-4 py-3 border-b border-gray-200 font-semibold text-gray-700 text-left hover:bg-gray-50">
+                    <span className={`inline-block text-gray-400 transition-transform ${cancellationsOpen ? 'rotate-90' : ''}`}>▶</span>
+                    Stornos ({cancellations?.length ?? stats.totals.cancelledCount})
+                  </button>
+                  {cancellationsOpen && (
+                    cancellationsLoading
+                      ? <div className="text-center py-8 text-gray-400">Laden…</div>
+                      : <CancellationTable rows={cancellations ?? []} />
+                  )}
+                </div>
 
                 <RateTable title="Preisverteilung" rows={stats.priceBands} />
                 <RateTable title="Größen & Kategorien" rows={[...stats.categories, ...stats.sizes]} />

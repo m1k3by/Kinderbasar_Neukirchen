@@ -119,13 +119,19 @@ describe('PUT /api/basars/[id]/participation', () => {
   it('activates participation and returns isActive: true', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basarSeller.upsert.mockResolvedValue(activeBasarSeller);
-    const res = await PUT(makeRequest({ isActive: true }), makeContext());
+    const res = await PUT(makeRequest({ isActive: true, acceptedTerms: true }), makeContext());
     expect(res.status).toBe(200);
     expect((await res.json()).isActive).toBe(true);
     expect(prismaMock.basarSeller.upsert).toHaveBeenCalledWith({
       where: { basarId_sellerId: { basarId: 'basar-1', sellerId: 1234 } },
-      update: { isActive: true, activatedAt: expect.any(Date) },
-      create: { basarId: 'basar-1', sellerId: 1234, isActive: true, activatedAt: expect.any(Date) },
+      update: { isActive: true, activatedAt: expect.any(Date), termsAcceptedAt: expect.any(Date) },
+      create: {
+        basarId: 'basar-1',
+        sellerId: 1234,
+        isActive: true,
+        activatedAt: expect.any(Date),
+        termsAcceptedAt: expect.any(Date),
+      },
     });
   });
 
@@ -156,6 +162,93 @@ describe('PUT /api/basars/[id]/participation', () => {
     expect(res.status).toBe(200);
   });
 
+  // ─── AGB- und Datenschutz-Zustimmung ─────────────────────────────────────────
+
+  describe('terms consent on self-activation', () => {
+    it('returns 400 and writes nothing when acceptedTerms is missing', async () => {
+      cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+      const res = await PUT(makeRequest({ isActive: true }), makeContext());
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toMatch(/AGB/);
+      expect(prismaMock.basarSeller.upsert).not.toHaveBeenCalled();
+      expect(prismaMock.mailQueue.create).not.toHaveBeenCalled();
+    });
+
+    it('returns 400 when acceptedTerms is false', async () => {
+      cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+      const res = await PUT(makeRequest({ isActive: true, acceptedTerms: false }), makeContext());
+      expect(res.status).toBe(400);
+      expect(prismaMock.basarSeller.upsert).not.toHaveBeenCalled();
+    });
+
+    it('returns 400 when acceptedTerms is truthy but not the boolean true', async () => {
+      cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+      const res = await PUT(makeRequest({ isActive: true, acceptedTerms: 'ja' }), makeContext());
+      expect(res.status).toBe(400);
+      expect(prismaMock.basarSeller.upsert).not.toHaveBeenCalled();
+    });
+
+    it('re-activating after a deactivation requires consent again and stamps it anew', async () => {
+      cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+      prismaMock.basarSeller.findUnique.mockResolvedValue({
+        ...inactiveBasarSeller,
+        termsAcceptedAt: new Date('2026-01-01T10:00:00Z'),
+      });
+
+      const denied = await PUT(makeRequest({ isActive: true }), makeContext());
+      expect(denied.status).toBe(400);
+
+      prismaMock.basarSeller.upsert.mockResolvedValue(activeBasarSeller);
+      const res = await PUT(makeRequest({ isActive: true, acceptedTerms: true }), makeContext());
+      expect(res.status).toBe(200);
+      expect(prismaMock.basarSeller.upsert.mock.calls[0][0].update.termsAcceptedAt).toBeInstanceOf(Date);
+    });
+
+    it('does not require consent when deactivating and leaves termsAcceptedAt untouched', async () => {
+      cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+      prismaMock.basarSeller.findUnique.mockResolvedValue(activeBasarSeller);
+      prismaMock.basarSeller.upsert.mockResolvedValue({ ...activeBasarSeller, isActive: false });
+
+      const res = await PUT(makeRequest({ isActive: false }), makeContext());
+
+      expect(res.status).toBe(200);
+      expect(prismaMock.basarSeller.upsert.mock.calls[0][0].update).not.toHaveProperty('termsAcceptedAt');
+    });
+
+    it('does not require consent when re-submitting an already-active participation', async () => {
+      cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+      prismaMock.basarSeller.findUnique.mockResolvedValue(activeBasarSeller);
+      prismaMock.basarSeller.upsert.mockResolvedValue(activeBasarSeller);
+
+      const res = await PUT(makeRequest({ isActive: true }), makeContext());
+
+      expect(res.status).toBe(200);
+      expect(prismaMock.basarSeller.upsert.mock.calls[0][0].update).not.toHaveProperty('termsAcceptedAt');
+    });
+
+    it('an admin activating on behalf of a seller needs no consent and records none', async () => {
+      cookiesGetMock.mockReturnValue({ value: adminToken() });
+      prismaMock.basarSeller.upsert.mockResolvedValue(activeBasarSeller);
+
+      const res = await PUT(makeRequest({ sellerId: 1234, isActive: true }), makeContext());
+
+      expect(res.status).toBe(200);
+      const call = prismaMock.basarSeller.upsert.mock.calls[0][0];
+      expect(call.update).not.toHaveProperty('termsAcceptedAt');
+      expect(call.create.termsAcceptedAt).toBeNull();
+    });
+
+    it('consent is only accepted after the eligibility checks – a closed basar still returns 403', async () => {
+      cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+      prismaMock.basar.findUnique.mockResolvedValue({ ...openBasar, status: 'CLOSED' });
+
+      const res = await PUT(makeRequest({ isActive: true, acceptedTerms: true }), makeContext());
+
+      expect(res.status).toBe(403);
+      expect(prismaMock.basarSeller.upsert).not.toHaveBeenCalled();
+    });
+  });
+
   // ─── Aktivierungs-Bestätigungsmail ───────────────────────────────────────────
 
   describe('confirmation email on activation', () => {
@@ -170,7 +263,7 @@ describe('PUT /api/basars/[id]/participation', () => {
       });
       prismaMock.basarSeller.upsert.mockResolvedValue(activeBasarSeller);
 
-      await PUT(makeRequest({ isActive: true }), makeContext());
+      await PUT(makeRequest({ isActive: true, acceptedTerms: true }), makeContext());
 
       expect(prismaMock.mailQueue.create).toHaveBeenCalledTimes(1);
       const data = prismaMock.mailQueue.create.mock.calls[0][0].data;
@@ -205,7 +298,7 @@ describe('PUT /api/basars/[id]/participation', () => {
       prismaMock.basarSeller.upsert.mockResolvedValue(activeBasarSeller);
       prismaMock.mailQueue.create.mockRejectedValue(new Error('DB down'));
 
-      const res = await PUT(makeRequest({ isActive: true }), makeContext());
+      const res = await PUT(makeRequest({ isActive: true, acceptedTerms: true }), makeContext());
 
       expect(res.status).toBe(200);
       expect((await res.json()).isActive).toBe(true);

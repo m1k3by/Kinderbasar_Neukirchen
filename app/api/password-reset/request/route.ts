@@ -3,13 +3,14 @@ import { prisma } from '@/app/lib/prisma';
 import crypto from 'crypto';
 import { sendMail } from '@/app/lib/mail';
 import { rateLimit } from '@/app/lib/rateLimit';
+import { normalizeEmail } from '@/app/lib/auth';
 
 export async function POST(req: Request) {
   const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown';
 
   try {
     const { email: emailInput } = await req.json();
-    const email = emailInput?.toLowerCase();
+    const email = normalizeEmail(emailInput);
 
     if (!email) {
       return NextResponse.json(

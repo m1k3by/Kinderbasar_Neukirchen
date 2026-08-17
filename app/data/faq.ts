@@ -92,7 +92,7 @@ export const faqData: FaqItem[] = [
     id: 'seller-status',
     question: 'Was bedeutet "Verkäuferstatus inaktiv"?',
     answer:
-      'Wenn dein Status **inaktiv** ist, kannst du keine neuen Artikel anlegen. Du siehst eine orangene Warnung: _"Dein Verkäuferstatus ist aktuell inaktiv."_\n\n**Für Mitarbeiter:** Status auf der Mitarbeiter-Startseite umschalten.\n**Für Verkäufer:** Status auf der Verkäufer-Startseite unter **"Verkäuferstatus"** aktivieren.',
+      'Wenn dein Status **inaktiv** ist, kannst du keine neuen Artikel anlegen. Du siehst eine orangene Warnung: _"Dein Verkäuferstatus ist aktuell inaktiv."_\n\nDie Teilnahme gilt pro Basar: Auf der Startseite beim gewünschten Basar den Schalter **"Teilnahme"** anklicken und im Dialog AGB und Datenschutzerklärung bestätigen.',
     keywords: ['status', 'inaktiv', 'aktiv', 'aktivieren', 'verkäuferstatus', 'deaktiviert', 'sperren'],
     roles: ['seller', 'employee'],
     category: 'Konto & Login',
@@ -204,7 +204,7 @@ export const faqData: FaqItem[] = [
     id: 'employee-verkaeufer-aktivieren',
     question: 'Wie aktiviere ich meinen Verkäuferstatus als Mitarbeiter?',
     answer:
-      'Im **Mitarbeiterbereich** siehst du oben die Karte **"Verkäuferstatus"**. Klicke auf den großen Schalter:\n\n– Grau = **INAKTIV** → klicken zum Aktivieren\n– Grün = **AKTIV** → klicken zum Deaktivieren\n\nEs erscheint ein Bestätigungsdialog mit deiner Verkäufernummer. Nach Aktivierung kannst du unter **"Zu meinen Artikeln"** Artikel anlegen.',
+      'Die Teilnahme gilt pro Basar. Auf deiner Startseite steht bei jedem Basar der Schalter **"Teilnahme"**:\n\n– Grau = **INAKTIV** → klicken zum Aktivieren\n– Grün = **AKTIV** → klicken zum Abmelden\n\nBeim Aktivieren erscheint ein Dialog, in dem du die **AGB** und die **Datenschutzerklärung** bestätigen musst. Danach kannst du für diesen Basar Artikel anlegen.',
     keywords: ['verkäufer', 'aktivieren', 'status', 'aktiv', 'umschalten', 'toggle', 'schalter', 'mitarbeiter'],
     roles: ['employee'],
     category: 'Konto & Login',

@@ -17,7 +17,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     const { id: basarId } = await params;
     const body = await request.json();
-    const { sellerId: sellerIdInput, isActive } = body;
+    const { sellerId: sellerIdInput, isActive, acceptedTerms } = body;
 
     if (typeof isActive !== 'boolean') {
       return NextResponse.json({ error: 'isActive (boolean) ist ein Pflichtfeld' }, { status: 400 });
@@ -51,6 +51,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const existing = await prisma.basarSeller.findUnique({
       where: { basarId_sellerId: { basarId, sellerId } },
     });
+
+    // Meldet sich jemand selbst an, muss er AGB und Datenschutzerklärung bestätigt haben.
+    // Ein Admin, der stellvertretend aktiviert, kann diese Zustimmung nicht abgeben –
+    // dort bleibt termsAcceptedAt leer, statt eine fremde Zustimmung zu fingieren.
+    const isSelfActivation = isActive && !(existing?.isActive) && auth.sellerId === sellerId;
 
     if (isActive && !(existing?.isActive)) {
       // Nur beim (Re-)Aktivieren prüfen – Abmelden ist immer erlaubt.
@@ -89,10 +94,30 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       }
     }
 
+    // Erst prüfen, ob eine Teilnahme überhaupt möglich ist – eine fehlende Zustimmung
+    // zu melden, wenn der Basar ohnehin geschlossen ist, wäre irreführend.
+    if (isSelfActivation && acceptedTerms !== true) {
+      console.log('[PARTICIPATION] Failed: terms not accepted', { basarId, sellerId, ip });
+      return NextResponse.json(
+        { error: 'Bitte bestätige die AGB und die Datenschutzerklärung, um teilzunehmen.' },
+        { status: 400 }
+      );
+    }
+
     const basarSeller = await prisma.basarSeller.upsert({
       where: { basarId_sellerId: { basarId, sellerId } },
-      update: { isActive, ...(isActive ? { activatedAt: new Date() } : {}) },
-      create: { basarId, sellerId, isActive, activatedAt: isActive ? new Date() : null },
+      update: {
+        isActive,
+        ...(isActive ? { activatedAt: new Date() } : {}),
+        ...(isSelfActivation ? { termsAcceptedAt: new Date() } : {}),
+      },
+      create: {
+        basarId,
+        sellerId,
+        isActive,
+        activatedAt: isActive ? new Date() : null,
+        termsAcceptedAt: isSelfActivation ? new Date() : null,
+      },
     });
 
     // War dies eine (Re-)Aktivierung, die vorher nicht aktiv war? Dann jetzt genau in diesem

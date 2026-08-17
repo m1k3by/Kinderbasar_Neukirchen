@@ -62,6 +62,7 @@ export default function AdminListPage() {
   const [showResetConfirm1, setShowResetConfirm1] = useState(false);
   const [showResetConfirm2, setShowResetConfirm2] = useState(false);
   const [resetPasswordSellerId, setResetPasswordSellerId] = useState<number | null>(null);
+  const [deactivateSeller, setDeactivateSeller] = useState<Seller | null>(null);
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
   const [newUserData, setNewUserData] = useState({
     email: '',
@@ -286,28 +287,46 @@ export default function AdminListPage() {
     }
   }
 
-  async function toggleSellerStatus(sellerId: number) {
+  function toggleSellerStatus(sellerId: number) {
     if (!selectedBasarId) return;
     const seller = sellers.find(s => s.sellerId === sellerId);
-    const nextActive = !(seller?.participation?.isActive ?? false);
+    if (!seller) return;
+    // Deaktivieren → erst bestätigen, aktivieren → sofort.
+    if (seller.participation?.isActive) {
+      setDeactivateSeller(seller);
+      return;
+    }
+    applySellerStatus(seller, true);
+  }
+
+  async function applySellerStatus(seller: Seller, nextActive: boolean) {
+    const previous = seller.participation ?? null;
+    // Optimistic update — Button reagiert sofort, kein Reload der ganzen Liste.
+    setSellers(prev => prev.map(s =>
+      s.sellerId === seller.sellerId
+        ? { ...s, participation: { isActive: nextActive, activatedAt: previous?.activatedAt ?? null } }
+        : s
+    ));
+
     try {
       const res = await fetch(`/api/basars/${selectedBasarId}/participation`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sellerId, isActive: nextActive }),
+        body: JSON.stringify({ sellerId: seller.sellerId, isActive: nextActive }),
       });
 
       if (res.ok) {
         setMessage(nextActive ? 'Teilnahme aktiviert' : 'Teilnahme deaktiviert');
         setTimeout(() => setMessage(''), 3000);
-        loadSellers(); // Reload list
       } else {
         const data = await res.json();
+        setSellers(prev => prev.map(s => s.sellerId === seller.sellerId ? { ...s, participation: previous } : s));
         setMessage('Fehler: ' + (data.error || 'Unbekannter Fehler'));
         setTimeout(() => setMessage(''), 5000);
       }
     } catch (error) {
       console.error('Error toggling participation:', error);
+      setSellers(prev => prev.map(s => s.sellerId === seller.sellerId ? { ...s, participation: previous } : s));
       setMessage('Fehler beim Ändern der Teilnahme');
       setTimeout(() => setMessage(''), 5000);
     }
@@ -620,6 +639,35 @@ export default function AdminListPage() {
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
                   Ja, zurücksetzen
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {deactivateSeller && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full">
+              <h3 className="text-xl font-bold mb-2 text-red-600">Teilnahme deaktivieren?</h3>
+              <p className="mb-4 text-gray-800">
+                {deactivateSeller.firstName} {deactivateSeller.lastName} (Nr. {deactivateSeller.sellerId}) wird von diesem Basar abgemeldet.
+              </p>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 text-sm text-amber-900">
+                <p className="font-semibold">Achtung:</p>
+                <p>Der Platz wird sofort freigegeben. Eine erneute Aktivierung ist nur möglich, solange noch Plätze frei sind – ist der Basar dann voll, kann die Teilnahme nicht wiederhergestellt werden.</p>
+              </div>
+              <div className="flex justify-end gap-4">
+                <button
+                  onClick={() => setDeactivateSeller(null)}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={() => { const s = deactivateSeller; setDeactivateSeller(null); applySellerStatus(s, false); }}
+                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                >
+                  Ja, deaktivieren
                 </button>
               </div>
             </div>

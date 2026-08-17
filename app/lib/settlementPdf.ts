@@ -170,10 +170,22 @@ function drawArticleTable(
   return y + 14;
 }
 
-export function buildSettlementPdf(data: SettlementPdfData): jsPDF {
+/** Leeres Abrechnungsdokument mit den in CLAUDE.md vorgeschriebenen Einstellungen. */
+export function newSettlementDoc(): jsPDF {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
   doc.viewerPreferences({ PrintScaling: 'None' });
+  return doc;
+}
 
+/**
+ * Rendert die Abrechnung eines Verkäufers ab der *aktuellen* Seite des Dokuments. Erwartet
+ * eine leere Seite (die Kopfzeile beginnt bei absoluten y=22) und hängt bei Bedarf weitere an.
+ *
+ * Getrennt von buildSettlementPdf, damit die Sammelabrechnung (alle Verkäufer in einer Datei)
+ * dieselbe Layout-Logik benutzt statt einer zweiten Kopie – siehe
+ * app/api/basars/[id]/settlements/abrechnungen.pdf/route.ts.
+ */
+export function drawSettlementPage(doc: jsPDF, data: SettlementPdfData): void {
   const { offered, sold, archive } = summarizeArticles(data.articles);
 
   // ── Kopf ────────────────────────────────────────────────
@@ -181,10 +193,19 @@ export function buildSettlementPdf(data: SettlementPdfData): jsPDF {
   doc.setFontSize(18);
   doc.text('Abrechnung Kinderbasar', mL, 22);
 
+  // Verkäufernummer oben rechts – das Merkmal, nach dem Abrechnungen sortiert und
+  // ausgegeben werden, muss ohne Suchen erkennbar sein.
+  doc.setFontSize(8);
+  doc.setTextColor(130);
+  doc.text('VERKÄUFERNUMMER', mR, 16, { align: 'right' });
+  doc.setTextColor(0);
+  doc.setFontSize(30);
+  doc.text(`#${data.sellerNr}`, mR, 28, { align: 'right' });
+
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(12);
   doc.text(data.basarTitle, mL, 32);
-  doc.text(`Verkäufer #${data.sellerNr}: ${data.sellerName}`, mL, 40);
+  doc.text(`Verkäufer: ${data.sellerName}`, mL, 40);
 
   doc.setFontSize(9);
   doc.setTextColor(140);
@@ -314,6 +335,32 @@ export function buildSettlementPdf(data: SettlementPdfData): jsPDF {
     },
     archive.summary.sum
   );
+}
 
+export function buildSettlementPdf(data: SettlementPdfData): jsPDF {
+  const doc = newSettlementDoc();
+  drawSettlementPage(doc, data);
   return doc;
+}
+
+/** Dateinamen-tauglicher ASCII-Slug (Content-Disposition verträgt keine Umlaute). */
+export function slug(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'basar';
+}
+
+export function pdfResponse(bytes: ArrayBuffer, filename: string): Response {
+  return new Response(new Uint8Array(bytes), {
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      // Die Abrechnung kann neu generiert werden; ein zwischengespeichertes PDF könnte
+      // veraltete Beträge zeigen.
+      'Cache-Control': 'no-store',
+    },
+  });
 }

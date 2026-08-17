@@ -154,7 +154,9 @@ describe('buildSettlementPdf – Inhalt', () => {
     const content = allContent(buf);
     expect(content).toContain('Abrechnung Kinderbasar');
     expect(content).toContain(data.basarTitle);
-    expect(content).toContain(`Verk\xe4ufer #${data.sellerNr}: ${data.sellerName}`);
+    expect(content).toContain(`Verk\xe4ufer: ${data.sellerName}`);
+    expect(content).toContain('VERK\xc4UFERNUMMER');
+    expect(content).toContain(`#${data.sellerNr}`);
     expect(content).toContain('ZUSAMMENFASSUNG');
     expect(content).toContain('\xdcBERSICHT');
     // jsPDF escaped runde Klammern im PDF-Textstring als \( \)

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../lib/prisma';
-import { createToken } from '../../lib/auth';
+import { createToken, normalizeEmail } from '../../lib/auth';
 import { rateLimit } from '../../lib/rateLimit';
 import { env } from '../../lib/env';
 import bcrypt from 'bcrypt';
@@ -20,8 +20,9 @@ export async function POST(request: Request) {
       timestamp: new Date().toISOString()
     });
     
-    // Normalize email to lowercase for case-insensitive comparison
-    email = email?.toLowerCase();
+    // Trimmen und Kleinschreibung – Alt-Datensätze können noch mit Leerzeichen gespeichert
+    // sein, aber die Eingabe muss zumindest hier sauber ankommen.
+    email = normalizeEmail(email);
 
     // Rate limiting: 30 login attempts per 15 minutes per IP
     const rateLimitKey = `login:${ip}`;

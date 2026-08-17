@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '../../../lib/prisma';
 import { requireAdmin } from '../../../lib/apiAuth';
+import { normalizeEmail } from '../../../lib/auth';
 
 export async function PUT(request: NextRequest) {
   const authResult = await requireAdmin();
@@ -10,7 +11,11 @@ export async function PUT(request: NextRequest) {
   
   try {
     const body = await request.json();
-    let { sellerId, email, firstName, lastName, isEmployee } = body;
+    const { sellerId, isEmployee } = body;
+    // Trimmen vor den Pflichtfeld-Prüfungen, sonst gilt " " als ausgefüllt.
+    const email = normalizeEmail(body.email);
+    const firstName = String(body.firstName ?? '').trim();
+    const lastName = String(body.lastName ?? '').trim();
 
     console.log('[EDIT-USER] Attempt:', {
       sellerId,
@@ -43,9 +48,6 @@ export async function PUT(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    // Normalize email to lowercase
-    email = email.toLowerCase();
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

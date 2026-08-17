@@ -43,6 +43,9 @@ export default function SellerPage() {
   const [closedBasars, setClosedBasars] = useState<Basar[]>([]);
   const [togglingBasarId, setTogglingBasarId] = useState<string | null>(null);
   const [deactivateConfirm, setDeactivateConfirm] = useState<Basar | null>(null);
+  const [activateConfirm, setActivateConfirm] = useState<Basar | null>(null);
+  const [agbAccepted, setAgbAccepted] = useState(false);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [message, setMessage] = useState('');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
@@ -109,8 +112,10 @@ export default function SellerPage() {
       return;
     }
 
-    // Anmelden → optimistisch sofort umschalten
-    await applyParticipationToggle(basar, true);
+    // Anmelden → erst AGB und Datenschutz bestätigen lassen
+    setAgbAccepted(false);
+    setPrivacyAccepted(false);
+    setActivateConfirm(basar);
   }
 
   async function confirmDeactivate() {
@@ -118,6 +123,13 @@ export default function SellerPage() {
     if (!basar) return;
     setDeactivateConfirm(null);
     await applyParticipationToggle(basar, false);
+  }
+
+  async function confirmActivate() {
+    const basar = activateConfirm;
+    if (!basar || !agbAccepted || !privacyAccepted) return;
+    setActivateConfirm(null);
+    await applyParticipationToggle(basar, true);
   }
 
   async function applyParticipationToggle(basar: Basar, nextActive: boolean) {
@@ -133,7 +145,9 @@ export default function SellerPage() {
       const res = await fetch(`/api/basars/${basar.id}/participation`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive: nextActive }),
+        // acceptedTerms nur beim Anmelden – der Server verlangt es genau dort und
+        // schreibt daraus den Zustimmungszeitpunkt.
+        body: JSON.stringify({ isActive: nextActive, ...(nextActive ? { acceptedTerms: true } : {}) }),
       });
 
       const data = await res.json();
@@ -453,6 +467,79 @@ export default function SellerPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Anmelde-Bestätigung: AGB und Datenschutz */}
+        {activateConfirm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Am Basar teilnehmen</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">{activateConfirm.title}</p>
+                </div>
+              </div>
+
+              <p className="text-sm text-gray-600 mb-4">
+                Für die Teilnahme benötigen wir deine Zustimmung:
+              </p>
+
+              <div className="space-y-3 mb-5">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={agbAccepted}
+                    onChange={(e) => setAgbAccepted(e.target.checked)}
+                    className="mt-0.5 w-5 h-5 flex-shrink-0 accent-green-600"
+                  />
+                  <span className="text-sm text-gray-700">
+                    Ich akzeptiere die{' '}
+                    <Link href="/agb" target="_blank" className="text-blue-600 hover:underline font-medium">
+                      Allgemeinen Geschäftsbedingungen (AGB)
+                    </Link>
+                    .
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={privacyAccepted}
+                    onChange={(e) => setPrivacyAccepted(e.target.checked)}
+                    className="mt-0.5 w-5 h-5 flex-shrink-0 accent-green-600"
+                  />
+                  <span className="text-sm text-gray-700">
+                    Ich habe die{' '}
+                    <Link href="/datenschutz" target="_blank" className="text-blue-600 hover:underline font-medium">
+                      Datenschutzerklärung
+                    </Link>
+                    {' '}gelesen und stimme der Verarbeitung meiner Daten zu.
+                  </span>
+                </label>
+              </div>
+
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setActivateConfirm(null)}
+                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors font-medium"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={confirmActivate}
+                  disabled={!agbAccepted || !privacyAccepted}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Teilnahme aktivieren
+                </button>
+              </div>
             </div>
           </div>
         )}

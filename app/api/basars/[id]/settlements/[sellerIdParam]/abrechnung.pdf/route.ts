@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../../../../../lib/prisma';
 import { requireAuth } from '../../../../../../lib/apiAuth';
-import { buildSettlementPdf, type SettlementPdfArticle } from '../../../../../../lib/settlementPdf';
+import { buildSettlementPdf, pdfResponse, slug, type SettlementPdfArticle } from '../../../../../../lib/settlementPdf';
 
 // Abrechnungs-PDF wird serverseitig erzeugt, damit das Ergebnis auf jedem Gerät identisch
 // ist – siehe CLAUDE.md, Abschnitt "PDF & Druck". Ersetzt die beiden früheren
@@ -9,28 +9,6 @@ import { buildSettlementPdf, type SettlementPdfArticle } from '../../../../../..
 // app/admin/basars/[id]/abrechnung/page.tsx.
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-/** Dateinamen-tauglicher ASCII-Slug (Content-Disposition verträgt keine Umlaute). */
-function slug(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40) || 'basar';
-}
-
-function pdfResponse(bytes: ArrayBuffer, filename: string) {
-  return new Response(new Uint8Array(bytes), {
-    headers: {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="${filename}"`,
-      // Die Abrechnung kann neu generiert werden; ein zwischengespeichertes PDF könnte
-      // veraltete Beträge zeigen.
-      'Cache-Control': 'no-store',
-    },
-  });
-}
 
 // GET /api/basars/:id/settlements/:sellerIdParam/abrechnung.pdf
 export async function GET(

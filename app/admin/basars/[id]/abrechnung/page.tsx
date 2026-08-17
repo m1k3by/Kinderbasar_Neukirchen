@@ -111,10 +111,21 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
             {basar && <p className="text-gray-500">{basar.title}</p>}
           </div>
           {navUser.role === 'admin' && basar?.status === 'CLOSED' && (
-            <button onClick={handleGenerate} disabled={generating}
-              className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold rounded-lg transition-colors disabled:opacity-50">
-              {generating ? 'Erstelle…' : settlements.length > 0 ? '↻ Neu berechnen' : 'Abrechnung erstellen'}
-            </button>
+            <div className="flex items-center gap-2">
+              {settlements.length > 0 && (
+                <a
+                  href={`/api/basars/${basarId}/settlements/abrechnungen.pdf`}
+                  download
+                  className="px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold rounded-lg transition-colors"
+                >
+                  ↓ Alle als ein PDF ({settlements.length})
+                </a>
+              )}
+              <button onClick={handleGenerate} disabled={generating}
+                className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold rounded-lg transition-colors disabled:opacity-50">
+                {generating ? 'Erstelle…' : settlements.length > 0 ? '↻ Neu berechnen' : 'Abrechnung erstellen'}
+              </button>
+            </div>
           )}
         </div>
 
@@ -145,6 +156,13 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
                 </div>
               ))}
             </div>
+
+            {/* Druckhinweis – Pflicht für jede PDF-Download-Stelle, siehe CLAUDE.md */}
+            <p className="text-xs text-gray-500 mb-3">
+              Beim Drucken „Tatsächliche Größe“ / 100 % wählen, nicht „An Seite anpassen“.
+              Das Sammel-PDF enthält alle Abrechnungen hintereinander (eine je Verkäufer, nach
+              Nummer sortiert) – bei vielen Verkäufern dauert die Erzeugung einen Moment.
+            </p>
 
             {/* Table */}
             <div className="bg-white rounded-xl shadow-sm overflow-hidden">

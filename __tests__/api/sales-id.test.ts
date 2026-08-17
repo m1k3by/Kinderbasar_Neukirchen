@@ -149,12 +149,39 @@ describe('DELETE /api/sales/[id]', () => {
 
     expect(saleUpdateMock).toHaveBeenCalledWith({
       where: { id: 'sale-1' },
-      data: { isCancelled: true },
+      data: { isCancelled: true, cancelledAt: expect.any(Date), cancelledById: 5555 },
     });
     expect(articleUpdateMock).toHaveBeenCalledWith({
       where: { id: 'art-1' },
       data: { status: 'AVAILABLE', soldAt: null },
     });
+  });
+
+  // Das Storno-Protokoll ist der ganze Zweck der Erfassung – ohne geprüfte Argumente wäre
+  // ein cancelledById, das immer null bleibt, unsichtbar (Status wäre weiterhin 200).
+  it('protokolliert den stornierenden Kassierer', async () => {
+    cookiesGetMock.mockReturnValue({ value: cashierToken(9004) });
+    prismaMock.sale.findUnique.mockResolvedValue(mockSale({ soldAt: new Date(Date.now() - 30 * 1000) }));
+    prismaMock.$transaction.mockResolvedValue([{}, {}]);
+
+    await DELETE(makeRequest(), makeContext());
+
+    expect(saleUpdateMock.mock.calls[0][0].data.cancelledById).toBe(9004);
+    expect(saleUpdateMock.mock.calls[0][0].data.cancelledAt).toBeInstanceOf(Date);
+  });
+
+  // Admins haben keine sellerId: cancelledById bleibt null, cancelledAt wird trotzdem
+  // gesetzt. Nur an dieser Kombination ist ein Admin-Storno vom nicht protokollierten
+  // Altbestand (beides null) unterscheidbar.
+  it('protokolliert einen Admin-Storno mit cancelledById null, aber gesetztem cancelledAt', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.sale.findUnique.mockResolvedValue(mockSale({ soldAt: new Date(Date.now() - 60 * 1000) }));
+    prismaMock.$transaction.mockResolvedValue([{}, {}]);
+
+    await DELETE(makeRequest(), makeContext());
+
+    expect(saleUpdateMock.mock.calls[0][0].data.cancelledById).toBeNull();
+    expect(saleUpdateMock.mock.calls[0][0].data.cancelledAt).toBeInstanceOf(Date);
   });
 
   it('führt beide Änderungen in einer einzigen Transaktion aus', async () => {
