@@ -401,6 +401,8 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
               <a
                 href={`/api/basars/${basarId}/settlements/${basarSeller?.seller?.sellerId ?? basarSeller?.sellerId ?? sellerId}/abrechnung.pdf`}
                 download
+                target="_blank"
+                rel="noopener"
                 className="px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-sm rounded-lg transition-colors"
               >
                 ↓ PDF
@@ -751,10 +753,18 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
           <div className="bg-white rounded-xl shadow-sm overflow-hidden">
             <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-gray-100">
               <h2 className="font-semibold text-gray-700">Meine Artikel ({articles.length})</h2>
+              {/* target="_blank" ist auf dem iPhone Pflicht, nicht Geschmackssache: die App
+                  läuft als PWA mit display:standalone (public/manifest.json), also ohne
+                  Adressleiste, Tabs und Zurück-Knopf. Wird dieses eine Fenster zum PDF
+                  navigiert, führt kein Weg zurück – die App muss beendet und neu gestartet
+                  werden. Mit _blank übernimmt Safari das PDF, das App-Fenster bleibt stehen.
+                  Gilt für jeden PDF-Link in dieser Anwendung. */}
               {basar.status === 'OPEN' && (
                 <a
                   href={`/api/basars/${basarId}/labels.pdf`}
                   download
+                  target="_blank"
+                  rel="noopener"
                   className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
                 >
                   🖨 Etiketten als PDF
@@ -769,6 +779,8 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
                 <a
                   href={`/api/basars/${basarId}/labels.pdf?calibration=1`}
                   download
+                  target="_blank"
+                  rel="noopener"
                   className="underline hover:no-underline"
                 >
                   Testseite für Normalpapier

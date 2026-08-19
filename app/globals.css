@@ -27,12 +27,14 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* Bewusst kein prefers-color-scheme: dark.
+   Hier stand eine Dark-Mode-Umschaltung, die --background auf #0a0a0a setzte. Die App hat
+   aber gar kein dunkles Thema: kein einziges dark:-Utility, keine Verwendung von
+   bg-background/text-foreground, alle Farben sind hell fest verdrahtet. Betroffen war
+   deshalb nur, was keinen eigenen Hintergrund setzt – der Footer liegt direkt auf <body>
+   und stand mit text-gray-900 schwarz auf schwarz, sobald das Gerät auf Dunkelmodus stand.
+   Wird echtes Dark Mode gewünscht, braucht es dark:-Varianten in den Komponenten, nicht
+   eine Umschaltung allein auf <body>. */
 
 body {
   background: var(--background);

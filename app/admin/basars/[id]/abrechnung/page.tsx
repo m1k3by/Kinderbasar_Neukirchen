@@ -116,6 +116,8 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
                 <a
                   href={`/api/basars/${basarId}/settlements/abrechnungen.pdf`}
                   download
+                  target="_blank"
+                  rel="noopener"
                   className="px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold rounded-lg transition-colors"
                 >
                   ↓ Alle als ein PDF ({settlements.length})
@@ -189,6 +191,8 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
                         <a
                           href={`/api/basars/${basarId}/settlements/${s.basarSeller.seller.sellerId}/abrechnung.pdf`}
                           download
+                          target="_blank"
+                          rel="noopener"
                           className="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs rounded transition-colors"
                         >
                           ↓ PDF

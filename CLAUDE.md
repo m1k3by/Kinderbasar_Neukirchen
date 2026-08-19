@@ -85,6 +85,13 @@ Wer einen Fehler behebt, baut ihn danach einmal wieder ein und prüft, dass der 
 4. **`doc.viewerPreferences({ PrintScaling: 'None' })` setzen.** Das ist ein *Hinweis* an den Viewer, im Druckdialog „Tatsächliche Größe" vorzuwählen. Adobe Acrobat/Reader wertet ihn aus; Firefox/pdf.js ignoriert ihn nachweislich (Bugzilla 1243580), Chrome ebenfalls nicht zuverlässig. Deshalb ersetzt er nicht Punkt 5.
 5. **Der Nutzer muss trotzdem informiert werden**: sichtbarer Hinweis an der Download-Stelle – *„Beim Drucken ‚Tatsächliche Größe' / 100 % wählen, nicht ‚An Seite anpassen'."*
 6. **Mindestens 5 mm Inhaltsabstand zur Papierkante.** Avery 3475 hat keine Ränder – 3 × 70 mm = exakt 210 mm. Typische Laser- und Tintendrucker haben aber 4–5 mm nicht bedruckbaren Rand. Inhalt in der linken/rechten Etikettenspalte muss deshalb ≥ 5 mm eingerückt sein, sonst wird er abgeschnitten – unabhängig von der Skalierung.
+7. **Jeder PDF-Link braucht `target="_blank"` und `rel="noopener"`.** Die App läuft als PWA mit
+   `display: standalone` (`public/manifest.json`): vom iPhone-Home-Bildschirm gestartet hat sie
+   keine Adressleiste, keine Tabs und keinen Zurück-Knopf. Wird dieses eine Fenster zum PDF
+   navigiert, führt kein Weg zurück – der Nutzer muss die App beenden und neu starten und
+   verliert dabei alles Nichtgespeicherte. `download` allein genügt nicht: iOS entscheidet
+   selbst, ob es die Datei lädt oder anzeigt. Mit `_blank` übernimmt Safari das PDF und das
+   App-Fenster bleibt unberührt stehen.
 
 ### Bestehende Stellen
 
