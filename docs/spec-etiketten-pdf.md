@@ -16,7 +16,7 @@ Auf iOS entsteht dabei eine unbrauchbare Datei. Analyse eines real erzeugten Bog
 |---|---|---|---|
 | Spaltenraster | 70,0 mm | 60,67 mm | 0,8667 |
 | Zeilenraster | 36,0 mm | 31,14 mm | 0,8649 |
-| QR-Kantenlänge | 24,0 mm | 21,00 mm | 0,875 |
+| QR-Kantenlänge | 31,0 mm | 27,13 mm | 0,875 |
 | 1. Spalte von links | 2,5 mm | 16,17 mm | +13,7 mm |
 | 1. Zeile von oben | 7,0 mm | 20,14 mm | +13,1 mm |
 
@@ -104,9 +104,11 @@ const SHEET = {
 
 const PAD   = 5;   // mm Innenabstand links/rechts, siehe unten
 const PAD_Y = 2.5; // mm oben/unten – dort grenzt kein Etikett an die Papierkante
-const QR    = 24;  // mm Kantenlänge inkl. Quiet Zone
-const TEXT_X = PAD + QR + 2; // 31 mm – Beginn der Textspalte
-const BAND_Y = 32.5;         // mm – Grundlinie Größe · Zielgruppe · Preis
+const QR    = SHEET.labelH - 2 * PAD_Y; // 31 mm – volle nutzbare Höhe
+const TEXT_X = PAD + QR + 2; // 38 mm – Beginn der Textspalte
+const TITLE_Y  = 14.5;       // mm – Grundlinie 1. Titelzeile
+const GENDER_Y = 26.6;       // mm – Grundlinie Zielgruppe
+const BAND_Y   = 33;         // mm – Grundlinie Größe / Preis
 ```
 
 Position von Etikett `i` (0-basiert, inkl. `from`-Offset):
@@ -129,36 +131,43 @@ Avery 3475 nutzt mit 3 × 70 mm exakt die volle A4-Breite von 210 mm – die Eti
 
 ```
  ┌──────────────────────────────────────────┐ ← y
- │  ┌──────────┐                       9001 │   PAD 5 mm links/rechts,
- │  │          │  Winterjacke Lego          │   PAD_Y 2,5 mm oben/unten
- │  │    QR    │  mit langem Namen          │
- │  │  24 mm   │                            │
- │  └──────────┘                            │
- │  116      Junge               5,00 €     │ ← BAND_Y = 32,5
+ │ ┌────────────┐                      9001 │   PAD 5 mm links/rechts,
+ │ │            │  Bezeichnung              │   PAD_Y 2,5 mm oben/unten
+ │ │     QR     │  Winterjacke blau         │
+ │ │   31 mm    │  Halleluja                │
+ │ │            │           Junge           │ ← GENDER_Y = 26,6
+ │ │            │  Größe             Preis  │
+ │ └────────────┘  116              5,00 €  │ ← BAND_Y = 33
  └──────────────────────────────────────────┘ ← y + 36
- x   x+5      x+29  x+31                 x+65
+ x  x+5        x+36 x+38                x+65
+
+Unter dem QR-Code steht nichts – er nutzt die volle Höhe, alle Angaben stehen rechts.
 ```
 
 | Element | Position | Schrift |
 |---|---|---|
-| QR-Code | `x+5`, `y+2,5`, 24 × 24 mm | – |
+| QR-Code | `x+5`, `y+2,5`, 31 × 31 mm | – |
 | Verkäufernummer | rechtsbündig `x+65`, `y+7,5` | Helvetica-Bold 12 pt |
-| Bezeichnung | `x+31`, `y+12,5` (+3,9 je Zeile) | Helvetica-Bold 9 pt, max. 3 Zeilen |
-| Größe | `x+5`, `y+32,5` | Helvetica-Bold 12 pt |
-| Zielgruppe | mittig zwischen Größe und Preis, `y+32,5` | Helvetica-Bold 10 pt, farbig |
-| Preis | rechtsbündig `x+65`, `y+32,5` | Helvetica-Bold 12 pt |
+| Label „Bezeichnung" | `x+38`, `y+11` | Helvetica 5 pt, Grau `#AAAAAA` |
+| Bezeichnung | `x+38`, `y+14,5` (+3,9 je Zeile) | Helvetica-Bold 9 pt, max. 3 Zeilen |
+| Zielgruppe | mittig in der Textspalte, `y+26,6` | Helvetica-Bold 10 pt, farbig |
+| Label „Größe" / „Preis" | `x+38` / rechtsbündig `x+65`, `y+29,2` | Helvetica 5 pt, Grau |
+| Größe | `x+38`, `y+33` | Helvetica-Bold 12 pt (siehe Schrumpfung) |
+| Preis | rechtsbündig `x+65`, `y+33` | Helvetica-Bold 12 pt (siehe Schrumpfung) |
 
-Feldbeschriftungen („Bezeichnung", „Größe", „Preis") entfallen – die Werte sind an der
-Kasse eindeutig, und der gewonnene Platz geht in QR-Code und Schriftgröße.
+Der QR-Code füllt die volle nutzbare Etikettenhöhe. Unter ihm steht bewusst nichts:
+jede Zeile dort würde ihn wieder kleiner machen. Die Textspalte ist dadurch nur 27 mm
+breit – dafür ist das Symbol 27,2 mm groß statt 15,0 mm wie in der ersten Fassung.
 
 **Farben der Zielgruppe:** Junge `#1D4EB8` (blau), Mädchen `#DB2777` (rosa),
 Unisex `#6B7280` (grau). Auf Schwarzweißdruckern werden daraus Grauwerte – die
 Unterscheidung trägt deshalb nie allein die Farbe, das Wort steht immer dabei.
 
-**Kollisionsschutz im unteren Band:** die Zielgruppe wird auf die Mitte zwischen dem
-rechten Rand der Größe und dem linken Rand des Preises gesetzt (beides über
-`getTextWidth`, also AFM-Metrik) und ganz weggelassen, wenn dort weniger als ihre
-Textbreite + 2 mm frei ist. Damit können „W32/L34" und „123,50 €" nicht ineinanderlaufen.
+**Schrumpfung im unteren Band:** Größe und Preis stehen in derselben Schriftgröße.
+Passen sie bei 12 pt nicht nebeneinander in die 27 mm breite Spalte („W32/L34" neben
+„123,50 €"), wird die Größe in 0,5-pt-Schritten bis minimal 7 pt gemeinsam reduziert,
+statt beide überlappen zu lassen. Die Breite kommt aus `getTextWidth`, also aus der
+AFM-Metrik des Standardfonts – das Ergebnis ist auf jedem Gerät dasselbe.
 
 ---
 
@@ -319,7 +328,7 @@ Gemessen am erzeugten Musterbogen (14 Artikel, Verkäufer 9001):
 MediaBox      0 0 595.28 841.89
 PrintScaling  /None
 Bilder        0        eingebettete Fonts  0
-Textspalten   31.0 / 101.0 / 171.0 mm  → Abstand 70.000 / 70.000 mm
+Textspalten   38.0 / 108.0 / 178.0 mm  → Abstand 70.000 / 70.000 mm
 Textzeilen    16.0 / 52.0 / 88.0 / 124.0 / 160.0 mm → Abstand 36.000 mm
 Linker Rand   6.36 mm (≥ 5 mm gefordert)
 ```

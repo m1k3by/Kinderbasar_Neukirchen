@@ -37,13 +37,23 @@ const PAD = 5;
  */
 const PAD_Y = 2.5;
 
-const QR_SIZE = 24;          // mm, inkl. Quiet Zone
+/**
+ * Quadratisch über die volle nutzbare Höhe: 36 − 2 × 2,5 = 31 mm. Rechts daneben
+ * steht alles andere – unter dem QR-Code liegt bewusst nichts mehr.
+ */
+const QR_SIZE = SHEET.labelH - 2 * PAD_Y;   // 31 mm, inkl. Quiet Zone
 const QR_QUIET_MODULES = 2;  // Module Ruhezone, liegen innerhalb von QR_SIZE
 const QR_GAP = 2;            // mm Abstand QR → Textspalte
-const TEXT_X = PAD + QR_SIZE + QR_GAP;  // 31 mm ab Etikettenkante
+const TEXT_X = PAD + QR_SIZE + QR_GAP;  // 38 mm ab Etikettenkante
 
-/** Grundlinie des unteren Bands (Größe · Zielgruppe · Preis), mm ab Etikettenoberkante. */
-const BAND_Y = 32.5;
+/** Grundlinie der ersten Titelzeile, mm ab Etikettenoberkante. */
+const TITLE_Y = 14.5;
+
+/** Grundlinie der Zielgruppe (eigene Zeile, mittig über dem Band). */
+const GENDER_Y = 26.6;
+
+/** Grundlinie des unteren Bands (Größe links, Preis rechts), mm ab Etikettenoberkante. */
+const BAND_Y = 33;
 
 /**
  * Farben der Zielgruppe. Auf Schwarzweißdruckern werden daraus Grauwerte – die
@@ -119,53 +129,69 @@ export function drawQr(doc: jsPDF, text: string, x: number, y: number, sizeMm: n
   }
 }
 
+/** Graue Feldbeschriftung über einem Wert – 5 pt, damit sie nie mit dem Wert konkurriert. */
+function drawFieldLabel(doc: jsPDF, text: string, x: number, y: number, align?: 'right') {
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(5);
+  doc.setTextColor(170);
+  doc.text(text, x, y, align ? { align } : undefined);
+  doc.setTextColor(0);
+}
+
 function drawLabel(doc: jsPDF, a: LabelData, sellerNr: number | string, x: number, y: number) {
+  const colX = x + TEXT_X;
   const textW = SHEET.labelW - TEXT_X - PAD;
-  const leftX = x + PAD;
   const rightX = x + SHEET.labelW - PAD;
 
-  drawQr(doc, a.qrCode, leftX, y + PAD_Y, QR_SIZE);
+  // QR über die volle Höhe, links. Rechts daneben die gesamte Beschriftung – unter dem
+  // QR-Code steht nichts, damit er so groß wie möglich bleiben kann.
+  drawQr(doc, a.qrCode, x + PAD, y + PAD_Y, QR_SIZE);
 
   // Verkäufernummer oben rechts, fett – an der Kasse die am häufigsten gesuchte Angabe.
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
   doc.text(String(sellerNr), rightX, y + 7.5, { align: 'right' });
 
+  drawFieldLabel(doc, 'Bezeichnung', colX, y + 11);
+
   // Bezeichnung auf drei Zeilen begrenzt. splitTextToSize nutzt die eingebauten
   // AFM-Metriken der Standardfonts und liefert damit überall dasselbe Ergebnis.
+  doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   const lines = doc.splitTextToSize(a.title, textW) as string[];
   const shown = lines.slice(0, 3);
   if (lines.length > 3 && shown[2]) {
     shown[2] = shown[2].replace(/.$/, '…');
   }
-  shown.forEach((line, i) => doc.text(line, x + TEXT_X, y + 12.5 + i * 3.9));
+  shown.forEach((line, i) => doc.text(line, colX, y + TITLE_Y + i * 3.9));
 
-  // Unteres Band über die volle Etikettenbreite: Größe links, Zielgruppe mittig,
-  // Preis rechts. Größe und Preis in derselben Größe – beides wird an der Kasse
-  // gelesen, nicht der Titel.
+  // Zielgruppe mittig in der Textspalte, in ihrer Farbe.
+  if (a.gender) {
+    const [r, g, b] = GENDER_COLORS[a.gender] ?? GENDER_COLORS.Unisex;
+    doc.setFontSize(10);
+    doc.setTextColor(r, g, b);
+    doc.text(a.gender, colX + textW / 2, y + GENDER_Y, { align: 'center' });
+    doc.setTextColor(0);
+  }
+
   const size = a.sizeLabel?.trim() || '–';
   const price = fmtPrice(a.price);
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.text(size, leftX, y + BAND_Y);
-  doc.text(price, rightX, y + BAND_Y, { align: 'right' });
+  drawFieldLabel(doc, 'Größe', colX, y + BAND_Y - 3.8);
+  drawFieldLabel(doc, 'Preis', rightX, y + BAND_Y - 3.8, 'right');
 
-  if (a.gender) {
-    // Mitte zwischen Größe und Preis statt fester Position: so kann das Wort auch bei
-    // langer Größe ("W32/L34") oder dreistelligem Preis nicht in eines von beiden laufen.
-    const sizeRight = leftX + doc.getTextWidth(size);
-    const priceLeft = rightX - doc.getTextWidth(price);
-    doc.setFontSize(10);
-    const genderW = doc.getTextWidth(a.gender);
-    if (priceLeft - sizeRight > genderW + 2) {
-      const [r, g, b] = GENDER_COLORS[a.gender] ?? GENDER_COLORS.Unisex;
-      doc.setTextColor(r, g, b);
-      doc.text(a.gender, (sizeRight + priceLeft) / 2, y + BAND_Y, { align: 'center' });
-      doc.setTextColor(0);
-    }
+  // Größe und Preis gleich groß. Passen beide nebeneinander nicht in die Spalte
+  // ("W32/L34" neben "123,50 €"), wird gemeinsam verkleinert statt überlappt –
+  // getTextWidth nutzt die AFM-Metrik, das Ergebnis ist auf jedem Gerät dasselbe.
+  doc.setFont('helvetica', 'bold');
+  let bandPt = 12;
+  doc.setFontSize(bandPt);
+  while (bandPt > 7 && doc.getTextWidth(size) + doc.getTextWidth(price) + 1.5 > textW) {
+    bandPt -= 0.5;
+    doc.setFontSize(bandPt);
   }
+  doc.text(size, colX, y + BAND_Y);
+  doc.text(price, rightX, y + BAND_Y, { align: 'right' });
 }
 
 function newDoc(): jsPDF {

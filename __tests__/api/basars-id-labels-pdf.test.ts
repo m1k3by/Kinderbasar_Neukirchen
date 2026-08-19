@@ -226,21 +226,21 @@ describe('GET /api/basars/[id]/labels.pdf – Geometrie', () => {
     const anchors = textAnchors(contentStream(buf));
     expect(anchors.length).toBeGreaterThan(0);
 
-    // Die Textspalte jedes Etiketts beginnt linksbündig bei x + 31 mm (5 + 24 QR + 2). Über den vollen
+    // Die Textspalte jedes Etiketts beginnt linksbündig bei x + 38 mm (5 + 31 QR + 2). Über den vollen
     // Bogen müssen daraus exakt drei x-Werte im Abstand von 70 mm entstehen.
     const colStarts = uniqSorted(
-      anchors.map(a => a.x / PT_PER_MM).filter(mm => Math.abs((mm % 70) - 31) < 0.01)
+      anchors.map(a => a.x / PT_PER_MM).filter(mm => Math.abs((mm % 70) - 38) < 0.01)
     );
     expect(colStarts).toHaveLength(3);
     expect(colStarts[1] - colStarts[0]).toBeCloseTo(70, 3);
     expect(colStarts[2] - colStarts[1]).toBeCloseTo(70, 3);
 
-    // Erste Grundlinie der Bezeichnung liegt 12,5 mm unter der Etikettenoberkante;
+    // Erste Grundlinie der Bezeichnung liegt 14,5 mm unter der Etikettenoberkante;
     // über acht Zeilen müssen daraus acht Werte im Abstand von 36 mm entstehen.
     const rowStarts = uniqSorted(
       anchors
         .map(a => 297 - a.y / PT_PER_MM)
-        .filter(mm => Math.abs(((mm - 4.5) % 36) - 12.5) < 0.01)
+        .filter(mm => Math.abs(((mm - 4.5) % 36) - 14.5) < 0.01)
     );
     expect(rowStarts).toHaveLength(8);
     for (let i = 1; i < rowStarts.length; i++) {
@@ -322,16 +322,16 @@ describe('GET /api/basars/[id]/labels.pdf – Inhalt', () => {
     const content = contentStream(buf);
     expect(content).toContain('\x85'); // Auslassungszeichen, WinAnsi 0x85
 
-    // Grundlinien der Bezeichnung liegen bei 17,0 / 20,9 / 24,8 mm – genau drei, keine vierte
+    // Grundlinien der Bezeichnung liegen bei 19,0 / 22,9 / 26,8 mm – genau drei, keine vierte
     // Zeile, und alle oberhalb des unteren Bands (Größe · Zielgruppe · Preis).
     const titleYs = uniqSorted(
       textAnchors(content)
         .map(a => 297 - a.y / PT_PER_MM)
-        .filter(mm => mm > 15 && mm < 30)
+        .filter(mm => mm > 17 && mm < 30)
     );
     expect(titleYs).toHaveLength(3);
-    expect(titleYs[0]).toBeCloseTo(4.5 + 12.5, 2);
-    expect(titleYs[2]).toBeLessThan(4.5 + 32.5 - 2); // oberhalb des unteren Bands
+    expect(titleYs[0]).toBeCloseTo(4.5 + 14.5, 2);
+    expect(titleYs[2]).toBeLessThan(4.5 + 26.6 - 2); // oberhalb der Zielgruppenzeile
   });
 
   it('schreibt Umlaute und das Eurozeichen', async () => {
