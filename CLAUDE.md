@@ -8,13 +8,21 @@ Projektregeln für Kinderbasar Neukirchen (Next.js 16 App Router, React 19, Type
 
 ```bash
 npm run dev            # Dev-Server
-npm run build          # prisma generate + next build
+npm run build          # prisma generate + prisma migrate deploy + next build
 npm run lint           # ESLint
 npm run test:run       # Vitest einmalig
 npm run test:coverage  # Coverage (Schwellwert 90 %)
 npm run db:push        # Prisma-Schema anwenden – nur lokal!
 ```
 
+> **Migrationen laufen im Build.** `npm run build` ruft `prisma migrate deploy` auf, bevor
+> `next build` startet. Grund: am 19.08.2026 ging die Seite auf 500, weil vier Migrationen
+> vom 17.08. als Code deployt, aber nie gegen die Datenbank ausgeführt wurden
+> (`The column Basar.maxArticlesPerEmployee does not exist in the current database`, P2022).
+> Solange das Anwenden ein manueller Schritt war, konnte er vergessen werden. Nebenwirkung
+> mit Absicht: ist die Datenbank beim Build nicht erreichbar, scheitert das Deployment —
+> besser als eine Seite, die erst zur Laufzeit auseinanderfliegt.
+>
 > **`db push` niemals gegen die Produktivdatenbank.** Es gleicht das Tabellenschema ab, führt
 > aber die Migrations-SQL nicht aus – von Migrationen angelegte Daten fehlen dann. Produktiv
 > gilt `prisma migrate deploy`. Wenn eine Migration Daten braucht (Seed-Zeilen, Backfills),

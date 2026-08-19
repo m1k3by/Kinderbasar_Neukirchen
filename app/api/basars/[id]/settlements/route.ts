@@ -1,4 +1,5 @@
 ﻿import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../../../lib/prisma';
 import { requireAuth, requireAdmin } from '../../../../lib/apiAuth';
 
@@ -40,14 +41,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 }
 
-// Sellers per transaction. A plain sequential loop of un-batched upserts (the old
-// implementation) has no transaction boundary at all: with 2000 sellers, a function timeout
-// midway through leaves an inconsistent mix of updated and stale settlements. Chunking into
-// batches, each wrapped in its own transaction, bounds how much work is in flight
-// un-committed at any point – if a batch fails, only that batch rolls back, and every
-// previously completed batch is already durably written.
-const SETTLEMENT_BATCH_SIZE = 100;
-
 // POST /api/basars/:id/settlements – generate settlements for all sellers (admin only)
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -61,63 +54,58 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Abrechnung nur für geschlossene Basare möglich' }, { status: 400 });
     }
 
-    const basarSellers = await prisma.basarSeller.findMany({
-      where: { basarId },
-      select: {
-        id: true,
-        commissionOverride: true,
-        articles: {
-          select: {
-            status: true,
-            sales: { select: { isCancelled: true, salePrice: true } },
-          },
-        },
-      },
-    });
+    // Bruttoerlös je BasarSeller als DB-Aggregat. Die alte Fassung lud jeden Artikel samt
+    // Sales in den Function-Speicher – bei 5000 Verkäufern × 500 Artikeln sind das Millionen
+    // Zeilen, die weder in Speicher noch Timeout passen. Pro SOLD-Artikel zählt genau EIN
+    // nicht stornierter Sale (LATERAL LIMIT 1), wie zuvor das .find() in JS – nicht die
+    // Summe mehrerer, falls Altdaten je Artikel doppelte aktive Sales tragen sollten.
+    const rows = await prisma.$queryRaw<
+      { basarSellerId: string; commissionOverride: Prisma.Decimal | null; grossRevenue: Prisma.Decimal }[]
+    >`
+      SELECT bs."id" AS "basarSellerId",
+             bs."commissionOverride",
+             COALESCE(SUM(s."salePrice"), 0) AS "grossRevenue"
+      FROM "BasarSeller" bs
+      LEFT JOIN "Article" a
+        ON a."basarSellerId" = bs."id" AND a."status" = 'SOLD'
+      LEFT JOIN LATERAL (
+        SELECT "salePrice"
+        FROM "Sale"
+        WHERE "articleId" = a."id" AND "isCancelled" = false
+        ORDER BY "soldAt"
+        LIMIT 1
+      ) s ON true
+      WHERE bs."basarId" = ${basarId}
+      GROUP BY bs."id"
+    `;
 
     const entryFeeAmt = Number(basar.entryFee);
-    let created = 0;
-    const totalBatches = Math.max(1, Math.ceil(basarSellers.length / SETTLEMENT_BATCH_SIZE));
 
-    for (let i = 0; i < basarSellers.length; i += SETTLEMENT_BATCH_SIZE) {
-      const batch = basarSellers.slice(i, i + SETTLEMENT_BATCH_SIZE);
-
-      const upserts = batch.map((bs) => {
-        const commissionRate = Number(bs.commissionOverride ?? basar.commissionPercent) / 100;
-
-        const grossRevenue = bs.articles
-          .filter((a) => a.status === 'SOLD')
-          .map((a) => a.sales?.find((s) => !s.isCancelled))
-          .filter((s): s is NonNullable<typeof s> => !!s)
-          .reduce((sum, s) => sum + Number(s.salePrice), 0);
-
-        const commissionAmount = Math.round(grossRevenue * commissionRate * 100) / 100;
-        const netPayout = Math.max(0, grossRevenue - commissionAmount - entryFeeAmt);
-
-        return prisma.settlement.upsert({
-          where: { basarSellerId: bs.id },
-          update: { grossRevenue, commissionAmount, entryFeeAmount: entryFeeAmt, netPayout },
-          create: {
-            basarId,
-            basarSellerId: bs.id,
-            grossRevenue,
-            commissionAmount,
-            entryFeeAmount: entryFeeAmt,
-            netPayout,
-          },
-        });
-      });
-
-      const results = await prisma.$transaction(upserts);
-      created += results.length;
-    }
-
-    return NextResponse.json({
-      created,
-      total: basarSellers.length,
-      batches: totalBatches,
-      batchSize: SETTLEMENT_BATCH_SIZE,
+    const settlements = rows.map((row) => {
+      const commissionRate = Number(row.commissionOverride ?? basar.commissionPercent) / 100;
+      const grossRevenue = Number(row.grossRevenue);
+      const commissionAmount = Math.round(grossRevenue * commissionRate * 100) / 100;
+      const netPayout = Math.max(0, grossRevenue - commissionAmount - entryFeeAmt);
+      return {
+        basarId,
+        basarSellerId: row.basarSellerId,
+        grossRevenue,
+        commissionAmount,
+        entryFeeAmount: entryFeeAmt,
+        netPayout,
+      };
     });
+
+    // Neu erzeugen statt je Verkäufer upserten: 5000 einzelne Upserts sind 5000 Roundtrips
+    // und liefen zuvor gestückelt in 50 Batches. delete+createMany sind zwei Statements in
+    // einer Transaktion – atomar, keine halb geschriebenen Läufe. Settlement-IDs werden
+    // dabei neu vergeben; nichts referenziert sie (Lookups laufen über basarSellerId).
+    const [, createResult] = await prisma.$transaction([
+      prisma.settlement.deleteMany({ where: { basarId } }),
+      prisma.settlement.createMany({ data: settlements }),
+    ]);
+
+    return NextResponse.json({ created: createResult.count, total: rows.length });
   } catch (error) {
     console.error('POST /api/basars/[id]/settlements error:', error);
     return NextResponse.json({ error: 'Interner Serverfehler' }, { status: 500 });

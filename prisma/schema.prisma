@@ -156,6 +156,11 @@ model BasarSeller {
   settlement          Settlement?
 
   @@unique([basarId, sellerId])
+  // GET /api/basars zählt je Basar die aktiven Teilnahmen (_count mit where isActive) –
+  // das läuft bei jedem Verkäufer-Dashboard-Aufruf über bis zu 50 Basare. Der Unique-Index
+  // [basarId, sellerId] deckt nur basarId ab, isActive müsste je Zeile aus dem Heap geholt
+  // werden: bei 5000 Teilnehmern × 19 Basaren sind das ~95.000 Zeilen pro Seitenaufruf.
+  @@index([basarId, isActive])
 }
 
 model Article {
@@ -176,6 +181,9 @@ model Article {
 
   @@index([basarSellerId, status])
   @@index([qrCode])
+  // FK-Index für updateMany({ where: { sellerArticleId } }) beim Archiv-Löschen –
+  // Prisma legt für Fremdschlüssel keine Indizes an, ohne ihn ist das ein Seq Scan.
+  @@index([sellerArticleId])
 }
 
 // Personal article archive – survives basar closures
@@ -191,6 +199,10 @@ model SellerArticle {
   updatedAt DateTime  @updatedAt
   seller    Seller    @relation(fields: [sellerId], references: [sellerId], onDelete: Cascade)
   articles  Article[]
+
+  // Jeder Archiv-Aufruf (GET /api/seller-articles) filtert auf sellerId – ohne Index
+  // wächst das mit der Gesamttabelle statt mit dem eigenen Archiv.
+  @@index([sellerId])
 }
 
 model Sale {
@@ -231,6 +243,9 @@ model Settlement {
   netPayout        Decimal     @db.Decimal(10, 2)
   generatedAt      DateTime    @default(now())
   basarSeller      BasarSeller @relation(fields: [basarSellerId], references: [id])
+
+  // Abrechnungsliste und Neu-Erzeugung filtern auf basarId (GET/POST /settlements).
+  @@index([basarId])
 }
 
 // ───────────────────────────────────────────────

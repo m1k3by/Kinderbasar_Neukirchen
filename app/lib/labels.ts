@@ -30,9 +30,30 @@ export const LABELS_PER_SHEET = SHEET.cols * SHEET.rows;
  */
 const PAD = 5;
 
-const QR_SIZE = 17;          // mm, inkl. Quiet Zone
+/**
+ * Oben und unten reichen 2,5 mm: dort grenzt kein Etikett an die Papierkante.
+ * Die erste Zeile beginnt bei 4,5 + 2,5 = 7 mm, die letzte endet bei 292,5 − 2,5
+ * = 290 mm – beides jenseits des nicht bedruckbaren Rands von 4–5 mm.
+ */
+const PAD_Y = 2.5;
+
+const QR_SIZE = 24;          // mm, inkl. Quiet Zone
 const QR_QUIET_MODULES = 2;  // Module Ruhezone, liegen innerhalb von QR_SIZE
-const TEXT_X = 25;           // mm ab Etikettenkante: Beginn der Textspalte
+const QR_GAP = 2;            // mm Abstand QR → Textspalte
+const TEXT_X = PAD + QR_SIZE + QR_GAP;  // 31 mm ab Etikettenkante
+
+/** Grundlinie des unteren Bands (Größe · Zielgruppe · Preis), mm ab Etikettenoberkante. */
+const BAND_Y = 32.5;
+
+/**
+ * Farben der Zielgruppe. Auf Schwarzweißdruckern werden daraus Grauwerte – die
+ * Unterscheidung trägt deshalb nie allein die Farbe, das Wort steht immer dabei.
+ */
+const GENDER_COLORS: Record<string, [number, number, number]> = {
+  Junge: [29, 78, 216],      // Blau
+  Mädchen: [219, 39, 119],   // Rosa
+  Unisex: [107, 114, 128],   // Grau
+};
 
 const A4 = { w: 210, h: 297 } as const;
 
@@ -45,7 +66,7 @@ export interface LabelData {
 }
 
 export interface LabelSheetOptions {
-  /** Verkäufernummer, wird unter jedem QR-Code gedruckt. */
+  /** Verkäufernummer, wird oben rechts auf jedes Etikett gedruckt. */
   sellerNr: number | string;
   /** Index des ersten belegten Etiketts auf dem Bogen (0-basiert) – für angebrochene Bögen. */
   from?: number;
@@ -67,7 +88,7 @@ export function slotPosition(slot: number): { x: number; y: number } {
 /**
  * Zeichnet einen QR-Code als Vektor-Rechtecke.
  *
- * Bewusst kein eingebettetes PNG: ein 300-px-Bild auf 17 mm ist bei 600 dpi bereits
+ * Bewusst kein eingebettetes PNG: ein 300-px-Bild auf 24 mm ist bei 600 dpi bereits
  * interpoliert, was die Scanrate an der Kasse senkt. Horizontal benachbarte Module
  * werden zu einem Rechteck zusammengefasst – das halbiert die Zeichenoperationen.
  */
@@ -98,58 +119,53 @@ export function drawQr(doc: jsPDF, text: string, x: number, y: number, sizeMm: n
   }
 }
 
-function drawFieldLabel(doc: jsPDF, text: string, x: number, y: number, align?: 'right') {
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(5);
-  doc.setTextColor(170);
-  doc.text(text, x, y, align ? { align } : undefined);
-  doc.setTextColor(0);
-}
-
 function drawLabel(doc: jsPDF, a: LabelData, sellerNr: number | string, x: number, y: number) {
   const textW = SHEET.labelW - TEXT_X - PAD;
+  const leftX = x + PAD;
   const rightX = x + SHEET.labelW - PAD;
 
-  drawQr(doc, a.qrCode, x + PAD, y + PAD, QR_SIZE);
+  drawQr(doc, a.qrCode, leftX, y + PAD_Y, QR_SIZE);
 
-  // Verkäufernummer mittig unter dem QR-Code
+  // Verkäufernummer oben rechts, fett – an der Kasse die am häufigsten gesuchte Angabe.
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(51);
-  doc.text(String(sellerNr), x + PAD + QR_SIZE / 2, y + 25.8, { align: 'center' });
-  doc.setTextColor(0);
+  doc.setFontSize(12);
+  doc.text(String(sellerNr), rightX, y + 7.5, { align: 'right' });
 
-  drawFieldLabel(doc, 'Bezeichnung', x + TEXT_X, y + 7.5);
-
-  // Bezeichnung auf zwei Zeilen begrenzen. splitTextToSize nutzt die eingebauten
+  // Bezeichnung auf drei Zeilen begrenzt. splitTextToSize nutzt die eingebauten
   // AFM-Metriken der Standardfonts und liefert damit überall dasselbe Ergebnis.
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
+  doc.setFontSize(9);
   const lines = doc.splitTextToSize(a.title, textW) as string[];
-  const shown = lines.slice(0, 2);
-  if (lines.length > 2 && shown[1]) {
-    shown[1] = shown[1].replace(/.$/, '…');
+  const shown = lines.slice(0, 3);
+  if (lines.length > 3 && shown[2]) {
+    shown[2] = shown[2].replace(/.$/, '…');
   }
-  shown.forEach((line, i) => doc.text(line, x + TEXT_X, y + 11.5 + i * 3.6));
+  shown.forEach((line, i) => doc.text(line, x + TEXT_X, y + 12.5 + i * 3.9));
 
-  drawFieldLabel(doc, 'Größe', x + TEXT_X, y + 24);
-  drawFieldLabel(doc, 'Preis', rightX, y + 24, 'right');
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(51);
+  // Unteres Band über die volle Etikettenbreite: Größe links, Zielgruppe mittig,
+  // Preis rechts. Größe und Preis in derselben Größe – beides wird an der Kasse
+  // gelesen, nicht der Titel.
   const size = a.sizeLabel?.trim() || '–';
-  doc.text(size, x + TEXT_X, y + 28.5);
-  if (a.gender) {
-    doc.setFontSize(6);
-    doc.setTextColor(29, 78, 216);
-    doc.text(a.gender, x + TEXT_X + doc.getTextWidth(size) + 1.2, y + 28.5);
-  }
-  doc.setTextColor(0);
+  const price = fmtPrice(a.price);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
-  doc.text(fmtPrice(a.price), rightX, y + 29, { align: 'right' });
+  doc.text(size, leftX, y + BAND_Y);
+  doc.text(price, rightX, y + BAND_Y, { align: 'right' });
+
+  if (a.gender) {
+    // Mitte zwischen Größe und Preis statt fester Position: so kann das Wort auch bei
+    // langer Größe ("W32/L34") oder dreistelligem Preis nicht in eines von beiden laufen.
+    const sizeRight = leftX + doc.getTextWidth(size);
+    const priceLeft = rightX - doc.getTextWidth(price);
+    doc.setFontSize(10);
+    const genderW = doc.getTextWidth(a.gender);
+    if (priceLeft - sizeRight > genderW + 2) {
+      const [r, g, b] = GENDER_COLORS[a.gender] ?? GENDER_COLORS.Unisex;
+      doc.setTextColor(r, g, b);
+      doc.text(a.gender, (sizeRight + priceLeft) / 2, y + BAND_Y, { align: 'center' });
+      doc.setTextColor(0);
+    }
+  }
 }
 
 function newDoc(): jsPDF {

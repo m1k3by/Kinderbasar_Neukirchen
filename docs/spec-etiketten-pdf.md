@@ -16,7 +16,7 @@ Auf iOS entsteht dabei eine unbrauchbare Datei. Analyse eines real erzeugten Bog
 |---|---|---|---|
 | Spaltenraster | 70,0 mm | 60,67 mm | 0,8667 |
 | Zeilenraster | 36,0 mm | 31,14 mm | 0,8649 |
-| QR-Kantenlänge | 17,0 mm | 14,88 mm | 0,875 |
+| QR-Kantenlänge | 24,0 mm | 21,00 mm | 0,875 |
 | 1. Spalte von links | 2,5 mm | 16,17 mm | +13,7 mm |
 | 1. Zeile von oben | 7,0 mm | 20,14 mm | +13,1 mm |
 
@@ -102,8 +102,11 @@ const SHEET = {
   marginLeft: 0,   // mm – 3*70 = 210 = volle A4-Breite
 } as const;
 
-const PAD = 5;     // mm Innenabstand, siehe unten
-const QR  = 17;    // mm Kantenlänge inkl. Quiet Zone
+const PAD   = 5;   // mm Innenabstand links/rechts, siehe unten
+const PAD_Y = 2.5; // mm oben/unten – dort grenzt kein Etikett an die Papierkante
+const QR    = 24;  // mm Kantenlänge inkl. Quiet Zone
+const TEXT_X = PAD + QR + 2; // 31 mm – Beginn der Textspalte
+const BAND_Y = 32.5;         // mm – Grundlinie Größe · Zielgruppe · Preis
 ```
 
 Position von Etikett `i` (0-basiert, inkl. `from`-Offset):
@@ -126,25 +129,36 @@ Avery 3475 nutzt mit 3 × 70 mm exakt die volle A4-Breite von 210 mm – die Eti
 
 ```
  ┌──────────────────────────────────────────┐ ← y
- │  ┌────────┐  Bezeichnung                 │
- │  │        │  Winterjacke Lego            │   PAD = 5mm rundum
- │  │  QR    │                              │
- │  │ 17mm   │  Größe        Preis          │
- │  └────────┘  116 Junge     5,00 €        │
- │    9001                                  │
+ │  ┌──────────┐                       9001 │   PAD 5 mm links/rechts,
+ │  │          │  Winterjacke Lego          │   PAD_Y 2,5 mm oben/unten
+ │  │    QR    │  mit langem Namen          │
+ │  │  24 mm   │                            │
+ │  └──────────┘                            │
+ │  116      Junge               5,00 €     │ ← BAND_Y = 32,5
  └──────────────────────────────────────────┘ ← y + 36
- x         x+5+17=22   x+25                  x+70
+ x   x+5      x+29  x+31                 x+65
 ```
 
 | Element | Position | Schrift |
 |---|---|---|
-| QR-Code | `x+PAD`, `y+PAD`, 17 × 17 mm | – |
-| Verkäufernummer | zentriert unter QR, `y+PAD+17+3,5` | Helvetica-Bold 9 pt |
-| Label „Bezeichnung" | `x+25`, `y+PAD+1` | Helvetica 5 pt, Grau `#AAAAAA` |
-| Bezeichnung | `x+25`, `y+PAD+4,5` | Helvetica-Bold 8 pt, max. 2 Zeilen |
-| Label „Größe" / „Preis" | `x+25` / `x+50`, `y+24` | Helvetica 5 pt, Grau |
-| Größe + Zielgruppe | `x+25`, `y+28` | Helvetica 8 pt |
-| Preis | `x+50`, `y+29` | Helvetica-Bold 12 pt |
+| QR-Code | `x+5`, `y+2,5`, 24 × 24 mm | – |
+| Verkäufernummer | rechtsbündig `x+65`, `y+7,5` | Helvetica-Bold 12 pt |
+| Bezeichnung | `x+31`, `y+12,5` (+3,9 je Zeile) | Helvetica-Bold 9 pt, max. 3 Zeilen |
+| Größe | `x+5`, `y+32,5` | Helvetica-Bold 12 pt |
+| Zielgruppe | mittig zwischen Größe und Preis, `y+32,5` | Helvetica-Bold 10 pt, farbig |
+| Preis | rechtsbündig `x+65`, `y+32,5` | Helvetica-Bold 12 pt |
+
+Feldbeschriftungen („Bezeichnung", „Größe", „Preis") entfallen – die Werte sind an der
+Kasse eindeutig, und der gewonnene Platz geht in QR-Code und Schriftgröße.
+
+**Farben der Zielgruppe:** Junge `#1D4EB8` (blau), Mädchen `#DB2777` (rosa),
+Unisex `#6B7280` (grau). Auf Schwarzweißdruckern werden daraus Grauwerte – die
+Unterscheidung trägt deshalb nie allein die Farbe, das Wort steht immer dabei.
+
+**Kollisionsschutz im unteren Band:** die Zielgruppe wird auf die Mitte zwischen dem
+rechten Rand der Größe und dem linken Rand des Preises gesetzt (beides über
+`getTextWidth`, also AFM-Metrik) und ganz weggelassen, wenn dort weniger als ihre
+Textbreite + 2 mm frei ist. Damit können „W32/L34" und „123,50 €" nicht ineinanderlaufen.
 
 ---
 
@@ -154,12 +168,12 @@ Avery 3475 nutzt mit 3 × 70 mm exakt die volle A4-Breite von 210 mm – die Eti
 
 Umlaute und `€` sind in WinAnsiEncoding enthalten und im Prototyp verifiziert.
 
-**Textkürzung** über `doc.splitTextToSize(text, maxWidthMm)` – das nutzt die eingebauten AFM-Metriken und ist damit ebenfalls geräteunabhängig. Bezeichnungen werden auf **2 Zeilen** begrenzt, danach mit `…` abgeschnitten:
+**Textkürzung** über `doc.splitTextToSize(text, maxWidthMm)` – das nutzt die eingebauten AFM-Metriken und ist damit ebenfalls geräteunabhängig. Bezeichnungen werden auf **3 Zeilen** begrenzt, danach mit `…` abgeschnitten:
 
 ```ts
-const lines = doc.splitTextToSize(a.title, SHEET.labelW - 25 - PAD);
-const shown = lines.slice(0, 2);
-if (lines.length > 2) shown[1] = shown[1].replace(/.{1}$/, '…');
+const lines = doc.splitTextToSize(a.title, SHEET.labelW - TEXT_X - PAD);
+const shown = lines.slice(0, 3);
+if (lines.length > 3) shown[2] = shown[2].replace(/.{1}$/, '…');
 ```
 
 > Damit ist auch der Fall aus dem Fehlerbild abgedeckt: `Hshehejejehsjdjdjdjdjdjdjdjd` und `aaaaaaaaaaaaaaaaaaaaaaaaa` liefen bisher aus dem Etikett heraus.
@@ -305,7 +319,7 @@ Gemessen am erzeugten Musterbogen (14 Artikel, Verkäufer 9001):
 MediaBox      0 0 595.28 841.89
 PrintScaling  /None
 Bilder        0        eingebettete Fonts  0
-Textspalten   25.0 / 95.0 / 165.0 mm   → Abstand 70.000 / 70.000 mm
+Textspalten   31.0 / 101.0 / 171.0 mm  → Abstand 70.000 / 70.000 mm
 Textzeilen    16.0 / 52.0 / 88.0 / 124.0 / 160.0 mm → Abstand 36.000 mm
 Linker Rand   6.36 mm (≥ 5 mm gefordert)
 ```

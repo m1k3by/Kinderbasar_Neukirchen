@@ -9,20 +9,26 @@ vi.mock('next/headers', () => ({
 
 const prismaMock = vi.hoisted(() => ({
   basarSeller: { findUnique: vi.fn(), findMany: vi.fn() },
-  settlement: { findMany: vi.fn(), upsert: vi.fn() },
+  settlement: { findMany: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn() },
   basar: { findUnique: vi.fn() },
   $transaction: vi.fn(),
+  $queryRaw: vi.fn(),
 }));
 vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
 
-// POST batches settlement upserts via the array form of $transaction (prisma.$transaction([
-// upsert1, upsert2, ...])) – one batch per SETTLEMENT_BATCH_SIZE sellers. The mocked upsert
-// calls already return promises (since settlement.upsert is a vi.fn()), so the mock just
-// needs to await them like Prisma's real array-transaction does.
+// POST schreibt deleteMany + createMany über die Array-Form von $transaction. Die gemockten
+// Aufrufe liefern bereits Promises, der Mock muss sie nur wie Prismas echte
+// Array-Transaktion abwarten.
 function mockTransactionArray() {
   prismaMock.$transaction.mockImplementation((arg: any) =>
     Array.isArray(arg) ? Promise.all(arg) : arg(prismaMock)
   );
+}
+
+// Standard-Schreibmocks: deleteMany/createMany liefern counts wie Prisma.
+function mockWrites(createdCount = 1) {
+  prismaMock.settlement.deleteMany.mockResolvedValue({ count: 0 });
+  prismaMock.settlement.createMany.mockResolvedValue({ count: createdCount });
 }
 
 import { GET, POST } from '@/app/api/basars/[id]/settlements/route';
@@ -129,153 +135,104 @@ describe('POST /api/basars/[id]/settlements', () => {
   it('creates settlements successfully', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.basar.findUnique.mockResolvedValue(closedBasar);
-    prismaMock.basarSeller.findMany.mockResolvedValue([
-      {
-        id: 'bs-1', commissionOverride: null,
-        articles: [
-          { status: 'SOLD', sales: [{ isCancelled: false, salePrice: dec(5.0) }] },
-          { status: 'AVAILABLE', sales: [] },
-        ],
-      },
+    prismaMock.$queryRaw.mockResolvedValue([
+      { basarSellerId: 'bs-1', commissionOverride: null, grossRevenue: dec('5.00') },
     ]);
-    prismaMock.settlement.upsert.mockResolvedValue({ id: 'set-1', netPayout: 4.0 });
+    mockWrites(1);
+
     const res = await POST(makePostRequest(), makeContext());
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.created).toBe(1);
-    // Progress/total reporting, since a single response can't stream progress for a run that
-    // spans multiple batches.
     expect(data.total).toBe(1);
-    expect(data.batches).toBe(1);
-    expect(data.batchSize).toBe(100);
-    expect(prismaMock.settlement.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        update: expect.objectContaining({ grossRevenue: 5.0, commissionAmount: 1.0, netPayout: 4.0 }),
-      })
-    );
-    // Upserts run through $transaction (one batch here) rather than a bare sequential loop –
-    // this is what keeps a batch from being partially written if it fails midway.
+    // Wirkung prüfen, nicht nur Statuscode: der fachliche Inhalt steckt in den
+    // createMany-Argumenten (CLAUDE.md-Testregel 3).
+    expect(prismaMock.settlement.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          basarId: 'basar-1',
+          basarSellerId: 'bs-1',
+          grossRevenue: 5.0,
+          commissionAmount: 1.0,
+          netPayout: 4.0,
+        }),
+      ],
+    });
+    // deleteMany muss auf den Basar beschränkt sein – ohne where würde die Neu-Erzeugung
+    // die Abrechnungen ALLER Basare löschen.
+    expect(prismaMock.settlement.deleteMany).toHaveBeenCalledWith({ where: { basarId: 'basar-1' } });
+    // Beide Schreiboperationen atomar in EINER Transaktion, kein Fenster ohne Abrechnungen.
     expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
   });
 
-  it('chunks sellers into batches of 100, each in its own transaction', async () => {
+  // Die Storno-Semantik (nur EIN nicht stornierter Sale je SOLD-Artikel zählt) lebt jetzt im
+  // SQL-Aggregat und ist mit gemocktem $queryRaw nicht fachlich testbar. Als Regressionsschutz
+  // gegen versehentliches Entfernen der Filter wird hier der Query-Text geprüft – schwächer
+  // als ein Verhaltens-Test, aber das Maximum, das ein Mock hergibt.
+  it('SQL-Aggregat filtert Stornos und zählt höchstens einen Sale pro Artikel', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.basar.findUnique.mockResolvedValue(closedBasar);
-    const manySellers = Array.from({ length: 150 }, (_, i) => ({
-      id: `bs-${i}`,
-      commissionOverride: null,
-      articles: [],
-    }));
-    prismaMock.basarSeller.findMany.mockResolvedValue(manySellers);
-    prismaMock.settlement.upsert.mockImplementation((args: any) =>
-      Promise.resolve({ id: `set-${args.where.basarSellerId}`, netPayout: 0 })
-    );
+    prismaMock.$queryRaw.mockResolvedValue([]);
+    mockWrites(0);
 
-    const res = await POST(makePostRequest(), makeContext());
+    await POST(makePostRequest(), makeContext());
 
-    expect(res.status).toBe(200);
-    const data = await res.json();
-    expect(data.total).toBe(150);
-    expect(data.created).toBe(150);
-    expect(data.batches).toBe(2); // ceil(150 / 100)
-    // One $transaction call per batch (100 + 50), not one call per seller.
-    expect(prismaMock.$transaction).toHaveBeenCalledTimes(2);
+    const sql = (prismaMock.$queryRaw.mock.calls[0][0] as unknown as string[]).join('?');
+    expect(sql).toContain('"isCancelled" = false');
+    expect(sql).toContain('LIMIT 1');
+    expect(sql).toContain(`'SOLD'`);
   });
 
-  it('ignores a cancelled sale on a SOLD article when computing settlement (storno-then-resell)', async () => {
-    // An article can end up with multiple Sale rows after storno + resell; only the
-    // non-cancelled one should count toward the seller's gross revenue.
+  // Regressionstest gegen Decimal-Verkettung. Das Aggregat liefert grossRevenue als Prisma.Decimal,
+  // dessen valueOf() eine Zeichenkette ist. Ohne Number() rechnete die Provision auf einem String –
+  // mit number-Fixtures wäre das unsichtbar geblieben (CLAUDE.md-Testregel 1).
+  it('rechnet den aggregierten Bruttoerlös numerisch, nicht als Zeichenkette', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.basar.findUnique.mockResolvedValue(closedBasar);
-    prismaMock.basarSeller.findMany.mockResolvedValue([
-      {
-        id: 'bs-1', commissionOverride: null,
-        articles: [
-          {
-            status: 'SOLD',
-            sales: [
-              { isCancelled: true, salePrice: dec(5.0) },
-              { isCancelled: false, salePrice: dec(7.0) },
-            ],
-          },
-        ],
-      },
+    prismaMock.$queryRaw.mockResolvedValue([
+      { basarSellerId: 'bs-1', commissionOverride: null, grossRevenue: dec('15.50') },
     ]);
-    prismaMock.settlement.upsert.mockResolvedValue({ id: 'set-1', netPayout: 5.6 });
-    const res = await POST(makePostRequest(), makeContext());
-    expect(res.status).toBe(200);
-    expect(prismaMock.settlement.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        update: expect.objectContaining({ grossRevenue: 7.0 }),
-      })
-    );
-  });
-
-  // Regressionstest gegen Decimal-Verkettung. Prisma liefert für salePrice ein Decimal, dessen
-  // valueOf() eine Zeichenkette ist. Ohne Number() ergibt `0 + dec(2.50) + dec(3.00) + dec(10.00)`
-  // nicht 15.5, sondern den String "02.5310" – und genau der landete dann als Auszahlungsbetrag
-  // in der Datenbank. Mit number-Fixtures wäre das unsichtbar geblieben.
-  it('summiert mehrere Verkäufe eines Verkäufers numerisch, nicht als Zeichenkette', async () => {
-    cookiesGetMock.mockReturnValue({ value: adminToken() });
-    prismaMock.basar.findUnique.mockResolvedValue(closedBasar);
-    prismaMock.basarSeller.findMany.mockResolvedValue([
-      {
-        id: 'bs-1', commissionOverride: null,
-        articles: [
-          { status: 'SOLD', sales: [{ isCancelled: false, salePrice: dec('2.50') }] },
-          { status: 'SOLD', sales: [{ isCancelled: false, salePrice: dec('3.00') }] },
-          { status: 'SOLD', sales: [{ isCancelled: false, salePrice: dec('10.00') }] },
-        ],
-      },
-    ]);
-    prismaMock.settlement.upsert.mockResolvedValue({ id: 'set-1' });
+    mockWrites(1);
 
     const res = await POST(makePostRequest(), makeContext());
 
     expect(res.status).toBe(200);
-    const [[args]] = prismaMock.settlement.upsert.mock.calls;
-    expect(args.update.grossRevenue).toBe(15.5);
-    expect(typeof args.update.grossRevenue).toBe('number'); // nicht "02.5310"
-    expect(args.update.commissionAmount).toBe(3.1);         // 20 % von 15,50 €
-    expect(args.update.netPayout).toBe(12.4);
+    const [[args]] = prismaMock.settlement.createMany.mock.calls;
+    expect(args.data[0].grossRevenue).toBe(15.5);
+    expect(typeof args.data[0].grossRevenue).toBe('number');
+    expect(args.data[0].commissionAmount).toBe(3.1);   // 20 % von 15,50 €
+    expect(args.data[0].netPayout).toBe(12.4);
   });
 
   it('rechnet mit der Provisionsabweichung des Verkäufers, wenn gesetzt', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.basar.findUnique.mockResolvedValue({ ...closedBasar, entryFee: dec('2.00') });
-    prismaMock.basarSeller.findMany.mockResolvedValue([
-      {
-        id: 'bs-1',
-        commissionOverride: dec(10), // statt der 20 % des Basars
-        articles: [{ status: 'SOLD', sales: [{ isCancelled: false, salePrice: dec('50.00') }] }],
-      },
+    prismaMock.$queryRaw.mockResolvedValue([
+      { basarSellerId: 'bs-1', commissionOverride: dec(10), grossRevenue: dec('50.00') },
     ]);
-    prismaMock.settlement.upsert.mockResolvedValue({ id: 'set-1' });
+    mockWrites(1);
 
     await POST(makePostRequest(), makeContext());
 
-    const [[args]] = prismaMock.settlement.upsert.mock.calls;
-    expect(args.update.grossRevenue).toBe(50);
-    expect(args.update.commissionAmount).toBe(5);   // 10 %, nicht 20 %
-    expect(args.update.entryFeeAmount).toBe(2);     // Teilnahmegebühr als Zahl, nicht Decimal
-    expect(args.update.netPayout).toBe(43);         // 50 − 5 − 2
+    const [[args]] = prismaMock.settlement.createMany.mock.calls;
+    expect(args.data[0].grossRevenue).toBe(50);
+    expect(args.data[0].commissionAmount).toBe(5);   // 10 %, nicht 20 %
+    expect(args.data[0].entryFeeAmount).toBe(2);     // Teilnahmegebühr als Zahl, nicht Decimal
+    expect(args.data[0].netPayout).toBe(43);         // 50 − 5 − 2
   });
 
   it('lässt die Auszahlung nicht negativ werden, wenn die Gebühr den Erlös übersteigt', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.basar.findUnique.mockResolvedValue({ ...closedBasar, entryFee: dec('5.00') });
-    prismaMock.basarSeller.findMany.mockResolvedValue([
-      {
-        id: 'bs-1', commissionOverride: null,
-        articles: [{ status: 'SOLD', sales: [{ isCancelled: false, salePrice: dec('1.00') }] }],
-      },
+    prismaMock.$queryRaw.mockResolvedValue([
+      { basarSellerId: 'bs-1', commissionOverride: null, grossRevenue: dec('1.00') },
     ]);
-    prismaMock.settlement.upsert.mockResolvedValue({ id: 'set-1' });
+    mockWrites(1);
 
     await POST(makePostRequest(), makeContext());
 
-    const [[args]] = prismaMock.settlement.upsert.mock.calls;
-    expect(args.update.netPayout).toBe(0);
+    const [[args]] = prismaMock.settlement.createMany.mock.calls;
+    expect(args.data[0].netPayout).toBe(0);
   });
 
   it('returns 500 on DB error', async () => {

@@ -226,21 +226,21 @@ describe('GET /api/basars/[id]/labels.pdf – Geometrie', () => {
     const anchors = textAnchors(contentStream(buf));
     expect(anchors.length).toBeGreaterThan(0);
 
-    // Die Textspalte jedes Etiketts beginnt linksbündig bei x + 25 mm. Über den vollen
+    // Die Textspalte jedes Etiketts beginnt linksbündig bei x + 31 mm (5 + 24 QR + 2). Über den vollen
     // Bogen müssen daraus exakt drei x-Werte im Abstand von 70 mm entstehen.
     const colStarts = uniqSorted(
-      anchors.map(a => a.x / PT_PER_MM).filter(mm => Math.abs((mm % 70) - 25) < 0.01)
+      anchors.map(a => a.x / PT_PER_MM).filter(mm => Math.abs((mm % 70) - 31) < 0.01)
     );
     expect(colStarts).toHaveLength(3);
     expect(colStarts[1] - colStarts[0]).toBeCloseTo(70, 3);
     expect(colStarts[2] - colStarts[1]).toBeCloseTo(70, 3);
 
-    // Erste Grundlinie der Bezeichnung liegt 11,5 mm unter der Etikettenoberkante;
+    // Erste Grundlinie der Bezeichnung liegt 12,5 mm unter der Etikettenoberkante;
     // über acht Zeilen müssen daraus acht Werte im Abstand von 36 mm entstehen.
     const rowStarts = uniqSorted(
       anchors
         .map(a => 297 - a.y / PT_PER_MM)
-        .filter(mm => Math.abs(((mm - 4.5) % 36) - 11.5) < 0.01)
+        .filter(mm => Math.abs(((mm - 4.5) % 36) - 12.5) < 0.01)
     );
     expect(rowStarts).toHaveLength(8);
     for (let i = 1; i < rowStarts.length; i++) {
@@ -308,7 +308,7 @@ describe('GET /api/basars/[id]/labels.pdf – Inhalt', () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(9001) });
   });
 
-  it('kürzt lange Bezeichnungen auf zwei Zeilen und lässt sie im Etikett', async () => {
+  it('kürzt lange Bezeichnungen auf drei Zeilen und lässt sie im Etikett', async () => {
     happyPath([
       {
         title: 'Hshehejejehsjdjdjdjdjdjdjdjd Winterjacke Lego mit sehr langem Namen ohne Ende',
@@ -322,16 +322,16 @@ describe('GET /api/basars/[id]/labels.pdf – Inhalt', () => {
     const content = contentStream(buf);
     expect(content).toContain('\x85'); // Auslassungszeichen, WinAnsi 0x85
 
-    // Grundlinien der Bezeichnung liegen bei 16,0 und 19,6 mm – genau zwei, keine dritte
-    // Zeile, und beide innerhalb des Etiketts (Unterkante 40,5 mm minus 5 mm Innenabstand).
+    // Grundlinien der Bezeichnung liegen bei 17,0 / 20,9 / 24,8 mm – genau drei, keine vierte
+    // Zeile, und alle oberhalb des unteren Bands (Größe · Zielgruppe · Preis).
     const titleYs = uniqSorted(
       textAnchors(content)
         .map(a => 297 - a.y / PT_PER_MM)
-        .filter(mm => mm > 14 && mm < 22)
+        .filter(mm => mm > 15 && mm < 30)
     );
-    expect(titleYs).toHaveLength(2);
-    expect(titleYs[0]).toBeCloseTo(4.5 + 11.5, 2);
-    expect(titleYs[1]).toBeLessThan(4.5 + 36 - 5);
+    expect(titleYs).toHaveLength(3);
+    expect(titleYs[0]).toBeCloseTo(4.5 + 12.5, 2);
+    expect(titleYs[2]).toBeLessThan(4.5 + 32.5 - 2); // oberhalb des unteren Bands
   });
 
   it('schreibt Umlaute und das Eurozeichen', async () => {
