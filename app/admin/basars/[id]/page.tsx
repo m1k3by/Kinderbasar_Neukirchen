@@ -161,37 +161,61 @@ function RateTable({ title, rows }: { title: string; rows: RateRow[] }) {
   );
 }
 
-const TX_SCOPES = [
-  { key: 'all', label: 'Alles', placeholder: 'Kassenvorgänge durchsuchen (Artikel, QR-Code, Verkäufer, Kassierer)…' },
-  { key: 'article', label: 'Artikel', placeholder: 'Artikel durchsuchen – mehrere Wörter möglich, z. B. „jeans blau 128“' },
-  { key: 'cashier', label: 'Kassierer', placeholder: 'Kassierer durchsuchen (Name oder Nummer)…' },
-] as const;
-
-function TransactionList({ transactions, onStorno, showCashier }: {
+function TransactionList({ transactions, onStorno, showCashier, startCollapsed }: {
   transactions: Transaction[]; onStorno: (saleId: string) => void; showCashier?: boolean;
+  /** Vorgänge zugeklappt anzeigen. Ohne die Angabe stehen sie offen. */
+  startCollapsed?: boolean;
 }) {
   // Zweistufiges Storno: der erste Klick fragt nur nach und nennt Artikel und Betrag,
   // erst der zweite storniert. Ersetzt den generischen confirm()-Dialog, der nicht sagte,
   // welche Position getroffen wird.
   const [pendingSaleId, setPendingSaleId] = useState<string | null>(null);
 
+  // Merkt sich nur die Vorgänge, die vom Startzustand abweichen – so bleibt die Zuordnung
+  // richtig, wenn nachgeladene Vorgänge dazukommen (die Kassiererliste lädt asynchron).
+  const [toggled, setToggled] = useState<Set<string>>(new Set());
+  const isOpen = (key: string) => (startCollapsed ? toggled.has(key) : !toggled.has(key));
+
+  function toggleTx(key: string) {
+    // Eine offene Storno-Rückfrage soll nicht in einem zugeklappten Vorgang weiterleben und
+    // beim nächsten Aufklappen wieder auftauchen.
+    setPendingSaleId(null);
+    setToggled(prev => {
+      const next = new Set(prev);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
+  }
+
   if (transactions.length === 0) {
     return <div className="text-center py-4 text-gray-400">Keine Kassenvorgänge</div>;
   }
   return (
     <div className="space-y-3">
-      {transactions.map(t => (
-        <div key={t.txId ?? t.items[0]?.saleId} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200 text-sm">
-            <span className="text-gray-600">
-              {new Date(t.soldAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
-              {' · '}{t.items.length} {t.items.length === 1 ? 'Position' : 'Positionen'}
-              {showCashier && (
-                <span className="text-gray-400"> · {t.cashierName}{t.cashierId !== null && ` #${t.cashierId}`}</span>
-              )}
+      {transactions.map(t => {
+        const txKey = t.txId ?? t.items[0]?.saleId;
+        const open = isOpen(txKey);
+        return (
+        <div key={txKey} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => toggleTx(txKey)}
+            aria-expanded={open}
+            className={`w-full flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 text-sm text-left hover:bg-gray-100 transition-colors ${open ? 'border-b border-gray-200' : ''}`}
+          >
+            <span className="flex items-center gap-1.5 text-gray-600">
+              <span className={`inline-block text-gray-400 transition-transform ${open ? 'rotate-90' : ''}`}>▶</span>
+              <span>
+                {new Date(t.soldAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                {' · '}{t.items.length} {t.items.length === 1 ? 'Position' : 'Positionen'}
+                {showCashier && (
+                  <span className="text-gray-400"> · {t.cashierName}{t.cashierId !== null && ` #${t.cashierId}`}</span>
+                )}
+              </span>
             </span>
             <span className="font-semibold text-gray-800">{fmt(t.total)}</span>
-          </div>
+          </button>
+          {open && (
           <table className="w-full text-sm">
             <tbody className="divide-y divide-gray-100">
               {t.items.map(i => (
@@ -234,8 +258,10 @@ function TransactionList({ transactions, onStorno, showCashier }: {
               ))}
             </tbody>
           </table>
+          )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -311,8 +337,10 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
   const [expandedCashier, setExpandedCashier] = useState<string | null>(null);
   const [cashierTx, setCashierTx] = useState<Record<string, Transaction[]>>({});
   const [cashierTxLoading, setCashierTxLoading] = useState<Record<string, boolean>>({});
-  const [txSearch, setTxSearch] = useState('');
-  const [txScope, setTxScope] = useState<'all' | 'article' | 'cashier'>('all');
+  // Zwei getrennte Suchfelder – nur so lässt sich nach Kassierer UND Artikel zugleich
+  // filtern (siehe app/api/basars/[id]/transactions/route.ts).
+  const [txArticleSearch, setTxArticleSearch] = useState('');
+  const [txCashierSearch, setTxCashierSearch] = useState('');
   const [txSearchResults, setTxSearchResults] = useState<Transaction[] | null>(null);
   const [txSearchLoading, setTxSearchLoading] = useState(false);
   const [txError, setTxError] = useState('');
@@ -370,17 +398,24 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
   // rausgeht. Leeres Suchfeld → null, dann zeigt die stats-Tab wieder die normale
   // Kassiereransicht statt der flachen Trefferliste.
   useEffect(() => {
-    const q = txSearch.trim();
-    if (!q) { setTxSearchResults(null); return; }
+    const article = txArticleSearch.trim();
+    const cashier = txCashierSearch.trim();
+    // Beide Felder leer → keine Suche, die stats-Tab zeigt wieder die Kassiereransicht.
+    // Ein einzelnes gefülltes Feld sucht nur in dieser Dimension, beide zugleich verknüpft
+    // sie mit UND.
+    if (!article && !cashier) { setTxSearchResults(null); return; }
     setTxSearchLoading(true);
     const timer = setTimeout(() => {
-      fetch(`/api/basars/${id}/transactions?q=${encodeURIComponent(q)}&scope=${txScope}`)
+      const params = new URLSearchParams();
+      if (article) params.set('article', article);
+      if (cashier) params.set('cashier', cashier);
+      fetch(`/api/basars/${id}/transactions?${params.toString()}`)
         .then(res => res.ok ? res.json() : null)
         .then(data => setTxSearchResults(data ? data.transactions : []))
         .finally(() => setTxSearchLoading(false));
     }, 300);
     return () => clearTimeout(timer);
-  }, [txSearch, txScope, id]);
+  }, [txArticleSearch, txCashierSearch, id]);
 
   function toggleCashier(c: CashierStat) {
     const key = c.cashierId === null ? 'null' : String(c.cashierId);
@@ -667,26 +702,28 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
                   ))}
                 </div>
 
+                {/* Getrennte Felder: gefüllt werden kann eines oder beide, beide zugleich
+                    bedeutet „dieser Artikel bei diesem Kassierer“. */}
                 <div className="flex flex-col sm:flex-row gap-2 mb-4">
-                  <input value={txSearch} onChange={e => setTxSearch(e.target.value)}
-                    placeholder={TX_SCOPES.find(s => s.key === txScope)!.placeholder}
-                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500" />
-                  <div className="flex rounded-lg border border-gray-300 overflow-hidden shrink-0">
-                    {TX_SCOPES.map(s => (
-                      <button key={s.key} type="button" onClick={() => setTxScope(s.key)}
-                        aria-pressed={txScope === s.key}
-                        className={`px-3 py-2 text-sm font-medium ${txScope === s.key ? 'bg-yellow-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
+                  <label className="flex-1">
+                    <span className="sr-only">Artikel durchsuchen</span>
+                    <input value={txArticleSearch} onChange={e => setTxArticleSearch(e.target.value)}
+                      placeholder="Artikel, QR-Code oder Verkäufer – z. B. „jeans blau 128“"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500" />
+                  </label>
+                  <label className="sm:w-72">
+                    <span className="sr-only">Kassierer durchsuchen</span>
+                    <input value={txCashierSearch} onChange={e => setTxCashierSearch(e.target.value)}
+                      placeholder="Kassierer (Name oder Nummer)"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500" />
+                  </label>
                 </div>
 
                 {txError && (
                   <div className="mb-4 px-4 py-3 rounded-lg font-medium bg-red-100 text-red-800">{txError}</div>
                 )}
 
-                {txSearch.trim() ? (
+                {(txArticleSearch.trim() || txCashierSearch.trim()) ? (
                   <div className="bg-white rounded-xl shadow-sm p-4">
                     {txSearchLoading ? (
                       <div className="text-center py-8 text-gray-400">Suche…</div>
@@ -743,7 +780,7 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
                                     {cashierTxLoading[key] ? (
                                       <div className="text-center py-4 text-gray-400">Laden…</div>
                                     ) : (
-                                      <TransactionList transactions={cashierTx[key] ?? []} onStorno={handleStorno} />
+                                      <TransactionList transactions={cashierTx[key] ?? []} onStorno={handleStorno} startCollapsed />
                                     )}
                                   </td>
                                 </tr>

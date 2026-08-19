@@ -12,6 +12,39 @@ import { requireAdmin } from '../../../../lib/apiAuth';
 // späteren Seiten – dann bräuchte es echte Cursor-Pagination auf DB-Ebene.
 const RAW_FETCH_CAP = 5000;
 
+// Höchstens sechs Wörter je Feld – schützt davor, dass ein eingefügter Absatz zu einer
+// Abfrage mit hunderten UND-verknüpften LIKE-Bedingungen wird.
+function tokenize(q: string | undefined): string[] {
+  return q ? q.split(/\s+/).filter(Boolean).slice(0, 6) : [];
+}
+
+function asNumber(token: string): number | undefined {
+  return /^\d+$/.test(token) ? parseInt(token, 10) : undefined;
+}
+
+// Felder, die zum Artikel gehören – einschließlich des Verkäufers, dem er gehört.
+function articleClauses(token: string): Prisma.SaleWhereInput[] {
+  const n = asNumber(token);
+  return [
+    { article: { title: { contains: token, mode: 'insensitive' } } },
+    { article: { qrCode: { contains: token, mode: 'insensitive' } } },
+    { article: { sizeLabel: { contains: token, mode: 'insensitive' } } },
+    { article: { basarSeller: { seller: { firstName: { contains: token, mode: 'insensitive' } } } } },
+    { article: { basarSeller: { seller: { lastName: { contains: token, mode: 'insensitive' } } } } },
+    ...(n !== undefined ? [{ article: { basarSeller: { sellerId: { equals: n } } } }] : []),
+  ];
+}
+
+// Felder des Kassierers, der den Vorgang gescannt hat.
+function cashierClauses(token: string): Prisma.SaleWhereInput[] {
+  const n = asNumber(token);
+  return [
+    { cashier: { firstName: { contains: token, mode: 'insensitive' } } },
+    { cashier: { lastName: { contains: token, mode: 'insensitive' } } },
+    ...(n !== undefined ? [{ cashierId: { equals: n } }] : []),
+  ];
+}
+
 // GET /api/basars/:id/transactions – Kassenvorgänge (gruppiert nach clientTxId) für die
 // aufklappbare Kassierertabelle in der Admin-Statistik. Admin only.
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -22,12 +55,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     const url = new URL(request.url);
     const cashierIdParam = url.searchParams.get('cashierId');
-    const q = url.searchParams.get('q')?.trim() || undefined;
-    const scopeParam = url.searchParams.get('scope');
-    if (scopeParam !== null && scopeParam !== 'article' && scopeParam !== 'cashier' && scopeParam !== 'all') {
-      return NextResponse.json({ error: 'Ungültiger scope' }, { status: 400 });
-    }
-    const scope = scopeParam ?? 'all';
+    // Zwei getrennte Suchfelder statt eines gemeinsamen mit Bereichsumschalter. Mit einem
+    // Feld ließ sich „dieser Kassierer UND dieser Artikel“ nicht ausdrücken: dort musste
+    // jedes Wort irgendwo treffen, egal wo. „hans jeans“ fand deshalb auch Jeans eines
+    // *Verkäufers* namens Hans, verkauft von einem beliebigen Kassierer. Beide Felder sind
+    // einzeln optional und werden miteinander UND-verknüpft.
+    const qArticle = url.searchParams.get('article')?.trim() || undefined;
+    const qCashier = url.searchParams.get('cashier')?.trim() || undefined;
     const cursor = url.searchParams.get('cursor');
     const limitParam = parseInt(url.searchParams.get('limit') || '50', 10);
     const limit = Math.min(Math.max(Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 50, 1), 200);
@@ -46,34 +80,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       }
     }
 
-    if (q) {
-      // Wortweise UND-Verknüpfung: "jeans blau" findet "Jeans blau" wie auch "Blaue Jeanshose".
-      // ponytail: kein Postgres-tsvector/GIN – `contains` je Token reicht bei ein paar tausend
-      // Sales pro Basar und braucht weder Preview-Feature noch Migration. Wird die Suche
-      // spürbar langsam, ist der Umstieg auf Full-Text-Index der nächste Schritt.
-      const tokens = q.split(/\s+/).filter(Boolean).slice(0, 6);
-      where.AND = tokens.map((token) => {
-        const asNumber = /^\d+$/.test(token) ? parseInt(token, 10) : undefined;
-        const articleClauses: Prisma.SaleWhereInput[] = [
-          { article: { title: { contains: token, mode: 'insensitive' } } },
-          { article: { qrCode: { contains: token, mode: 'insensitive' } } },
-          { article: { sizeLabel: { contains: token, mode: 'insensitive' } } },
-          { article: { basarSeller: { seller: { firstName: { contains: token, mode: 'insensitive' } } } } },
-          { article: { basarSeller: { seller: { lastName: { contains: token, mode: 'insensitive' } } } } },
-          ...(asNumber !== undefined ? [{ article: { basarSeller: { sellerId: { equals: asNumber } } } }] : []),
-        ];
-        const cashierClauses: Prisma.SaleWhereInput[] = [
-          { cashier: { firstName: { contains: token, mode: 'insensitive' } } },
-          { cashier: { lastName: { contains: token, mode: 'insensitive' } } },
-          ...(asNumber !== undefined ? [{ cashierId: { equals: asNumber } }] : []),
-        ];
-        return {
-          OR: scope === 'article' ? articleClauses
-            : scope === 'cashier' ? cashierClauses
-            : [...articleClauses, ...cashierClauses],
-        };
-      });
-    }
+    // Wortweise UND-Verknüpfung innerhalb eines Feldes: „jeans blau“ findet „Jeans blau“
+    // wie auch „Blaue Jeanshose“. Die Bedingungen beider Felder landen in derselben
+    // UND-Liste, damit Artikel- und Kassiererfilter gleichzeitig gelten.
+    // ponytail: kein Postgres-tsvector/GIN – `contains` je Token reicht bei ein paar tausend
+    // Sales pro Basar und braucht weder Preview-Feature noch Migration. Wird die Suche
+    // spürbar langsam, ist der Umstieg auf Full-Text-Index der nächste Schritt.
+    const filters: Prisma.SaleWhereInput[] = [
+      ...tokenize(qArticle).map((token) => ({ OR: articleClauses(token) })),
+      ...tokenize(qCashier).map((token) => ({ OR: cashierClauses(token) })),
+    ];
+    if (filters.length > 0) where.AND = filters;
 
     const sales = await prisma.sale.findMany({
       where,

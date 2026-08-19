@@ -134,11 +134,11 @@ describe('GET /api/basars/[id]/transactions', () => {
     expect(cancelledItem.isCancelled).toBe(true);
   });
 
-  it('q durchsucht den Artikeltitel', async () => {
+  it('article durchsucht den Artikeltitel', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.sale.findMany.mockResolvedValue([]);
 
-    await GET(makeRequest('?q=Hose'), makeContext());
+    await GET(makeRequest('?article=Hose'), makeContext());
 
     const args = prismaMock.sale.findMany.mock.calls[0][0];
     expect(args.where.AND).toHaveLength(1);
@@ -147,11 +147,11 @@ describe('GET /api/basars/[id]/transactions', () => {
     );
   });
 
-  it('q als Zahl durchsucht auch die Verkäufernummer', async () => {
+  it('article als Zahl durchsucht auch die Verkäufernummer', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.sale.findMany.mockResolvedValue([]);
 
-    await GET(makeRequest('?q=1234'), makeContext());
+    await GET(makeRequest('?article=1234'), makeContext());
 
     const args = prismaMock.sale.findMany.mock.calls[0][0];
     expect(args.where.AND[0].OR).toEqual(
@@ -165,7 +165,7 @@ describe('GET /api/basars/[id]/transactions', () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.sale.findMany.mockResolvedValue([]);
 
-    await GET(makeRequest('?q=jeans%20blau'), makeContext());
+    await GET(makeRequest('?article=jeans%20blau'), makeContext());
 
     const args = prismaMock.sale.findMany.mock.calls[0][0];
     expect(args.where.AND).toHaveLength(2);
@@ -177,11 +177,11 @@ describe('GET /api/basars/[id]/transactions', () => {
     );
   });
 
-  it('scope=article sucht nicht in Kassiererfeldern', async () => {
+  it('das Artikelfeld sucht nicht in Kassiererfeldern', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.sale.findMany.mockResolvedValue([]);
 
-    await GET(makeRequest('?q=Anna&scope=article'), makeContext());
+    await GET(makeRequest('?article=Anna'), makeContext());
 
     const or = prismaMock.sale.findMany.mock.calls[0][0].where.AND[0].OR;
     expect(JSON.stringify(or)).not.toContain('cashier');
@@ -190,22 +190,48 @@ describe('GET /api/basars/[id]/transactions', () => {
     );
   });
 
-  it('scope=cashier sucht nicht in Artikelfeldern und trifft die Kassierernummer', async () => {
+  it('das Kassiererfeld sucht nicht in Artikelfeldern und trifft die Kassierernummer', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.sale.findMany.mockResolvedValue([]);
 
-    await GET(makeRequest('?q=9004&scope=cashier'), makeContext());
+    await GET(makeRequest('?cashier=9004'), makeContext());
 
     const or = prismaMock.sale.findMany.mock.calls[0][0].where.AND[0].OR;
     expect(JSON.stringify(or)).not.toContain('article');
     expect(or).toEqual(expect.arrayContaining([{ cashierId: { equals: 9004 } }]));
   });
 
-  it('returns 400 bei unbekanntem scope', async () => {
+  // Der eigentliche Zweck der getrennten Felder: beide Filter müssen gleichzeitig gelten.
+  // Mit dem früheren gemeinsamen Feld ging das nicht – dort musste jedes Wort irgendwo
+  // treffen, sodass „hans jeans“ auch Jeans eines *Verkäufers* Hans fand, gescannt von
+  // einem beliebigen Kassierer.
+  it('verknüpft Artikel- und Kassiererfeld mit UND', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
-    const res = await GET(makeRequest('?q=x&scope=quatsch'), makeContext());
-    expect(res.status).toBe(400);
-    expect(prismaMock.sale.findMany).not.toHaveBeenCalled();
+    prismaMock.sale.findMany.mockResolvedValue([]);
+
+    await GET(makeRequest('?article=jeans&cashier=Hans'), makeContext());
+
+    const and = prismaMock.sale.findMany.mock.calls[0][0].where.AND;
+    expect(and).toHaveLength(2);
+    // Die Artikelbedingung darf keine Kassiererfelder enthalten und umgekehrt – sonst
+    // wäre die Zuordnung wieder unscharf.
+    expect(JSON.stringify(and[0])).not.toContain('cashier');
+    expect(and[0].OR).toEqual(
+      expect.arrayContaining([{ article: { title: { contains: 'jeans', mode: 'insensitive' } } }])
+    );
+    expect(JSON.stringify(and[1])).not.toContain('article');
+    expect(and[1].OR).toEqual(
+      expect.arrayContaining([{ cashier: { firstName: { contains: 'Hans', mode: 'insensitive' } } }])
+    );
+  });
+
+  it('sucht ohne Suchfelder gar nicht (keine AND-Bedingung)', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.sale.findMany.mockResolvedValue([]);
+
+    await GET(makeRequest(''), makeContext());
+
+    expect(prismaMock.sale.findMany.mock.calls[0][0].where.AND).toBeUndefined();
   });
 
   it('löst Verkäufername/-nummer und Kassierername je Position korrekt auf', async () => {
