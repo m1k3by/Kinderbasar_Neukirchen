@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, use, useCallback } from 'react';
 import Header from '../../../../components/Header';
 import { getNavLinks, type NavUser } from '../../../../lib/navLinks';
 import { articleCacheKey, articleCacheEtagKey, staleArticleCacheKeys } from '../../../../lib/scanCache';
-import { buildScannerConfig, hasNativeBarcodeDetector, scannerRecoveryAction, scannerTuning, type ScannerTuning } from '../../../../lib/scannerConfig';
+import { buildScannerConfig, hasNativeBarcodeDetector, scannerRecoveryAction, scannerTuning, SCANNER_VIEWPORT_HEIGHT, type ScannerTuning } from '../../../../lib/scannerConfig';
 
 interface ScannedArticle {
   id: string;
@@ -368,7 +368,12 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
         showErrorFlash(msg);
         return 1000;
       }
-      setCart(prev => [...prev, { ...data, salePrice: data.price }]);
+      // Neueste Position nach oben: der Warenkorb steht unter dem Scanner, angehängt landete
+      // der eben gescannte Artikel mit jedem Scan weiter unten und ab etwa zehn Positionen
+      // außerhalb des Bildschirms – man musste scrollen, um zu sehen, was gerade erfasst
+      // wurde. Die Reihenfolge ist rein für die Anzeige; der Kassiervorgang behandelt jede
+      // Position einzeln und der Verkaufszeitpunkt kommt aus der Datenbank.
+      setCart(prev => [{ ...data, salePrice: data.price }, ...prev]);
       scanTimestampsRef.current.set(qrCode, Date.now());
       setScanLastTitle(data.title);
       setScanFlash('success');
@@ -386,7 +391,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
         showErrorFlash('Bereits verkauft (laut Cache)');
         return 1000;
       } else if (cached) {
-        setCart(prev => [...prev, { ...cached, salePrice: cached.price }]);
+        setCart(prev => [{ ...cached, salePrice: cached.price }, ...prev]);
         scanTimestampsRef.current.set(qrCode, Date.now());
         setScanLastTitle(cached.title + ' (offline)');
         setScanFlash('success');
@@ -416,7 +421,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
     if (!pendingManualQr || !manualTitle) return;
     const price = parseFloat(manualPrice);
     if (isNaN(price) || price < 0) return;
-    setCart(prev => [...prev, {
+    setCart(prev => [{
       id: `manual-${Date.now()}`,
       title: manualTitle,
       price,
@@ -425,7 +430,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
       sellerName: 'Manuell',
       qrCode: pendingManualQr,
       basarId,
-    }]);
+    }, ...prev]);
     scannedCodesRef.current.add(pendingManualQr);
     showMessage(`✓ "${manualTitle}" manuell hinzugefügt`, 'success');
     playScanSuccess();
@@ -591,12 +596,22 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
             </div>
           )}
 
+          {/* Sichtbarer Kameraausschnitt: fester Querformat-Streifen statt der vollen
+              Vorschau. Im Hochformat liefert ein Handy ein hohes Bild, das früher fast den
+              ganzen Bildschirm einnahm und den Warenkorb darunter schob. Beschnitten wird
+              nur der Rahmen – das <video> behält sein Seitenverhältnis, weil html5-qrcode
+              sonst den falschen Bildausschnitt dekodiert (siehe SCANNER_VIEWPORT_HEIGHT). */}
           <div
-            id="qr-reader-container"
             ref={scannerDivRef}
-            className={`w-full rounded-lg bg-gray-100 relative ${scanning ? 'block' : 'hidden'}`}
-            style={{ minHeight: scanning ? '280px' : '0' }}
+            className={`w-full rounded-lg bg-gray-100 relative overflow-hidden ${scanning ? 'block' : 'hidden'}`}
+            style={{ height: scanning ? SCANNER_VIEWPORT_HEIGHT : 0 }}
           >
+            {/* Vertikal zentriert: gezeigt wird die Mitte des Bildes – dort sitzt auch das
+                Suchfenster, das html5-qrcode mittig in die Vorschau legt. */}
+            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2">
+              <div id="qr-reader-container" className="w-full" />
+            </div>
+
             {scanFlash && (
               <div className={`absolute inset-0 z-10 flex flex-col items-center justify-center pointer-events-none
                 ${scanFlash === 'success' ? 'bg-green-500/85' : 'bg-red-500/85'}`}>

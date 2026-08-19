@@ -21,7 +21,7 @@
 
 export interface ScannerTuning {
   fps: number;
-  /** Anteil der kürzeren Kantenlänge, den das Suchfenster einnimmt. */
+  /** Anteil der sichtbaren Vorschauhöhe (SCANNER_VIEWPORT_HEIGHT), den das Suchfenster einnimmt. */
   qrboxRatio: number;
   disableFlip: boolean;
   videoConstraints: MediaTrackConstraints;
@@ -91,13 +91,40 @@ export function scannerRecoveryAction(video: VideoLike | null | undefined): Scan
   return video.paused ? 'resume' : 'ok';
 }
 
+/**
+ * Höhe des sichtbaren Kameraausschnitts an der Kasse (px).
+ *
+ * Das Video selbst behält sein natürliches Seitenverhältnis – im Hochformat liefert ein Handy
+ * ein hohes Bild, das früher den halben Bildschirm einnahm und den Warenkorb unter den Falz
+ * schob. Die Kasse zeigt davon nur noch einen Querformat-Streifen dieser Höhe (siehe
+ * app/admin/basars/[id]/kasse/page.tsx); oben und unten wird abgeschnitten.
+ *
+ * Warum nicht einfach das Video kleiner/breiter ziehen: html5-qrcode rechnet die Scan-Region
+ * mit getrennten Faktoren `videoWidth/clientWidth` und `videoHeight/clientHeight` in
+ * Bildkoordinaten um (html5-qrcode/esm/html5-qrcode.js, Z. 562). Bekäme das <video> per CSS
+ * ein anderes Seitenverhältnis als der Kamerastream, fielen beide Faktoren auseinander und
+ * der dekodierte Ausschnitt wäre gestaucht – der QR-Code säße sichtbar im Rahmen und würde
+ * trotzdem nicht erkannt. Deshalb wird ausschließlich der Rahmen beschnitten.
+ */
+export const SCANNER_VIEWPORT_HEIGHT = 220;
+
+/** Seitenverhältnis des Suchfensters (Breite : Höhe). Querformat wie der sichtbare Streifen. */
+export const QRBOX_ASPECT = 1.5;
+
 /** Fertige `Html5QrcodeCameraScanConfig` für `Html5Qrcode.start()`. */
 export function buildScannerConfig(tuning: ScannerTuning) {
   return {
     fps: tuning.fps,
+    // Das Suchfenster muss in den sichtbaren Streifen passen, nicht in das (viel höhere)
+    // Video – sonst liegt ein Teil davon hinter dem abgeschnittenen Rand und der Nutzer
+    // zielt auf einen Bereich, den er nicht sieht. Es bemisst sich deshalb an der Höhe des
+    // Ausschnitts; die Breite folgt daraus im Querformat, gedeckelt auf 90 % der Videobreite,
+    // damit es nie breiter als der Sucher wird (html5-qrcode verwirft ein zu großes Fenster).
     qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-      const size = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * tuning.qrboxRatio);
-      return { width: size, height: size };
+      const visibleHeight = Math.min(viewfinderHeight, SCANNER_VIEWPORT_HEIGHT);
+      const height = Math.floor(visibleHeight * tuning.qrboxRatio);
+      const width = Math.min(Math.floor(height * QRBOX_ASPECT), Math.floor(viewfinderWidth * 0.9));
+      return { width, height };
     },
     disableFlip: tuning.disableFlip,
     videoConstraints: tuning.videoConstraints,

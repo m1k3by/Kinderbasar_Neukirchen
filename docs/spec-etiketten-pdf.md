@@ -148,10 +148,10 @@ Unter dem QR-Code steht nichts – er nutzt die volle Höhe, alle Angaben stehen
 |---|---|---|
 | QR-Code | `x+5`, `y+2,5`, 31 × 31 mm | – |
 | Verkäufernummer | rechtsbündig `x+65`, `y+7,5` | Helvetica-Bold 12 pt |
-| Label „Bezeichnung" | `x+38`, `y+11` | Helvetica 5 pt, Grau `#AAAAAA` |
+| Label „Bezeichnung" | `x+38`, `y+11` | Helvetica 6 pt, Grau `#6E6E6E` |
 | Bezeichnung | `x+38`, `y+14,5` (+3,9 je Zeile) | Helvetica-Bold 9 pt, max. 3 Zeilen |
 | Zielgruppe | mittig in der Textspalte, `y+26,6` | Helvetica-Bold 10 pt, farbig |
-| Label „Größe" / „Preis" | `x+38` / rechtsbündig `x+65`, `y+29,2` | Helvetica 5 pt, Grau |
+| Label „Größe" / „Preis" | `x+38` / rechtsbündig `x+65`, `y+29,2` | Helvetica 6 pt, Grau `#6E6E6E` |
 | Größe | `x+38`, `y+33` | Helvetica-Bold 12 pt (siehe Schrumpfung) |
 | Preis | rechtsbündig `x+65`, `y+33` | Helvetica-Bold 12 pt (siehe Schrumpfung) |
 

@@ -129,11 +129,17 @@ export function drawQr(doc: jsPDF, text: string, x: number, y: number, sizeMm: n
   }
 }
 
-/** Graue Feldbeschriftung über einem Wert – 5 pt, damit sie nie mit dem Wert konkurriert. */
+/**
+ * Feldbeschriftung über einem Wert. 6 pt in Dunkelgrau: groß und kontrastreich genug
+ * zum Lesen, aber klar unter dem Wert selbst (9–12 pt, schwarz, fett).
+ *
+ * Nach oben begrenzt die Zielgruppenzeile (Grundlinie 26,6 mm, Unterlänge bis 27,4 mm),
+ * darunter beginnt bei 6 pt die Oberkante der Beschriftung erst bei 27,7 mm.
+ */
 function drawFieldLabel(doc: jsPDF, text: string, x: number, y: number, align?: 'right') {
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(5);
-  doc.setTextColor(170);
+  doc.setFontSize(6);
+  doc.setTextColor(110);
   doc.text(text, x, y, align ? { align } : undefined);
   doc.setTextColor(0);
 }

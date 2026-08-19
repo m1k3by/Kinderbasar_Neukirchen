@@ -4,6 +4,7 @@ import {
   scannerTuning,
   buildScannerConfig,
   scannerRecoveryAction,
+  SCANNER_VIEWPORT_HEIGHT,
 } from '@/app/lib/scannerConfig';
 
 describe('hasNativeBarcodeDetector', () => {
@@ -81,17 +82,46 @@ describe('buildScannerConfig', () => {
   });
 
   // qrbox bekommt html5-qrcode als Funktion und ruft sie mit den Maßen des Suchers auf.
-  it('berechnet ein quadratisches Suchfenster aus der kürzeren Kante', () => {
+  it('berechnet ein Querformat-Suchfenster', () => {
     const config = buildScannerConfig(scannerTuning(false)); // ratio 0.55
-    expect(config.qrbox(400, 300)).toEqual({ width: 165, height: 165 });
-    expect(config.qrbox(300, 400)).toEqual({ width: 165, height: 165 });
+    // 220 sichtbare Höhe × 0,55 = 121; Breite im Verhältnis 1,5 : 1 = 181.
+    expect(config.qrbox(400, 300)).toEqual({ width: 181, height: 121 });
+    expect(config.qrbox(300, 400)).toEqual({ width: 181, height: 121 });
   });
 
-  it('liefert ganzzahlige Kantenlängen', () => {
-    const config = buildScannerConfig(scannerTuning(true)); // ratio 0.72
-    const box = config.qrbox(377, 812);
-    expect(Number.isInteger(box.width)).toBe(true);
-    expect(box.width).toBe(box.height);
+  // Der Kern der Änderung: die Kasse zeigt nur einen Streifen von SCANNER_VIEWPORT_HEIGHT.
+  // Ein Suchfenster, das sich an der (viel größeren) Videohöhe bemisst, läge zum Teil hinter
+  // dem abgeschnittenen Rand – der Nutzer zielt dann auf einen Bereich, den er nicht sieht.
+  it('hält das Suchfenster innerhalb des sichtbaren Streifens', () => {
+    for (const native of [true, false]) {
+      const config = buildScannerConfig(scannerTuning(native));
+      // Typisches Handy im Hochformat: das Video ist weit höher als der Ausschnitt.
+      const box = config.qrbox(377, 812);
+      expect(box.height).toBeLessThanOrEqual(SCANNER_VIEWPORT_HEIGHT);
+    }
+  });
+
+  // html5-qrcode verwirft ein Suchfenster, das größer als der Sucher ist
+  // (getShadedRegionBounds), und scannt dann ohne Begrenzung weiter.
+  it('passt bei jedem Seitenverhältnis in den Sucher', () => {
+    const config = buildScannerConfig(scannerTuning(true)); // ratio 0.72, das größere Fenster
+    for (const [w, h] of [[377, 812], [160, 812], [400, 150], [1280, 720]]) {
+      const box = config.qrbox(w, h);
+      expect(box.width).toBeLessThanOrEqual(w);
+      expect(box.height).toBeLessThanOrEqual(h);
+      expect(Number.isInteger(box.width)).toBe(true);
+      expect(Number.isInteger(box.height)).toBe(true);
+    }
+  });
+
+  // Die Begründung von qrboxRatio (weniger Bildpunkte je Dekodierlauf ohne nativen Decoder)
+  // muss die Umstellung auf Querformat überleben.
+  it('dekodiert ohne nativen Decoder weiterhin eine kleinere Fläche', () => {
+    const flaeche = (native: boolean) => {
+      const box = buildScannerConfig(scannerTuning(native)).qrbox(377, 812);
+      return box.width * box.height;
+    };
+    expect(flaeche(false)).toBeLessThan(flaeche(true));
   });
 });
 
