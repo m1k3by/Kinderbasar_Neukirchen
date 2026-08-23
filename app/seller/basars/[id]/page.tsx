@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import Header from '../../../components/Header';
 import { parseSizes } from '../../../lib/sizes';
 import { getNavLinks } from '../../../lib/navLinks';
-import { maxArticlesFor } from '../../../lib/articleLimits';
+import { formatArticleLimit, maxArticlesFor } from '../../../lib/articleLimits';
 
 interface Article {
   id: string;
@@ -38,7 +38,7 @@ interface BasarDetail {
   entryFee: number;
   status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
   allowedSizes?: string;
-  myParticipation?: { isActive: boolean; activatedAt: string | null } | null;
+  myParticipation?: { isActive: boolean; activatedAt: string | null; viaOrga?: boolean } | null;
 }
 
 interface Settlement {
@@ -77,6 +77,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   const [showArchive, setShowArchive] = useState(false);
   const [selectedArchiveIds, setSelectedArchiveIds] = useState<Set<string>>(new Set());
   const [isEmployee, setIsEmployee] = useState(false);
+  const [isOrga, setIsOrga] = useState(false);
   const [isCashier, setIsCashier] = useState(false);
   const [allowedSizes, setAllowedSizes] = useState<string[]>([]);
   const [sizeError, setSizeError] = useState('');
@@ -132,6 +133,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
         if (me.role !== 'admin') {
           setSellerName(`${me.firstName} ${me.lastName}`);
           setIsEmployee(me.isEmployee || false);
+          setIsOrga(me.isOrga || false);
           setIsCashier(me.isCashier || false);
           // Archiv für jeden OPEN-Basar laden, unabhängig von der Teilnahme – die Übernahme
           // aus dem Archiv ist Artikelanlage und setzt keine Anmeldung mehr voraus.
@@ -297,7 +299,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
     </div>
   );
 
-  const maxArticles = maxArticlesFor(basar, { isEmployee }, basarSeller?.maxArticlesOverride);
+  const maxArticles = maxArticlesFor(basar, { isEmployee, isOrga }, basarSeller?.maxArticlesOverride);
   const soldCount = articles.filter(a => a.status === 'SOLD').length;
   const soldRevenue = articles.filter(a => a.status === 'SOLD').reduce((s, a) => s + Number(a.price), 0);
   // Nur der Basar-Status entscheidet, nicht die Teilnahme: Artikel dürfen vorbereitet
@@ -332,7 +334,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
             {basar.location && ` · ${basar.location}`}
           </p>
           <p className="text-sm text-gray-500 mt-1">
-            {Number(basar.commissionPercent).toFixed(0)}% Provision · Max. {maxArticles} Artikel
+            {Number(basar.commissionPercent).toFixed(0)}% Provision · Max. {formatArticleLimit(maxArticles)} Artikel
             {Number(basar.entryFee) > 0 && ` · ${fmt(Number(basar.entryFee))} € Teilnahmegebühr`}
           </p>
           {basarSeller && (
@@ -543,7 +545,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
             <h2 className="font-semibold text-gray-700 mb-3">
               Neuen Artikel hinzufügen
               <span className={`ml-2 text-sm font-normal ${articles.length >= maxArticles ? 'text-orange-600 font-semibold' : 'text-gray-400'}`}>
-                ({articles.length}/{maxArticles})
+                ({articles.length}/{formatArticleLimit(maxArticles)})
               </span>
             </h2>
 
@@ -552,7 +554,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
                 Erklärung käme also nie an. */}
             {articles.length >= maxArticles && (
               <div className="mb-3 px-4 py-3 rounded-lg bg-orange-50 border border-orange-200 text-sm text-orange-800">
-                <strong>Maximale Artikelanzahl erreicht.</strong> Du hast alle {maxArticles} Artikel
+                <strong>Maximale Artikelanzahl erreicht.</strong> Du hast alle {formatArticleLimit(maxArticles)} Artikel
                 angelegt, die für diesen Basar erlaubt sind. Zum Anlegen eines weiteren Artikels
                 musst du unten einen vorhandenen löschen.
               </div>

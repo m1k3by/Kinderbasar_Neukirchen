@@ -68,6 +68,9 @@ describe('GET /api/me', () => {
 
         isEmployee: true,
         isCashier: true,
+        // Die Verkäuferoberfläche braucht das Orga-Kennzeichen für Artikellimit und
+        // Teilnahme-Umschalter (app/lib/articleLimits.ts, app/lib/participation.ts).
+        isOrga: true,
       },
     });
   });

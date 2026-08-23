@@ -15,6 +15,13 @@ model Seller {
   lastName           String
   isEmployee         Boolean  @default(false)
   isCashier          Boolean  @default(false)
+  // Orga-Kennzeichen, nur für Mitarbeiter sinnvoll und ausschließlich vom Admin gesetzt.
+  // Zwei Wirkungen, siehe app/lib/articleLimits.ts und app/lib/participation.ts:
+  //  - gilt in jedem Basar als teilnehmend, ohne sich zu aktivieren
+  //  - kein Artikellimit
+  // Wird beim Zurückstufen auf Verkäufer mit zurückgesetzt (toggle-employee-status),
+  // damit kein Verkäufer ein wirkungsvolles Orga-Kennzeichen behält.
+  isOrga             Boolean  @default(false)
   createdAt          DateTime @default(now())
   password           String?
   qrCode             String?

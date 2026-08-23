@@ -30,6 +30,7 @@ export async function GET() {
         email: true,
         isEmployee: true,
         isCashier: true,
+        isOrga: true,
       },
     });
 

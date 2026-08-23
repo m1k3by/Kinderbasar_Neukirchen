@@ -1,4 +1,5 @@
 ﻿import { NextResponse } from 'next/server';
+import { participationPayload } from '../../../lib/participation';
 import { prisma } from '../../../lib/prisma';
 import { requireAuth, requireAdmin } from '../../../lib/apiAuth';
 import { buildBasarData, lockedFieldsForActiveBasar } from '../../../lib/basarPayload';
@@ -38,12 +39,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json(basar);
     }
 
-    const myParticipation = await prisma.basarSeller.findUnique({
-      where: { basarId_sellerId: { basarId: id, sellerId: auth.sellerId } },
-      select: { isActive: true, activatedAt: true },
-    });
+    // isOrga wird aus der Datenbank gelesen, nicht aus dem Token: das Kennzeichen setzt der
+    // Admin jederzeit, ein Token behielte den alten Wert bis zur nächsten Anmeldung.
+    const [myParticipation, seller] = await Promise.all([
+      prisma.basarSeller.findUnique({
+        where: { basarId_sellerId: { basarId: id, sellerId: auth.sellerId } },
+        select: { isActive: true, activatedAt: true },
+      }),
+      prisma.seller.findUnique({ where: { sellerId: auth.sellerId }, select: { isOrga: true } }),
+    ]);
 
-    return NextResponse.json({ ...basar, myParticipation: myParticipation ?? null });
+    // Aufgelöst ausliefern, damit keine Oberfläche das Orga-Kennzeichen selbst auswerten muss.
+    return NextResponse.json({ ...basar, myParticipation: participationPayload(seller, myParticipation) });
   } catch (error) {
     console.error('GET /api/basars/[id] error:', error);
     return NextResponse.json({ error: 'Interner Serverfehler' }, { status: 500 });

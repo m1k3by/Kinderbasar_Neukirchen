@@ -30,16 +30,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Verkäufer nicht gefunden' }, { status: 404 });
     }
 
-    // Toggle isEmployee status
+    const nextIsEmployee = !seller.isEmployee;
+
+    // Orga ist ein Zusatz zum Mitarbeiter und fällt beim Zurückstufen mit weg. Bliebe das
+    // Kennzeichen stehen, hätte ein reiner Verkäufer weiterhin kein Artikellimit und wäre in
+    // jedem Basar angemeldet – unsichtbar, weil die Oberfläche den Orga-Schalter für
+    // Verkäufer gar nicht anzeigt.
     const updatedSeller = await prisma.seller.update({
       where: { sellerId: sellerIdInt },
-      data: { isEmployee: !seller.isEmployee },
+      data: { isEmployee: nextIsEmployee, ...(nextIsEmployee ? {} : { isOrga: false }) },
     });
+
+    const orgaRemoved = !nextIsEmployee && seller.isOrga;
 
     return NextResponse.json({ 
       success: true, 
       isEmployee: updatedSeller.isEmployee,
+      isOrga: updatedSeller.isOrga,
       message: `Rolle wurde geändert zu ${updatedSeller.isEmployee ? 'Mitarbeiter' : 'Verkäufer'}`
+        + (orgaRemoved ? ' – Orga-Kennzeichen wurde dabei entfernt' : '')
     });
   } catch (error: any) {
     console.error('Error toggling employee status:', error);

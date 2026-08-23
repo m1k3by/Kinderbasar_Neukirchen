@@ -318,9 +318,9 @@ describe('POST /api/basars/[id]/articles – Limit je Gruppe', () => {
   });
 
   /** Basar mit getrennten Limits + Rolle des Verkäufers laut Datenbank. */
-  function setup(isEmployee: boolean, count: number, maxArticlesPerEmployee: number | null = 80) {
+  function setup(isEmployee: boolean, count: number, maxArticlesPerEmployee: number | null = 80, isOrga = false) {
     prismaMock.basar.findUnique.mockResolvedValue({ ...openBasar, maxArticlesPerEmployee });
-    prismaMock.seller.findUnique.mockResolvedValue({ isEmployee });
+    prismaMock.seller.findUnique.mockResolvedValue({ isEmployee, isOrga });
     prismaMock.article.count.mockResolvedValue(count);
   }
 
@@ -362,8 +362,27 @@ describe('POST /api/basars/[id]/articles – Limit je Gruppe', () => {
     const res = await POST(makePostRequest(body), makeContext());
     expect(res.status).toBe(201);
     expect(prismaMock.seller.findUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { sellerId: 1234 }, select: { isEmployee: true } })
+      expect.objectContaining({ where: { sellerId: 1234 }, select: { isEmployee: true, isOrga: true } })
     );
+  });
+
+  // Orga stellt die Artikel ein, die dem Basar selbst gehören – dafür gibt es keine
+  // sinnvolle Obergrenze. Ohne das Kennzeichen wäre bei 80 Schluss.
+  it('lässt Orga über dem Mitarbeiterlimit weiter anlegen', async () => {
+    setup(true, 5000, 80, true);
+    const res = await POST(makePostRequest(body), makeContext());
+    expect(res.status).toBe(201);
+    expect(prismaMock.article.create).toHaveBeenCalled();
+  });
+
+  // Die Einzelfall-Ausnahme bleibt auch für Orga das stärkste Mittel – sonst ließe sich
+  // eine Orga-Person gar nicht mehr begrenzen.
+  it('begrenzt auch Orga, wenn eine Einzelfall-Ausnahme gesetzt ist', async () => {
+    prismaMock.basarSeller.findUnique.mockResolvedValue({ ...fakeBasarSeller, maxArticlesOverride: 3 });
+    setup(true, 3, 80, true);
+    const res = await POST(makePostRequest(body), makeContext());
+    expect(res.status).toBe(400);
+    expect(prismaMock.article.create).not.toHaveBeenCalled();
   });
 
   it('lässt die Einzelfall-Ausnahme über dem Gruppenlimit stehen', async () => {

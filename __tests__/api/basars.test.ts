@@ -15,6 +15,9 @@ const prismaMock = vi.hoisted(() => ({
     count: vi.fn(),
     create: vi.fn(),
   },
+  // Die Route liest isOrga des Aufrufers aus der Datenbank, um die Teilnahme aufzulösen
+  // (app/lib/participation.ts) – nicht aus dem Token, das den alten Wert behielte.
+  seller: { findUnique: vi.fn() },
 }));
 vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
 
@@ -50,6 +53,30 @@ describe('GET /api/basars', () => {
     expect(json.basars).toHaveLength(1);
     expect(json.total).toBe(1);
     expect(json.page).toBe(1);
+  });
+
+  // Orga gilt in jedem Basar als teilnehmend, auch ohne BasarSeller-Zeile. Ohne diese
+  // Auflösung müsste sich die Orga in jedem Basar einzeln aktivieren.
+  it('meldet für Orga eine aktive Teilnahme, auch ohne BasarSeller-Zeile', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basar.findMany.mockResolvedValue([{ ...fakeBasar, basarSellers: [] }]);
+    prismaMock.basar.count.mockResolvedValue(1);
+    prismaMock.seller.findUnique.mockResolvedValue({ isOrga: true });
+
+    const json = await (await GET(makeRequest('GET'))).json();
+
+    expect(json.basars[0].myParticipation).toEqual({ isActive: true, viaOrga: true });
+  });
+
+  it('meldet ohne Orga und ohne Zeile keine Teilnahme', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basar.findMany.mockResolvedValue([{ ...fakeBasar, basarSellers: [] }]);
+    prismaMock.basar.count.mockResolvedValue(1);
+    prismaMock.seller.findUnique.mockResolvedValue({ isOrga: false });
+
+    const json = await (await GET(makeRequest('GET'))).json();
+
+    expect(json.basars[0].myParticipation).toBeNull();
   });
 
   it('returns 500 on DB error', async () => {

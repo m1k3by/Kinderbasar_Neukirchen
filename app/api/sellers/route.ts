@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../lib/prisma';
 import { requireAdmin } from '../../lib/apiAuth';
+import { participationPayload } from '../../lib/participation';
 
 // GET /api/sellers – admin-only listing of all sellers.
 // Non-admin self-lookups now go through /api/me instead (this endpoint used to be
@@ -54,6 +55,7 @@ export async function GET(request: Request) {
         email: true,
         isEmployee: true,
         isCashier: true,
+        isOrga: true,
         createdAt: true,
         _count: { select: { taskSignups: true, cakes: true } },
         ...(basarId
@@ -98,7 +100,9 @@ export async function GET(request: Request) {
     const sellers = basarId
       ? rows.map((r) => {
           const { basarSellers, ...rest } = r as typeof r & { basarSellers?: ParticipationRow[] };
-          return { ...rest, participation: basarSellers?.[0] ?? null };
+          // Orga gilt in jedem Basar als teilnehmend, auch ohne BasarSeller-Zeile – aufgelöst
+          // ausliefern, damit die Liste dieselbe Wahrheit zeigt wie die Verkäuferoberfläche.
+          return { ...rest, participation: participationPayload(rest, basarSellers?.[0]) };
         })
       : rows;
 

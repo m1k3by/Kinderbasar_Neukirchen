@@ -81,6 +81,38 @@ describe('POST /api/admin/toggle-employee-status', () => {
     expect((await res.json()).isEmployee).toBe(false);
   });
 
+  // Orga ist ein Zusatz zum Mitarbeiter (Seller.isOrga). Bliebe das Kennzeichen beim
+  // Zurückstufen stehen, hätte ein reiner Verkäufer weiterhin kein Artikellimit und wäre in
+  // jedem Basar angemeldet – und zwar unsichtbar, weil die Verkäuferliste den Orga-Schalter
+  // nur für Mitarbeiter anzeigt.
+  it('entfernt das Orga-Kennzeichen beim Zurückstufen zum Verkäufer', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.seller.findUnique.mockResolvedValue({ sellerId: 1234, isEmployee: true, isOrga: true });
+    prismaMock.seller.update.mockResolvedValue({ sellerId: 1234, isEmployee: false, isOrga: false });
+
+    const res = await POST(makeRequest({ sellerId: 1234 }));
+
+    expect(res.status).toBe(200);
+    expect(prismaMock.seller.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { isEmployee: false, isOrga: false } })
+    );
+    expect((await res.json()).message).toContain('Orga');
+  });
+
+  // Umgekehrt darf das Hochstufen niemanden nebenbei zur Orga machen – das bleibt ein
+  // eigener, bewusster Schritt des Admins.
+  it('setzt beim Hochstufen zum Mitarbeiter kein Orga-Kennzeichen', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.seller.findUnique.mockResolvedValue({ sellerId: 1234, isEmployee: false, isOrga: false });
+    prismaMock.seller.update.mockResolvedValue({ sellerId: 1234, isEmployee: true, isOrga: false });
+
+    await POST(makeRequest({ sellerId: 1234 }));
+
+    expect(prismaMock.seller.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { isEmployee: true } })
+    );
+  });
+
   it('returns 500 on DB error', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.seller.findUnique.mockRejectedValue(new Error('DB error'));

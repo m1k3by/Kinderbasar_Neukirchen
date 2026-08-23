@@ -1,6 +1,7 @@
 ﻿import { NextResponse } from 'next/server';
 import { prisma } from '../../lib/prisma';
 import { requireAuth, requireAdmin } from '../../lib/apiAuth';
+import { participationPayload } from '../../lib/participation';
 import { buildBasarData } from '../../lib/basarPayload';
 
 // GET /api/basars – list all basars (any logged-in user)
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
     const where = { isArchived: archived };
     const isAdmin = auth.role === 'admin';
 
-    const [rows, total] = await Promise.all([
+    const [rows, total, me] = await Promise.all([
       prisma.basar.findMany({
         where,
         skip,
@@ -36,12 +37,17 @@ export async function GET(request: Request) {
         },
       }),
       prisma.basar.count({ where }),
+      // Orga gilt in jedem Basar als teilnehmend (app/lib/participation.ts). Aus der
+      // Datenbank gelesen statt aus dem Token, das den alten Wert behielte.
+      !isAdmin && auth.sellerId
+        ? prisma.seller.findUnique({ where: { sellerId: auth.sellerId }, select: { isOrga: true } })
+        : Promise.resolve(null),
     ]);
 
     const basars = rows.map((b) => {
       if (isAdmin || !('basarSellers' in b)) return b;
       const { basarSellers, ...rest } = b as typeof b & { basarSellers: { isActive: boolean; activatedAt: Date | null }[] };
-      return { ...rest, myParticipation: basarSellers[0] ?? null };
+      return { ...rest, myParticipation: participationPayload(me, basarSellers[0]) };
     });
 
     return NextResponse.json({ basars, total, page, limit });

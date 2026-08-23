@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Header from '../components/Header';
 import { getNavLinks } from '../lib/navLinks';
-import { maxArticlesFor } from '../lib/articleLimits';
+import { formatArticleLimit, maxArticlesFor } from '../lib/articleLimits';
 
 interface Basar {
   id: string;
@@ -18,7 +18,9 @@ interface Basar {
   entryFee: number;
   status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
   isArchived: boolean;
-  myParticipation: { isActive: boolean; activatedAt: string | null } | null;
+  // viaOrga: die Teilnahme kommt aus dem Orga-Kennzeichen, nicht aus einer eigenen
+  // Aktivierung – dann gibt es nichts umzuschalten (app/lib/participation.ts).
+  myParticipation: { isActive: boolean; activatedAt: string | null; viaOrga?: boolean } | null;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -39,6 +41,7 @@ export default function SellerPage() {
   const [sellerId, setSellerId] = useState('');
   const [sellerName, setSellerName] = useState('');
   const [isEmployee, setIsEmployee] = useState(false);
+  const [isOrga, setIsOrga] = useState(false);
   const [isCashier, setIsCashier] = useState(false);
   const [loading, setLoading] = useState(true);
   const [basars, setBasars] = useState<Basar[]>([]);
@@ -87,6 +90,7 @@ export default function SellerPage() {
         if (me.role !== 'admin') {
           setSellerName(`${me.firstName} ${me.lastName}`);
           setIsEmployee(me.isEmployee || false);
+          setIsOrga(me.isOrga || false);
           setIsCashier(me.isCashier || false);
         }
       }
@@ -264,7 +268,8 @@ export default function SellerPage() {
             <div className="space-y-4">
               {basars.map(basar => {
                 const isActive = basar.myParticipation?.isActive ?? false;
-                const canToggle = basar.status === 'OPEN' || basar.status === 'ACTIVE' || isActive;
+                const viaOrga = basar.myParticipation?.viaOrga ?? false;
+                const canToggle = !viaOrga && (basar.status === 'OPEN' || basar.status === 'ACTIVE' || isActive);
                 return (
                   <div key={basar.id} className="border border-gray-200 rounded-xl p-4">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -278,20 +283,21 @@ export default function SellerPage() {
                       {basar.location && ` · ${basar.location}`}
                     </p>
                     <p className="text-sm text-gray-500 mt-0.5">
-                      Max. {maxArticlesFor(basar, { isEmployee })} Artikel · {Number(basar.commissionPercent).toFixed(0)}% Provision
+                      Max. {formatArticleLimit(maxArticlesFor(basar, { isEmployee, isOrga }))} Artikel · {Number(basar.commissionPercent).toFixed(0)}% Provision
                       {Number(basar.entryFee) > 0 && ` · ${fmt(Number(basar.entryFee))} € Gebühr`}
                     </p>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-4">
                       <button
                         onClick={() => toggleParticipation(basar)}
-                        disabled={togglingBasarId === basar.id || (!canToggle && !isActive)}
+                        disabled={viaOrga || togglingBasarId === basar.id || (!canToggle && !isActive)}
+                        title={viaOrga ? 'Als Orga bist du in jedem Basar automatisch angemeldet.' : undefined}
                         className={`px-6 py-3 rounded-xl font-bold transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed ${
                           isActive
                             ? 'bg-green-500 hover:bg-green-600 text-white'
                             : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300'
                         }`}
                       >
-                        {togglingBasarId === basar.id ? '…' : isActive ? 'Teilnahme: AKTIV' : 'Teilnahme: INAKTIV'}
+                        {togglingBasarId === basar.id ? '…' : viaOrga ? 'Teilnahme: AKTIV (Orga)' : isActive ? 'Teilnahme: AKTIV' : 'Teilnahme: INAKTIV'}
                       </button>
                       {/* Auch für Nicht-Teilnehmer sichtbar – was ohne aktive Teilnahme
                           erlaubt ist, entscheidet die Detailseite, nicht diese Karte. */}

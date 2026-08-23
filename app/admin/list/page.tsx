@@ -11,6 +11,8 @@ interface Seller {
   // das frühere globale Seller.sellerStatusActive.
   participation?: {
     isActive: boolean;
+    // true = die Teilnahme kommt aus dem Orga-Kennzeichen, nicht aus einer Aktivierung.
+    viaOrga?: boolean;
     activatedAt: string | null;
     // Nachweis der Zustimmung zu AGB und Datenschutzerklärung. null = keine dokumentierte
     // Zustimmung (Altbestand oder vom Admin stellvertretend aktiviert).
@@ -23,6 +25,9 @@ interface Seller {
   email: string;
   isEmployee: boolean;
   isCashier: boolean;
+  // Zusatzkennzeichen für Mitarbeiter, nur vom Admin setzbar: gilt in jedem Basar als
+  // teilnehmend und hat kein Artikellimit (app/lib/participation.ts, app/lib/articleLimits.ts).
+  isOrga: boolean;
   createdAt: string;
   _count?: { taskSignups: number; cakes: number };
 }
@@ -292,6 +297,29 @@ export default function AdminListPage() {
     } catch (error) {
       console.error('Error toggling cashier status:', error);
       setMessage('Fehler beim Ändern des Kassierer-Status');
+      setTimeout(() => setMessage(''), 5000);
+    }
+  }
+
+  async function toggleOrgaStatus(sellerId: number) {
+    try {
+      const res = await fetch('/api/admin/toggle-orga-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sellerId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage(data.message);
+        setTimeout(() => setMessage(''), 3000);
+        loadSellers();
+      } else {
+        setMessage('Fehler: ' + (data.error || 'Unbekannter Fehler'));
+        setTimeout(() => setMessage(''), 5000);
+      }
+    } catch (error) {
+      console.error('Error toggling orga status:', error);
+      setMessage('Fehler beim Ändern des Orga-Status');
       setTimeout(() => setMessage(''), 5000);
     }
   }
@@ -1003,11 +1031,17 @@ export default function AdminListPage() {
                         >
                           {seller.isEmployee ? 'M' : 'V'}
                         </span>
+                        {seller.isOrga && (
+                          <span className="ml-1 px-2 py-1 text-xs rounded font-medium bg-amber-100 text-amber-800"
+                            title="Orga: in jedem Basar angemeldet, kein Artikellimit">
+                            Orga
+                          </span>
+                        )}
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap text-sm">
                         {selectedBasarId ? (
                           <span className={`px-2 py-1 text-xs rounded font-medium ${seller.participation?.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                            {seller.participation?.isActive ? 'Aktiv' : 'Inaktiv'}
+                            {seller.participation?.viaOrga ? 'Aktiv (Orga)' : seller.participation?.isActive ? 'Aktiv' : 'Inaktiv'}
                           </span>
                         ) : (
                           <span className="text-gray-400">–</span>
@@ -1061,16 +1095,35 @@ export default function AdminListPage() {
                           </button>
                           <button
                             onClick={() => toggleSellerStatus(seller.sellerId)}
-                            disabled={!selectedBasarId}
+                            disabled={!selectedBasarId || !!seller.participation?.viaOrga}
                             className={`px-2 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                               seller.participation?.isActive
                                 ? 'bg-red-500 hover:bg-red-600 text-white'
                                 : 'bg-green-500 hover:bg-green-600 text-white'
                             }`}
-                            title={seller.participation?.isActive ? 'Teilnahme deaktivieren' : 'Teilnahme aktivieren'}
+                            title={seller.participation?.viaOrga
+                              ? 'Orga ist in jedem Basar angemeldet – dafür zuerst das Orga-Kennzeichen entfernen.'
+                              : seller.participation?.isActive ? 'Teilnahme deaktivieren' : 'Teilnahme aktivieren'}
                           >
                             {seller.participation?.isActive ? 'Deakt' : 'Akt'}
                           </button>
+                          {/* Orga ist ein Zusatz zum Mitarbeiter – für Verkäufer gibt es den
+                              Schalter nicht, die Route weist das ebenfalls ab. */}
+                          {seller.isEmployee && (
+                            <button
+                              onClick={() => toggleOrgaStatus(seller.sellerId)}
+                              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                                seller.isOrga
+                                  ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                                  : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                              }`}
+                              title={seller.isOrga
+                                ? 'Orga entfernen (dann gelten wieder Anmeldung und Artikellimit)'
+                                : 'Als Orga kennzeichnen: in jedem Basar angemeldet, kein Artikellimit'}
+                            >
+                              {seller.isOrga ? 'Orga✓' : 'Orga'}
+                            </button>
+                          )}
                           <button
                             onClick={() => toggleCashierStatus(seller.sellerId)}
                             className={`px-2 py-1 rounded text-xs font-medium transition-colors ${

@@ -100,7 +100,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const [basar, existingBasarSeller, seller] = await Promise.all([
       prisma.basar.findUnique({ where: { id: basarId } }),
       prisma.basarSeller.findUnique({ where: { basarId_sellerId: { basarId, sellerId } } }),
-      prisma.seller.findUnique({ where: { sellerId }, select: { isEmployee: true } }),
+      prisma.seller.findUnique({ where: { sellerId }, select: { isEmployee: true, isOrga: true } }),
     ]);
     if (!basar) return NextResponse.json({ error: 'Basar nicht gefunden' }, { status: 404 });
     if (basar.status !== 'OPEN') {
@@ -137,7 +137,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         create: { basarId, sellerId, isActive: false, activatedAt: null },
       });
 
-      const maxArticles = maxArticlesFor(basar, seller ?? { isEmployee: false }, basarSeller.maxArticlesOverride);
+      const maxArticles = maxArticlesFor(basar, seller ?? { isEmployee: false, isOrga: false }, basarSeller.maxArticlesOverride);
       const articleCount = await tx.article.count({ where: { basarSellerId: basarSeller.id } });
       if (articleCount >= maxArticles) {
         return { error: 'MAX_ARTICLES' as const, maxArticles };

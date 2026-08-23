@@ -33,7 +33,7 @@ export async function POST(
     // /api/basars/[id]/articles: ein Token behält isEmployee bis zur nächsten Anmeldung.
     const [basar, seller] = await Promise.all([
       prisma.basar.findUnique({ where: { id: basarId } }),
-      prisma.seller.findUnique({ where: { sellerId }, select: { isEmployee: true } }),
+      prisma.seller.findUnique({ where: { sellerId }, select: { isEmployee: true, isOrga: true } }),
     ]);
     if (!basar) return NextResponse.json({ error: 'Basar nicht gefunden' }, { status: 404 });
     if (basar.status !== 'OPEN') {
@@ -56,7 +56,7 @@ export async function POST(
     });
 
     // Check article limit
-    const maxArticles = maxArticlesFor(basar, seller ?? { isEmployee: false }, basarSeller.maxArticlesOverride);
+    const maxArticles = maxArticlesFor(basar, seller ?? { isEmployee: false, isOrga: false }, basarSeller.maxArticlesOverride);
     const currentCount = await prisma.article.count({ where: { basarSellerId: basarSeller.id } });
 
     // Filter: only articles owned by this seller and not already in this basar

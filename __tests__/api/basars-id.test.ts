@@ -12,6 +12,8 @@ vi.mock('next/headers', () => ({
 const prismaMock = vi.hoisted(() => ({
   basar: { findUnique: vi.fn(), update: vi.fn() },
   basarSeller: { findUnique: vi.fn() },
+  // isOrga des Aufrufers – entscheidet mit über myParticipation (app/lib/participation.ts).
+  seller: { findUnique: vi.fn() },
 }));
 vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
 
@@ -56,6 +58,30 @@ describe('GET /api/basars/[id]', () => {
     const res = await GET(makeGetRequest(), makeContext());
     expect(res.status).toBe(200);
     expect((await res.json()).title).toBe('Basar 2025');
+  });
+
+  // Auch eine ausdrücklich abgemeldete Zeile darf die Orga nicht inaktiv machen – sonst
+  // hinge die Teilnahme doch wieder an einem Klick.
+  it('meldet für Orga eine aktive Teilnahme trotz inaktiver Zeile', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basar.findUnique.mockResolvedValue(fakeBasar);
+    prismaMock.basarSeller.findUnique.mockResolvedValue({ isActive: false, activatedAt: null });
+    prismaMock.seller.findUnique.mockResolvedValue({ isOrga: true });
+
+    const json = await (await GET(makeGetRequest(), makeContext())).json();
+
+    expect(json.myParticipation).toMatchObject({ isActive: true, viaOrga: true });
+  });
+
+  it('lässt die Teilnahme ohne Orga unverändert inaktiv', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basar.findUnique.mockResolvedValue(fakeBasar);
+    prismaMock.basarSeller.findUnique.mockResolvedValue({ isActive: false, activatedAt: null });
+    prismaMock.seller.findUnique.mockResolvedValue({ isOrga: false });
+
+    const json = await (await GET(makeGetRequest(), makeContext())).json();
+
+    expect(json.myParticipation).toMatchObject({ isActive: false, viaOrga: false });
   });
 
   it('returns 500 on DB error', async () => {

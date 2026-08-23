@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { maxArticlesFor } from '@/app/lib/articleLimits';
+import { formatArticleLimit, maxArticlesFor } from '@/app/lib/articleLimits';
 
 const seller = { isEmployee: false };
 const employee = { isEmployee: true };
@@ -26,6 +26,55 @@ describe('maxArticlesFor', () => {
 
   it('erlaubt ein kleineres Mitarbeiterlimit als das Verkäuferlimit', () => {
     expect(maxArticlesFor({ maxArticlesPerSeller: 50, maxArticlesPerEmployee: 20 }, employee)).toBe(20);
+  });
+
+  // Orga ist ein Zusatzkennzeichen für Mitarbeiter (Seller.isOrga), das der Admin setzt.
+  // Diese Leute stellen die Artikel ein, die dem Basar selbst gehören – dafür gibt es keine
+  // sinnvolle Obergrenze.
+  describe('Orga', () => {
+    const orga = { isEmployee: true, isOrga: true };
+
+    it('hat kein Limit', () => {
+      expect(maxArticlesFor(basar, orga)).toBe(Infinity);
+    });
+
+    // Der eigentliche Zweck: das Mitarbeiterlimit darf Orga nicht ausbremsen.
+    it('sticht das Mitarbeiterlimit', () => {
+      expect(maxArticlesFor({ maxArticlesPerSeller: 50, maxArticlesPerEmployee: 20 }, orga)).toBe(Infinity);
+    });
+
+    // Infinity ist so gewählt, dass die vorhandenen Vergleiche ohne Sonderfall stimmen.
+    it('lässt jede Artikelzahl zu, ohne dass Aufrufer einen Sonderfall brauchen', () => {
+      expect(5000 >= maxArticlesFor(basar, orga)).toBe(false);
+    });
+
+    it('ändert für Nicht-Orga nichts, auch wenn das Feld fehlt oder null ist', () => {
+      expect(maxArticlesFor(basar, { isEmployee: true, isOrga: false })).toBe(80);
+      expect(maxArticlesFor(basar, { isEmployee: true, isOrga: null })).toBe(80);
+      expect(maxArticlesFor(basar, { isEmployee: true })).toBe(80);
+      expect(maxArticlesFor(basar, { isEmployee: false, isOrga: false })).toBe(50);
+    });
+
+    // Bewusste Entscheidung: die Einzelfall-Ausnahme bleibt das stärkste Mittel. Wer einer
+    // Orga-Person doch eine Obergrenze geben will, setzt sie dort – sonst gäbe es dafür
+    // gar keine Möglichkeit mehr.
+    it('unterliegt weiterhin der Einzelfall-Ausnahme', () => {
+      expect(maxArticlesFor(basar, orga, 10)).toBe(10);
+      expect(maxArticlesFor(basar, orga, 0)).toBe(0);
+    });
+  });
+
+  describe('formatArticleLimit', () => {
+    it('zeigt endliche Limits als Zahl', () => {
+      expect(formatArticleLimit(50)).toBe('50');
+      expect(formatArticleLimit(0)).toBe('0');
+    });
+
+    // Ohne diese Umformung stünde in der Oberfläche "Max. Infinity Artikel".
+    it('zeigt ein unbegrenztes Limit als Wort', () => {
+      expect(formatArticleLimit(Infinity)).toBe('unbegrenzt');
+      expect(formatArticleLimit(maxArticlesFor(basar, { isEmployee: true, isOrga: true }))).toBe('unbegrenzt');
+    });
   });
 
   describe('Einzelfall-Ausnahme (BasarSeller.maxArticlesOverride)', () => {

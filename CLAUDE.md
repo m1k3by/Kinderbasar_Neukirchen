@@ -119,4 +119,17 @@ Nach jeder Änderung an einer PDF-Ausgabe: Datei erzeugen und die Geometrie mess
 - Beträge über `fmt()` formatieren, Währung `€` mit schmalem Abstand davor.
 - Verkäufernummer (`sellerId`) ist permanent und basarübergreifend stabil; QR-Codes von Artikeln dürfen sich bei Wiederverwendung über Basare hinweg **nicht** ändern (sonst müsste neu gedruckt werden).
 - Fehler in Route Handlern: `console.error` mit Routenpfad als Präfix, nach außen generische Meldung.
+- **Orga (`Seller.isOrga`) ist ein Zusatzkennzeichen für Mitarbeiter, kein eigener Rang.**
+  Nur der Admin setzt es (`app/api/admin/toggle-orga-status`), und es hat genau zwei
+  Wirkungen: die Person gilt in **jedem** Basar als teilnehmend, ohne sich zu aktivieren
+  (`app/lib/participation.ts`), und für sie greift **kein** Artikellimit
+  (`app/lib/articleLimits.ts` gibt `Infinity` zurück). Die Teilnahme wird bewusst *abgeleitet*
+  statt gespeichert – sonst müssten beim Setzen des Kennzeichens und beim Anlegen jedes neuen
+  Basars Zeilen nachgezogen werden, und beides liefe bei der ersten vergessenen Stelle
+  auseinander. `BasarSeller.maxArticlesOverride` sticht weiterhin alles, auch Orga: sonst
+  ließe sich eine Orga-Person gar nicht mehr begrenzen. Beim Zurückstufen zum Verkäufer fällt
+  das Kennzeichen mit weg (`toggle-employee-status`) – ein Verkäufer mit stehengebliebenem
+  Orga-Kennzeichen hätte unsichtbar kein Limit, weil die Oberfläche den Schalter nur
+  Mitarbeitern zeigt.
+
 - **Artikel-Archiv (`SellerArticle`) überlebt das Basar-Ende.** Ob ein Archiv-Eintrag beim nächsten Basar wieder übernehmbar ist, entscheidet ausschließlich, ob ein damit verknüpfter `Article` den Status `SOLD` erreicht hat (`app/api/seller-articles/route.ts`, `soldPreviously`): nicht verkaufte Artikel (`AVAILABLE`/`RETURNED`) bleiben übernehmbar, verkaufte Artikel dauerhaft nicht – unabhängig davon, in wie vielen weiteren Basaren der Eintrag seitdem aufgetaucht ist.
