@@ -1,8 +1,9 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { prisma } from '../../../../lib/prisma';
 import { requireAuth } from '../../../../lib/apiAuth';
 import { isActivationOpen } from '../../../../lib/basarWindows';
 import { TERMS_VERSION, PRIVACY_VERSION } from '../../../../lib/legalDocs';
+import { deliverMail } from '../../../../lib/mailQueue';
 
 // PUT /api/basars/:id/participation – seller/employee an- oder abmelden für genau
 // diesen Basar. Ersetzt PUT /api/sellers/seller-status, das ein globales
@@ -193,13 +194,16 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           </div>
         `;
 
-        await prisma.mailQueue.create({
+        const queued = await prisma.mailQueue.create({
           data: {
             to: seller.email,
             subject: `Teilnahme bestätigt: ${basar.title}`,
             html: emailHtml,
           },
         });
+
+        // Siehe app/api/register/route.ts: after() stellt zu, ohne die Antwort aufzuhalten.
+        after(() => deliverMail(queued.id));
       } catch (emailError) {
         console.error('[PARTICIPATION] Failed to enqueue confirmation email:', { basarId, sellerId, error: emailError, ip });
         // Teilnahme-Aktivierung selbst darf durch einen Mail-Fehler nicht scheitern.

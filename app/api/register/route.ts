@@ -1,4 +1,4 @@
-import { NextResponse, NextRequest } from 'next/server';
+import { NextResponse, NextRequest, after } from 'next/server';
 import { prisma } from '../../lib/prisma';
 import { generateQR, generateBarcode } from '../../lib/qr';
 import path from 'path';
@@ -8,6 +8,7 @@ import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { getAuth } from '../../lib/apiAuth';
 import { normalizeEmail } from '../../lib/auth';
+import { deliverMail } from '../../lib/mailQueue';
 
 // Legt die Zählerzeile an, falls sie fehlt. Der Startwert ist beliebig: runAllocate()
 // berechnet ihn bei jedem Aufruf ohnehin neu aus der tatsächlichen Belegung. Idempotent
@@ -276,7 +277,7 @@ export async function POST(request: NextRequest) {
       // load). A separate processor (app/api/admin/mail-queue/route.ts) drains PENDING rows
       // with retry/backoff; failures land in status=FAILED with lastError instead of being
       // silently swallowed.
-      await prisma.mailQueue.create({
+      const queued = await prisma.mailQueue.create({
         data: {
           to: email,
           subject: 'Ihre Registrierung beim Kinderbasar Neukirchen',
@@ -284,6 +285,12 @@ export async function POST(request: NextRequest) {
           attachmentsJson: attachments.length > 0 ? JSON.stringify(attachments) : null,
         },
       });
+
+      // after() läuft, nachdem die Antwort raus ist, aber noch in derselben Invocation: der
+      // Nutzer wartet nicht auf SMTP, die Mail geht trotzdem sofort raus. Ohne diesen Aufruf
+      // wartet die Zeile auf einen Stapellauf – den bis zum 26.08.2026 niemand auslöste, und
+      // 36 Mails blieben liegen. Ein Scheduler ist damit nicht mehr die einzige Hoffnung.
+      after(() => deliverMail(queued.id));
     } catch (emailError) {
       console.error('[REGISTER] Failed to enqueue confirmation email:', {
         sellerId,
