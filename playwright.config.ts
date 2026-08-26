@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { defineConfig } from '@playwright/test';
 import { config as loadEnv } from 'dotenv';
 
@@ -12,6 +12,16 @@ if (!existsSync('.env.test')) {
   throw new Error(
     '.env.test fehlt. Ohne diese Datei wuerde der E2E-Lauf auf die Datenbank aus .env ' +
     'zeigen – also moeglicherweise auf die Produktivdatenbank. Vorlage: .env.test.example'
+  );
+}
+// Die unveraendert kopierte Vorlage ist der haeufigste Fall: die Datei existiert, die
+// Verbindungsstrings fehlen. Ohne diese Pruefung endet der Lauf erst Minuten spaeter in
+// einem DNS-Fehler auf "TEST-HOST" – hier steht sofort da, was zu tun ist.
+if (/TEST-HOST|USER:PASS/.test(readFileSync('.env.test', 'utf8'))) {
+  throw new Error(
+    '.env.test enthaelt noch die Platzhalter aus .env.test.example. Trage die ' +
+    'Verbindungsstrings deiner *leeren* Testdatenbank in POSTGRES_PRISMA_URL und ' +
+    'POSTGRES_URL_NON_POOLING ein.'
   );
 }
 loadEnv({ path: '.env.test', override: true });

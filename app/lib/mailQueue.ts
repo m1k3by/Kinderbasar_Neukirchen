@@ -1,3 +1,4 @@
+import path from 'path';
 import { prisma } from './prisma';
 import { sendMail } from './mail';
 
@@ -13,10 +14,25 @@ type QueuedMail = {
   attempts: number;
 };
 
+/**
+ * Anhänge einer Warteschlangen-Zeile für *diese* Umgebung auflösen.
+ *
+ * Die gespeicherten Pfade stammen aus der Invocation, die die Zeile eingereiht hat – auf
+ * Vercel `/var/task/...`. Zugestellt wird sie aber möglicherweise woanders: von einem anderen
+ * Cron-Lauf, von einem Entwicklerrechner. Ein absoluter Pfad in der Warteschlange bindet die
+ * Zeile an eine Maschine, die es beim Senden nicht mehr geben muss; unter Windows wurde
+ * daraus ein Pfad unter dem Windows-Laufwerk und alle vier Registrierungsmails
+ * scheiterten mit ENOENT.
+ *
+ * Verlässlich ist nur der Dateiname. Der Rest wird beim Senden neu bestimmt.
+ */
 function parseAttachments(json: string | null) {
   if (!json) return undefined;
   try {
-    return JSON.parse(json) as { filename?: string; path?: string }[];
+    const raw = JSON.parse(json) as { filename?: string; path?: string }[];
+    return raw.map(a => (
+      a.path ? { ...a, path: path.join(process.cwd(), path.basename(a.path)) } : a
+    ));
   } catch {
     return undefined;
   }

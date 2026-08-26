@@ -132,6 +132,19 @@ Nach jeder Änderung an einer PDF-Ausgabe: Datei erzeugen und die Geometrie mess
   Orga-Kennzeichen hätte unsichtbar kein Limit, weil die Oberfläche den Schalter nur
   Mitarbeitern zeigt.
 
+- **Wer eine Mail einreiht, muss sie auch zustellen lassen.** `MailQueue` wird an zwei
+  Stellen gefüllt (`app/api/register`, `app/api/basars/[id]/participation`); beide rufen
+  danach `after(() => deliverMail(id))` auf (`app/lib/mailQueue.ts`). `after()` läuft nach
+  der Antwort, aber in derselben Invocation – der Nutzer wartet nicht auf SMTP, die Mail
+  geht trotzdem sofort raus. Zweiter Riegel: `GET /api/cron/mail-queue` (Vercel Cron,
+  `vercel.json`, abgesichert über `CRON_SECRET`) arbeitet ab, was liegen blieb.
+  *Warum zwei:* vom 06.08. bis 26.08.2026 gab es **keinen** Auslöser. Commit `6988ac7`
+  ersetzte `await sendMail(...)` durch `mailQueue.create(...)` und legte die
+  Verarbeitungs-Route samt 187 Zeilen Tests an – nur niemanden, der sie aufruft. 36 Mails
+  lagen 20 Tage unversendet, alle mit `attempts: 0`. **Es gibt keinen Unit-Test für „diese
+  Funktion hat einen Aufrufer".** Wer eine synchrone Wirkung durch eine Warteschlange
+  ersetzt, liefert den Auslöser im selben Commit mit.
+
 - **Aufgaben sind basarübergreifend, ihre Anmeldungen nicht.** `Task` hat bewusst kein
   `basarId` – dieselben Schichten wiederholen sich jeden Basar, eine Kopie pro Basar wäre
   nur Pflegearbeit. `TaskSignup` und `Cake` haben eines, und `basarId` gehört in den

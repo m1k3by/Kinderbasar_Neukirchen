@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import path from 'path';
 import { adminToken, sellerToken } from '../helpers/tokens';
 
 const cookiesGetMock = vi.hoisted(() => vi.fn());
@@ -66,16 +67,25 @@ describe('POST /api/admin/mail-queue', () => {
     });
   });
 
-  it('parses attachmentsJson and passes it to sendMail', async () => {
+  it('parses attachmentsJson and passes it to sendMail – Pfad auf das aktuelle cwd bezogen', async () => {
+    // Der gespeicherte Pfad wird *nicht* durchgereicht: er stammt aus der Umgebung, die die
+    // Zeile eingereiht hat (auf Vercel /var/task), und zeigt beim Zustellen von woanders ins
+    // Leere. Genau das liess am 26.08.2026 alle vier Registrierungsmails mit ENOENT
+    // scheitern. Die frühere Fassung dieses Tests verlangte das Durchreichen ausdrücklich –
+    // sie hat den Fehler nicht gefunden, sondern festgeschrieben.
     cookiesGetMock.mockReturnValue({ value: adminToken() });
-    const attachments = [{ filename: 'info.jpeg', path: '/tmp/info.jpeg' }];
-    prismaMock.mailQueue.findMany.mockResolvedValue([{ ...pendingMail, attachmentsJson: JSON.stringify(attachments) }]);
+    prismaMock.mailQueue.findMany.mockResolvedValue([{
+      ...pendingMail,
+      attachmentsJson: JSON.stringify([{ filename: 'info.jpeg', path: '/var/task/info.jpeg' }]),
+    }]);
     sendMailMock.mockResolvedValue(undefined);
     prismaMock.mailQueue.update.mockResolvedValue({});
 
     await POST();
 
-    expect(sendMailMock).toHaveBeenCalledWith('a@b.de', 'Hi', '<p>hi</p>', attachments);
+    expect(sendMailMock).toHaveBeenCalledWith('a@b.de', 'Hi', '<p>hi</p>', [
+      { filename: 'info.jpeg', path: path.join(process.cwd(), 'info.jpeg') },
+    ]);
   });
 
   it('increments attempts and keeps status PENDING (retryable) on a failed send below MAX_ATTEMPTS', async () => {
