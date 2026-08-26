@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '../components/Header';
-import { dateForWeekday } from '../lib/basarWindows';
+import { dateForWeekday, pickDefaultBasarId } from '../lib/basarWindows';
 import { getNavLinks } from '../lib/navLinks';
 import { shiftsOverlap } from '../lib/time';
 
@@ -80,10 +80,6 @@ export default function EmployeePage() {
   }, [router]);
 
   useEffect(() => {
-    loadData();
-  }, []);
-
-  useEffect(() => {
     if (sellerId) loadSellerInfo();
   }, [sellerId]);
 
@@ -112,10 +108,7 @@ export default function EmployeePage() {
         const all: Basar[] = data.basars ?? [];
         const relevant = all.filter(b => !b.isArchived && b.status !== 'DRAFT');
         setBasars(relevant);
-        setHelferlisteBasarId(prev => prev || relevant.find(b => b.status === 'ACTIVE')?.id
-          || relevant.find(b => b.status === 'OPEN')?.id
-          || relevant[0]?.id
-          || '');
+        setHelferlisteBasarId(prev => prev || pickDefaultBasarId(relevant));
       }
     } catch (error) {
       console.error('Error loading seller info:', error);
@@ -131,11 +124,13 @@ export default function EmployeePage() {
     }
   }, [sellerId, cakes]);
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
+    if (!helferlisteBasarId) return;
+    const q = `?basarId=${encodeURIComponent(helferlisteBasarId)}`;
     try {
       const [tasksRes, cakesRes] = await Promise.all([
-        fetch('/api/tasks'),
-        fetch('/api/cakes'),
+        fetch(`/api/tasks${q}`),
+        fetch(`/api/cakes${q}`),
       ]);
 
       if (tasksRes.ok) setTasks(await tasksRes.json());
@@ -153,7 +148,14 @@ export default function EmployeePage() {
     } catch (error) {
       console.error('Error loading data:', error);
     }
-  }
+  }, [helferlisteBasarId, sellerId]);
+
+  // Muss unterhalb von loadData stehen: die Abhaengigkeitsliste wird beim Rendern
+  // ausgewertet, eine const-Deklaration weiter unten waere zu diesem Zeitpunkt noch in der
+  // temporalen Totzone.
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   async function handleTaskToggle(taskId: string) {
     if (!sellerId) return;
@@ -207,9 +209,10 @@ export default function EmployeePage() {
 
       // Dann tatsächliche API-Anfrage im Hintergrund
       if (isSignedUp) {
-        const res = await fetch(`/api/task-signups?taskId=${taskId}&sellerId=${sellerId}`, {
-          method: 'DELETE',
-        });
+        const res = await fetch(
+          `/api/task-signups?taskId=${taskId}&sellerId=${sellerId}&basarId=${encodeURIComponent(helferlisteBasarId)}`,
+          { method: 'DELETE' }
+        );
 
         if (res.ok) {
           setMessage('✓ Erfolgreich ausgetragen');
@@ -223,7 +226,7 @@ export default function EmployeePage() {
         const res = await fetch('/api/task-signups', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ taskId, sellerId }),
+          body: JSON.stringify({ taskId, sellerId, basarId: helferlisteBasarId }),
         });
 
         if (res.ok) {
@@ -246,14 +249,18 @@ export default function EmployeePage() {
 
   async function handleCakeSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!cakeName.trim() || !sellerId) return;
+    if (!cakeName.trim() || !sellerId || !helferlisteBasarId) return;
 
     try {
       // Create new cake
       const res = await fetch('/api/cakes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cakeName: cakeName.trim(), sellerId: parseInt(sellerId, 10) }),
+        body: JSON.stringify({
+          cakeName: cakeName.trim(),
+          sellerId: parseInt(sellerId, 10),
+          basarId: helferlisteBasarId,
+        }),
       });
 
       if (res.ok) {
@@ -423,7 +430,7 @@ export default function EmployeePage() {
               Inhaltsbreite schrumpfen darf – sonst laeuft es trotz max-w weiter ueber. */}
           {basars.length > 1 && (
             <label className="w-full sm:w-auto min-w-0 text-sm text-gray-600 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-              <span className="flex-shrink-0">Termine von:</span>
+              <span className="flex-shrink-0">Helferliste für:</span>
               <select
                 value={helferlisteBasarId}
                 onChange={(e) => setHelferlisteBasarId(e.target.value)}
@@ -466,7 +473,7 @@ export default function EmployeePage() {
                       const isFull = signupCount >= task.capacity;
 
                       return (
-                        <div key={task.id} className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-5">
+                        <div key={task.id} data-task-title={task.title} className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-5">
                           <div className="mb-3">
                             <div className="flex items-center justify-between mb-1">
                               <h4 className="text-lg font-semibold text-gray-800">{task.title}</h4>

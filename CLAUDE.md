@@ -132,4 +132,31 @@ Nach jeder Änderung an einer PDF-Ausgabe: Datei erzeugen und die Geometrie mess
   Orga-Kennzeichen hätte unsichtbar kein Limit, weil die Oberfläche den Schalter nur
   Mitarbeitern zeigt.
 
+- **Aufgaben sind basarübergreifend, ihre Anmeldungen nicht.** `Task` hat bewusst kein
+  `basarId` – dieselben Schichten wiederholen sich jeden Basar, eine Kopie pro Basar wäre
+  nur Pflegearbeit. `TaskSignup` und `Cake` haben eines, und `basarId` gehört in den
+  Unique-Key (`@@unique([taskId, sellerId, basarId])`): ohne ihn könnte sich niemand im
+  nächsten Basar für eine Schicht eintragen, für die er im letzten eingetragen war.
+  `GET /api/tasks` und `GET /api/cakes` verlangen `basarId` als Pflichtparameter, ebenso
+  die beiden `clear-*`-Routen – **kein stiller Fallback auf „alle Basare"**. Bei
+  `clear-task-signups` hängt daran die gesamte Historie: ein `deleteMany({})` ohne `where`
+  löscht die Anmeldungen sämtlicher Basare und liefert dabei ebenfalls 200.
+
+- **Eine Zahl, die aus einem optionalen Feld kommt, das die API nicht mehr liefert, ist
+  stumm falsch.** `/admin/tasks` zeigte monatelang „0 / 8 Helfer": die Projektion in
+  `app/api/tasks/route.ts` hatte `_count` entfernt („never read by any consumer" – die Seite
+  las es), und `task._count?.signups || 0` machte daraus wortlos eine 0. Kein Fehler, kein
+  Log, und weil das Feld im Interface optional deklariert war, auch keine Typwarnung.
+  Konsequenz: Felder, die eine Seite tatsächlich braucht, nicht optional deklarieren, und
+  bei Projektionsänderungen die *Argumente* von `findMany` testen – ein gemocktes Prisma
+  ignoriert `select` vollständig, die Antwort im Test beweist darüber nichts.
+
+- **`npm run test:e2e` (Playwright) deckt die Naht zwischen API und Seite ab**, die die
+  Unit-Tests strukturell nicht erreichen: Helfer meldet sich an, trägt sich in mehrere
+  Schichten ein, Admin sieht dieselben Zahlen – pro Basar (`e2e/helferliste.spec.ts`).
+  Braucht eine **eigene, leere** Postgres-Datenbank in `.env.test` (Vorlage:
+  `.env.test.example`); der Seed leert Tabellen und verweigert den Dienst ohne
+  `E2E_ALLOW_RESET=1` sowie sobald er fremde Verkäufer vorfindet. Läuft lokal, nicht im
+  Build – der läuft auf Vercel gegen die Produktivdatenbank.
+
 - **Artikel-Archiv (`SellerArticle`) überlebt das Basar-Ende.** Ob ein Archiv-Eintrag beim nächsten Basar wieder übernehmbar ist, entscheidet ausschließlich, ob ein damit verknüpfter `Article` den Status `SOLD` erreicht hat (`app/api/seller-articles/route.ts`, `soldPreviously`): nicht verkaufte Artikel (`AVAILABLE`/`RETURNED`) bleiben übernehmbar, verkaufte Artikel dauerhaft nicht – unabhängig davon, in wie vielen weiteren Basaren der Eintrag seitdem aufgetaucht ist.

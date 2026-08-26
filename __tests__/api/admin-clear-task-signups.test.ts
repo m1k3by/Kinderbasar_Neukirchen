@@ -17,8 +17,12 @@ vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
 
 import { POST } from '@/app/api/admin/clear-task-signups/route';
 
-function makeRequest() {
-  return {} as any;
+const BASAR = 'basar-a';
+
+// Der Handler liest basarId aus der URL – ein Platzhalter-Objekt reicht dafür nicht mehr.
+function makeRequest(basarId = BASAR) {
+  const qs = basarId ? `?basarId=${basarId}` : '';
+  return new Request(`http://localhost/api/admin/clear-task-signups${qs}`, { method: 'POST' }) as any;
 }
 
 describe('POST /api/admin/clear-task-signups', () => {
@@ -49,7 +53,16 @@ describe('POST /api/admin/clear-task-signups', () => {
     const json = await res.json();
     expect(res.status).toBe(200);
     expect(json.count).toBe(15);
-    expect(prismaMock.taskSignup.deleteMany).toHaveBeenCalled();
+    // Das where ist hier der ganze Vertrag: ein deleteMany({}) löscht die Anmeldungen *aller*
+    // Basare, also die gesamte Historie – und liefert dabei ebenfalls 200.
+    expect(prismaMock.taskSignup.deleteMany).toHaveBeenCalledWith({ where: { basarId: BASAR } });
+  });
+
+  it('returns 400 without basarId and deletes nothing', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    const res = await POST(makeRequest(''));
+    expect(res.status).toBe(400);
+    expect(prismaMock.taskSignup.deleteMany).not.toHaveBeenCalled();
   });
 
   it('returns 500 on DB error', async () => {

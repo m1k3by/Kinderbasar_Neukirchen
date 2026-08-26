@@ -7,15 +7,22 @@ function parseSellerId(value: unknown): number | null {
   return typeof num === 'number' && !isNaN(num) ? num : null;
 }
 
-// GET /api/cakes – list all cake entries so sellers/employees can see which cake types
-// already exist (without seeing who is bringing them). Admins get full seller details.
+// GET /api/cakes – list this basar's cake entries so sellers/employees can see which cake
+// types already exist (without seeing who is bringing them). Admins get full seller details.
 export async function GET(request: Request) {
   try {
     const authResult = await requireAuth();
     if (authResult.response) return authResult.response;
     const { auth } = authResult;
 
+    const { searchParams } = new URL(request.url);
+    const basarId = searchParams.get('basarId');
+    if (!basarId) {
+      return NextResponse.json({ error: 'basarId ist erforderlich' }, { status: 400 });
+    }
+
     const cakes = await prisma.cake.findMany({
+      where: { basarId },
       select: {
         id: true,
         cakeName: true,
@@ -52,9 +59,9 @@ export async function POST(request: Request) {
 
     const body = await request.json();
 
-    if (!body.cakeName || !body.sellerId) {
+    if (!body.cakeName || !body.sellerId || !body.basarId) {
       return NextResponse.json(
-        { error: 'Fehlende Pflichtfelder: cakeName, sellerId' },
+        { error: 'Fehlende Pflichtfelder: cakeName, sellerId, basarId' },
         { status: 400 }
       );
     }
@@ -77,6 +84,7 @@ export async function POST(request: Request) {
       data: {
         cakeName: body.cakeName,
         sellerId: sellerIdInt,
+        basarId: body.basarId,
       },
       include: {
         seller: {

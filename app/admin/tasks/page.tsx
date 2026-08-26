@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Header from '../../components/Header';
 import { getNavLinks } from '../../lib/navLinks';
+import { pickDefaultBasarId } from '../../lib/basarWindows';
 
 interface Task {
   id: string;
@@ -12,13 +13,27 @@ interface Task {
   timeTo?: string | null;
   capacity: number;
   createdAt: string;
-  _count?: {
-    signups: number;
-  };
+  // Die Helferzahl wird aus signups.length gezaehlt. Frueher stand hier ein optionales
+  // _count, das die API irgendwann nicht mehr lieferte – optionales Feld plus `|| 0` hiess:
+  // stumm immer 0 Helfer, ohne Fehler und ohne dass TypeScript etwas gemerkt haette.
+  signups?: { sellerId: number; seller: { firstName: string; lastName: string } }[];
 }
+
+interface Basar {
+  id: string;
+  title: string;
+  status: string;
+  isArchived: boolean;
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: 'Vorbereitung', OPEN: 'Anmeldung offen', ACTIVE: 'Läuft', CLOSED: 'Beendet',
+};
 
 export default function TasksManagementPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [basars, setBasars] = useState<Basar[]>([]);
+  const [basarId, setBasarId] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -48,11 +63,14 @@ export default function TasksManagementPage() {
   // Clear cakes state
   const [showClearCakesConfirm, setShowClearCakesConfirm] = useState(false);
 
-  // Fetch tasks
-  const fetchTasks = async () => {
+  // Anmeldungen gehoeren zu einem Basar, deshalb laedt die Seite erst, wenn einer gewaehlt
+  // ist. Ohne basarId antwortet /api/tasks mit 400 – bewusst, statt still alle Basare zu
+  // vermischen.
+  const fetchTasks = useCallback(async () => {
+    if (!basarId) return;
     try {
       setLoading(true);
-      const response = await fetch('/api/tasks');
+      const response = await fetch(`/api/tasks?basarId=${encodeURIComponent(basarId)}`);
       if (!response.ok) throw new Error('Failed to fetch tasks');
       const data = await response.json();
       setTasks(data);
@@ -62,11 +80,31 @@ export default function TasksManagementPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [basarId]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/basars');
+        if (!res.ok) throw new Error('Failed to fetch basars');
+        const data = await res.json();
+        const relevant: Basar[] = (data.basars ?? []).filter(
+          (b: Basar) => !b.isArchived && b.status !== 'DRAFT'
+        );
+        setBasars(relevant);
+        setBasarId(pickDefaultBasarId(relevant));
+        if (relevant.length === 0) setLoading(false);
+      } catch (err) {
+        setError('Fehler beim Laden der Basare');
+        setLoading(false);
+        console.error(err);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     fetchTasks();
-  }, []);
+  }, [fetchTasks]);
 
   // Create task
   const handleSubmit = async (e: React.FormEvent) => {
@@ -119,9 +157,10 @@ export default function TasksManagementPage() {
   const handleClearSignups = async () => {
     try {
       setError('');
-      const response = await fetch('/api/admin/clear-task-signups', {
-        method: 'POST',
-      });
+      const response = await fetch(
+        `/api/admin/clear-task-signups?basarId=${encodeURIComponent(basarId)}`,
+        { method: 'POST' }
+      );
       
       if (!response.ok) {
         const data = await response.json();
@@ -143,9 +182,10 @@ export default function TasksManagementPage() {
   const handleClearCakes = async () => {
     try {
       setError('');
-      const response = await fetch('/api/admin/clear-cakes', {
-        method: 'POST',
-      });
+      const response = await fetch(
+        `/api/admin/clear-cakes?basarId=${encodeURIComponent(basarId)}`,
+        { method: 'POST' }
+      );
       
       if (!response.ok) {
         const data = await response.json();
@@ -215,6 +255,22 @@ export default function TasksManagementPage() {
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-800 mb-2">Aufgaben-Verwaltung</h1>
           <p className="text-gray-600">Verwalte Helferschichten für den Basar</p>
+          {/* Aufgaben gelten basarübergreifend, ihre Anmeldungen nicht. Die Auswahl bestimmt
+              deshalb, wessen Helferzahlen unten stehen – und was die Löschknöpfe treffen. */}
+          <label className="mt-3 w-full sm:w-auto min-w-0 text-sm text-gray-600 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+            <span className="flex-shrink-0">Anmeldungen für:</span>
+            <select
+              value={basarId}
+              onChange={(e) => setBasarId(e.target.value)}
+              disabled={basars.length === 0}
+              className="w-full sm:w-auto sm:max-w-xs min-w-0 truncate border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+            >
+              {basars.length === 0 && <option value="">Kein Basar vorhanden</option>}
+              {basars.map(b => (
+                <option key={b.id} value={b.id}>{b.title} ({STATUS_LABELS[b.status]})</option>
+              ))}
+            </select>
+          </label>
         </div>
 
         {/* Error Message */}
@@ -235,14 +291,16 @@ export default function TasksManagementPage() {
           
           <button
             onClick={() => setShowClearSignupsConfirm(true)}
-            className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow"
+            disabled={!basarId}
+            className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow disabled:bg-gray-400"
           >
             Alle Anmeldungen löschen
           </button>
           
           <button
             onClick={() => setShowClearCakesConfirm(true)}
-            className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow"
+            disabled={!basarId}
+            className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow disabled:bg-gray-400"
           >
             Alle Kuchen löschen
           </button>
@@ -363,8 +421,12 @@ export default function TasksManagementPage() {
             </div>
           ) : (
             <div className="divide-y divide-gray-200">
-              {tasks.map((task) => (
-                <div key={task.id} className="p-4 md:p-6 hover:bg-gray-50 transition-colors">
+              {tasks.map((task) => {
+                // Eine Quelle fuer alle fuenf Anzeigen unten – Zaehler und Balken koennen
+                // damit nicht auseinanderlaufen.
+                const signupCount = task.signups?.length ?? 0;
+                return (
+                <div key={task.id} data-task-title={task.title} className="p-4 md:p-6 hover:bg-gray-50 transition-colors">
                   {editingTaskId === task.id ? (
                     // Edit Mode
                     <div className="space-y-4">
@@ -472,7 +534,7 @@ export default function TasksManagementPage() {
                             </span>
                           )}
                           <span className="inline-flex items-center">
-                            👥 <span className="ml-1">{task._count?.signups || 0} / {task.capacity} Helfer</span>
+                            👥 <span className="ml-1">{signupCount} / {task.capacity} Helfer</span>
                           </span>
                         </div>
                         
@@ -480,19 +542,19 @@ export default function TasksManagementPage() {
                         <div className="w-full md:w-64">
                           <div className="flex justify-between text-xs text-gray-600 mb-1">
                             <span>Auslastung</span>
-                            <span>{Math.round(((task._count?.signups || 0) / task.capacity) * 100)}%</span>
+                            <span>{Math.round((signupCount / task.capacity) * 100)}%</span>
                           </div>
                           <div className="w-full bg-gray-200 rounded-full h-2">
                             <div
                               className={`h-2 rounded-full transition-all ${
-                                (task._count?.signups || 0) >= task.capacity
+                                signupCount >= task.capacity
                                   ? 'bg-red-500'
-                                  : (task._count?.signups || 0) > task.capacity * 0.7
+                                  : signupCount > task.capacity * 0.7
                                   ? 'bg-yellow-500'
                                   : 'bg-green-500'
                               }`}
                               style={{
-                                width: `${Math.min(((task._count?.signups || 0) / task.capacity) * 100, 100)}%`,
+                                width: `${Math.min((signupCount / task.capacity) * 100, 100)}%`,
                               }}
                             ></div>
                           </div>
@@ -516,7 +578,7 @@ export default function TasksManagementPage() {
                     </div>
                   )}
                 </div>
-              ))}
+              );})}
             </div>
           )}
         </div>
@@ -527,8 +589,9 @@ export default function TasksManagementPage() {
             <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full">
               <h3 className="text-xl font-bold mb-4 text-red-600">Alle Anmeldungen löschen?</h3>
               <p className="mb-6 text-gray-800">
-                Möchten Sie wirklich alle Benutzer-Anmeldungen aus allen Aufgaben entfernen? 
-                Die Aufgaben selbst bleiben bestehen.
+                Möchten Sie wirklich alle Anmeldungen aus allen Aufgaben des Basars
+                <strong> {basars.find(b => b.id === basarId)?.title}</strong> entfernen?
+                Die Aufgaben selbst und die Anmeldungen anderer Basare bleiben bestehen.
               </p>
               <p className="mb-6 text-sm text-gray-600">
                 Diese Aktion kann nicht rückgängig gemacht werden!
@@ -557,7 +620,9 @@ export default function TasksManagementPage() {
             <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full">
               <h3 className="text-xl font-bold mb-4 text-orange-600">Alle Kuchen löschen?</h3>
               <p className="mb-6 text-gray-800">
-                Möchten Sie wirklich alle Kuchen-Einträge löschen?
+                Möchten Sie wirklich alle Kuchen-Einträge des Basars
+                <strong> {basars.find(b => b.id === basarId)?.title}</strong> löschen?
+                Die Einträge anderer Basare bleiben bestehen.
               </p>
               <p className="mb-6 text-sm text-gray-600">
                 Diese Aktion kann nicht rückgängig gemacht werden!

@@ -172,6 +172,14 @@ describe('GET /api/sellers?basarId= – Zustimmungsnachweis', () => {
     await GET(makeRequest('?basarId=basar-1'));
     const call = prismaMock.seller.findMany.mock.calls[0][0];
     expect(call.select.basarSellers.where).toEqual({ basarId: 'basar-1' });
+    // Die "Aktivität"-Markierung in /admin/list soll den gewählten Basar zeigen, nicht
+    // jede Anmeldung, die die Person jemals irgendwo hatte.
+    expect(call.select._count).toEqual({
+      select: {
+        taskSignups: { where: { basarId: 'basar-1' } },
+        cakes: { where: { basarId: 'basar-1' } },
+      },
+    });
     expect(call.select.basarSellers.select).toEqual({
       isActive: true,
       activatedAt: true,

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Header from '../components/Header';
-import { dateForWeekday } from '../lib/basarWindows';
+import { dateForWeekday, pickDefaultBasarId } from '../lib/basarWindows';
 import { getNavLinks } from '../lib/navLinks';
 
 interface Seller {
@@ -81,36 +81,49 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Zwei Schritte, weil Helferliste und Kuchen basarabhaengig sind: erst Verkaeufer und
+  // Basare laden und einen Basar waehlen, dann dessen Anmeldungen.
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch sellers (paginated, looped to "all"), tasks, cakes, and basars
-        const [sellersData, tasksRes, cakesRes, basarsRes] = await Promise.all([
+        const [sellersData, basarsRes] = await Promise.all([
           fetchAllSellers(),
-          fetch('/api/tasks'),
-          fetch('/api/cakes'),
           fetch('/api/basars'),
         ]);
 
-        if (!tasksRes.ok || !cakesRes.ok || !basarsRes.ok) {
-          throw new Error('Failed to fetch data');
-        }
+        if (!basarsRes.ok) throw new Error('Failed to fetch data');
 
-        const [tasksData, cakesData, basarsData] = await Promise.all([
-          tasksRes.json(),
-          cakesRes.json(),
-          basarsRes.json(),
-        ]);
-
+        const basarsData = await basarsRes.json();
         setSellers(sellersData);
-        setTasks(tasksData);
-        setCakes(cakesData);
         const relevant: Basar[] = (basarsData.basars ?? []).filter((b: Basar) => !b.isArchived && b.status !== 'DRAFT');
         setBasars(relevant);
-        setHelferlisteBasarId(relevant.find(b => b.status === 'ACTIVE')?.id
-          || relevant.find(b => b.status === 'OPEN')?.id
-          || relevant[0]?.id
-          || '');
+        const defaultId = pickDefaultBasarId(relevant);
+        setHelferlisteBasarId(defaultId);
+        if (!defaultId) setLoading(false);
+      } catch (err) {
+        setError('Fehler beim Laden der Daten');
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  useEffect(() => {
+    if (!helferlisteBasarId) return;
+    const q = `?basarId=${encodeURIComponent(helferlisteBasarId)}`;
+    const fetchHelferliste = async () => {
+      try {
+        setLoading(true);
+        const [tasksRes, cakesRes] = await Promise.all([
+          fetch(`/api/tasks${q}`),
+          fetch(`/api/cakes${q}`),
+        ]);
+
+        if (!tasksRes.ok || !cakesRes.ok) throw new Error('Failed to fetch data');
+
+        setTasks(await tasksRes.json());
+        setCakes(await cakesRes.json());
       } catch (err) {
         setError('Fehler beim Laden der Daten');
       } finally {
@@ -118,8 +131,8 @@ export default function AdminPage() {
       }
     };
 
-    fetchData();
-  }, []);
+    fetchHelferliste();
+  }, [helferlisteBasarId]);
 
   // Group tasks by day
   const groupedTasks: { [key: string]: Task[] } = {
@@ -210,7 +223,7 @@ export default function AdminPage() {
               Handy 146 px über den rechten Rand hinausragen. */}
           {basars.length > 1 && (
             <label className="w-full sm:w-auto min-w-0 text-sm text-gray-600 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-              <span className="flex-shrink-0">Termine von:</span>
+              <span className="flex-shrink-0">Helferliste für:</span>
               <select
                 value={helferlisteBasarId}
                 onChange={(e) => setHelferlisteBasarId(e.target.value)}
@@ -249,7 +262,7 @@ export default function AdminPage() {
                     dayTasks.map((task) => {
                       const signups = task.signups || [];
                       return (
-                        <div key={task.id} className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-5">
+                        <div key={task.id} data-task-title={task.title} className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-5">
                           <div className="flex items-center justify-between">
                             <h4 className="text-lg font-semibold">{task.title}</h4>
                             <span className="text-base text-gray-600">

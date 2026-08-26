@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Header from '../../components/Header';
+import { pickDefaultBasarId } from '../../lib/basarWindows';
 import { getNavLinks } from '../../lib/navLinks';
 import { consentSummary } from '../../lib/legalDocs';
 
@@ -111,10 +112,7 @@ export default function AdminListPage() {
       const data = await res.json();
       const relevant: Basar[] = (data.basars ?? []).filter((b: Basar) => !b.isArchived && b.status !== 'DRAFT');
       setBasars(relevant);
-      const defaultId = relevant.find(b => b.status === 'ACTIVE')?.id
-        || relevant.find(b => b.status === 'OPEN')?.id
-        || relevant[0]?.id
-        || '';
+      const defaultId = pickDefaultBasarId(relevant);
       setSelectedBasarId(defaultId);
       if (!defaultId) setLoading(false); // no basar → nothing to load, don't spin forever
     } catch (error) {

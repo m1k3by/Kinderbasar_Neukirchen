@@ -57,7 +57,12 @@ export async function GET(request: Request) {
         isCashier: true,
         isOrga: true,
         createdAt: true,
-        _count: { select: { taskSignups: true, cakes: true } },
+        // Auf den Basar eingegrenzt, wenn einer mitgegeben wurde: die "Aktivität"-Spalte in
+        // /admin/list soll zeigen, ob jemand *in diesem* Basar mitmacht, nicht ob er jemals
+        // irgendwo mitgemacht hat.
+        _count: basarId
+          ? { select: { taskSignups: { where: { basarId } }, cakes: { where: { basarId } } } }
+          : { select: { taskSignups: true, cakes: true } },
         ...(basarId
           ? {
               basarSellers: {

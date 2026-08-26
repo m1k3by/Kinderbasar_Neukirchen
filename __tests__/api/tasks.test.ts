@@ -20,7 +20,9 @@ vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
 
 import { GET, POST, PUT, DELETE } from '@/app/api/tasks/route';
 
-function makeRequest(method: string, body?: object, url = 'http://localhost/api/tasks') {
+const BASAR = 'basar-a';
+
+function makeRequest(method: string, body?: object, url = `http://localhost/api/tasks?basarId=${BASAR}`) {
   return new Request(url, {
     method,
     headers: body ? { 'Content-Type': 'application/json' } : {},
@@ -39,6 +41,15 @@ describe('GET /api/tasks', () => {
     expect(res.status).toBe(401);
   });
 
+  it('returns 400 when basarId is missing', async () => {
+    // Ohne Basar gibt es keine sinnvolle Helferzahl. Ein stiller Fallback auf "alle Basare"
+    // hätte hier lange Zeit falsche Zahlen geliefert, ohne dass etwas aufgefallen wäre.
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    const res = await GET(makeRequest('GET', undefined, 'http://localhost/api/tasks'));
+    expect(res.status).toBe(400);
+    expect(prismaMock.task.findMany).not.toHaveBeenCalled();
+  });
+
   it('returns list of tasks → 200', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.task.findMany.mockResolvedValue([fakeTask]);
@@ -46,6 +57,34 @@ describe('GET /api/tasks', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toHaveLength(1);
+  });
+
+  // Das gemockte findMany ignoriert die Projektion, deshalb sagt die Antwort selbst nichts
+  // über sie aus – geprüft werden muss das Argument. Genau diese Lücke hat /admin/tasks
+  // monatelang "0 / 8 Helfer" anzeigen lassen, nachdem ein Feld aus dem select verschwand.
+  it('grenzt die Anmeldungen auf den Basar ein und liefert sie mit', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.task.findMany.mockResolvedValue([fakeTask]);
+    await GET(makeRequest('GET'));
+    const args = prismaMock.task.findMany.mock.calls[0][0];
+    expect(args.select.signups.where).toEqual({ basarId: BASAR });
+    expect(args.select.signups.select.sellerId).toBe(true);
+    expect(args.select.capacity).toBe(true);
+  });
+
+  it('liefert Helfer-E-Mails nur an Admins', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.task.findMany.mockResolvedValue([fakeTask]);
+    await GET(makeRequest('GET'));
+    expect(prismaMock.task.findMany.mock.calls[0][0].select.signups.select.seller.select.email)
+      .toBeUndefined();
+
+    vi.clearAllMocks();
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.task.findMany.mockResolvedValue([fakeTask]);
+    await GET(makeRequest('GET'));
+    expect(prismaMock.task.findMany.mock.calls[0][0].select.signups.select.seller.select.email)
+      .toBe(true);
   });
 
   it('returns 500 on DB error', async () => {

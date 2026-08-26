@@ -79,3 +79,28 @@ export function dateForWeekday(basar: BasarDays, day: string): Date | null {
       return null;
   }
 }
+
+export interface SelectableBasar {
+  id: string;
+  status: string;
+  isArchived?: boolean;
+}
+
+/**
+ * Vorgabe-Basar für die Helferlisten-Ansichten: der laufende Basar, sonst der offene,
+ * sonst der erste verbleibende. Entwürfe und Archiviertes kommen nicht in Frage.
+ *
+ * Stand vorher wortgleich in app/admin/page.tsx, app/employee/page.tsx und
+ * app/admin/list/page.tsx – bei vier Kopien wäre die erste vergessene Anpassung ein
+ * Basar, in dem eine Seite andere Daten zeigt als die nächste.
+ *
+ * Gibt '' zurück, wenn kein Basar in Frage kommt. Die aufrufende Seite darf dann nicht
+ * laden – ohne Basar gibt es keine Anmeldungen, die sie anzeigen könnte.
+ */
+export function pickDefaultBasarId(basars: SelectableBasar[]): string {
+  const relevant = basars.filter(b => !b.isArchived && b.status !== 'DRAFT');
+  return relevant.find(b => b.status === 'ACTIVE')?.id
+    || relevant.find(b => b.status === 'OPEN')?.id
+    || relevant[0]?.id
+    || '';
+}

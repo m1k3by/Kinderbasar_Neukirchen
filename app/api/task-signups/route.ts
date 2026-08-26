@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     if (authResult.response) return authResult.response;
     const { auth } = authResult;
 
-    const { taskId, sellerId: bodySellerId } = await req.json();
+    const { taskId, sellerId: bodySellerId, basarId } = await req.json();
 
     // Non-admins may only sign up themselves. Admins may sign up any seller.
     let sellerIdInt: number | null;
@@ -33,19 +33,21 @@ export async function POST(req: NextRequest) {
       sellerIdInt = auth.sellerId;
     }
 
-    if (!taskId || !sellerIdInt) {
+    if (!taskId || !sellerIdInt || !basarId) {
       return NextResponse.json(
-        { error: 'taskId und sellerId sind erforderlich' },
+        { error: 'taskId, sellerId und basarId sind erforderlich' },
         { status: 400 }
       );
     }
 
-    // Prüfen ob bereits angemeldet
+    // Prüfen ob bereits angemeldet – im *selben* Basar. Dieselbe Schicht in einem anderen
+    // Basar ist eine eigene Anmeldung, deshalb ist basarId Teil des Unique-Keys.
     const existing = await prisma.taskSignup.findUnique({
       where: {
-        taskId_sellerId: {
+        taskId_sellerId_basarId: {
           taskId,
           sellerId: sellerIdInt,
+          basarId,
         },
       },
     });
@@ -69,9 +71,10 @@ export async function POST(req: NextRequest) {
 
     // Prüfen auf zeitliche Überschneidungen mit bereits angemeldeten Aufgaben
     if (targetTask.timeFrom && targetTask.timeTo) {
-      // Hole alle Aufgaben, für die der User bereits angemeldet ist
+      // Nur Anmeldungen desselben Basars können sich überschneiden – eine Schicht aus
+      // einem vergangenen Basar darf die Eintragung im aktuellen nicht blockieren.
       const userSignups = await prisma.taskSignup.findMany({
-        where: { sellerId: sellerIdInt },
+        where: { sellerId: sellerIdInt, basarId },
         include: { task: true },
       });
 
@@ -97,7 +100,7 @@ export async function POST(req: NextRequest) {
     // oben geladenen targetTask.signups zu verwenden, der zwischen Laden und Schreiben schon
     // veraltet sein könnte.
     const signup = await prisma.$transaction(async (tx) => {
-      const currentCount = await tx.taskSignup.count({ where: { taskId } });
+      const currentCount = await tx.taskSignup.count({ where: { taskId, basarId } });
       if (currentCount >= targetTask.capacity) {
         return null; // signals "full" to the caller
       }
@@ -105,6 +108,7 @@ export async function POST(req: NextRequest) {
         data: {
           taskId,
           sellerId: sellerIdInt,
+          basarId,
         },
       });
     });
@@ -132,6 +136,7 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const taskId = searchParams.get('taskId');
     const bodySellerId = searchParams.get('sellerId');
+    const basarId = searchParams.get('basarId');
 
     // Non-admins may only remove themselves. Admins may remove any seller.
     let sellerIdInt: number | null;
@@ -150,18 +155,19 @@ export async function DELETE(req: NextRequest) {
       sellerIdInt = auth.sellerId;
     }
 
-    if (!taskId || !sellerIdInt) {
+    if (!taskId || !sellerIdInt || !basarId) {
       return NextResponse.json(
-        { error: 'taskId und sellerId sind erforderlich' },
+        { error: 'taskId, sellerId und basarId sind erforderlich' },
         { status: 400 }
       );
     }
 
     await prisma.taskSignup.delete({
       where: {
-        taskId_sellerId: {
+        taskId_sellerId_basarId: {
           taskId,
           sellerId: sellerIdInt,
+          basarId,
         },
       },
     });

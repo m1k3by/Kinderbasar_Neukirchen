@@ -21,8 +21,10 @@ vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
 
 import { GET, POST, PUT, DELETE } from '@/app/api/cakes/route';
 
+const BASAR = 'basar-a';
+
 function makeGetRequest() {
-  return new Request('http://localhost/api/cakes', { method: 'GET' });
+  return new Request(`http://localhost/api/cakes?basarId=${BASAR}`, { method: 'GET' });
 }
 
 function makePostRequest(body: object) {
@@ -67,6 +69,7 @@ describe('GET /api/cakes', () => {
     const json = await res.json();
     expect(json).toHaveLength(1);
     expect(prismaMock.cake.findMany).toHaveBeenCalledWith({
+      where: { basarId: BASAR },
       select: { id: true, cakeName: true, sellerId: true },
     });
   });
@@ -76,6 +79,7 @@ describe('GET /api/cakes', () => {
     prismaMock.cake.findMany.mockResolvedValue([fakeCake]);
     await GET(makeGetRequest());
     expect(prismaMock.cake.findMany).toHaveBeenCalledWith({
+      where: { basarId: BASAR },
       select: {
         id: true,
         cakeName: true,
@@ -105,57 +109,64 @@ describe('POST /api/cakes', () => {
 
   it('returns 401 when no token', async () => {
     cookiesGetMock.mockReturnValue(undefined);
-    const res = await POST(makePostRequest({ cakeName: 'Torte', sellerId: 1234 }));
+    const res = await POST(makePostRequest({ cakeName: 'Torte', sellerId: 1234, basarId: BASAR }));
     expect(res.status).toBe(401);
   });
 
   it('returns 400 when cakeName is missing', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
-    const res = await POST(makePostRequest({ sellerId: 1234 }));
+    const res = await POST(makePostRequest({ sellerId: 1234, basarId: BASAR }));
     expect(res.status).toBe(400);
   });
 
   it('returns 400 when sellerId is missing', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
-    const res = await POST(makePostRequest({ cakeName: 'Torte' }));
+    const res = await POST(makePostRequest({ cakeName: 'Torte', basarId: BASAR }));
     expect(res.status).toBe(400);
   });
 
   it('returns 400 for non-numeric sellerId string', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
-    const res = await POST(makePostRequest({ cakeName: 'Torte', sellerId: 'abc' }));
+    const res = await POST(makePostRequest({ cakeName: 'Torte', sellerId: 'abc', basarId: BASAR }));
     expect(res.status).toBe(400);
   });
 
   it('returns 403 when seller tries to create a cake for someone else', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
-    const res = await POST(makePostRequest({ cakeName: 'Torte', sellerId: 9999 }));
+    const res = await POST(makePostRequest({ cakeName: 'Torte', sellerId: 9999, basarId: BASAR }));
     expect(res.status).toBe(403);
   });
 
   it('creates a cake and returns it → 200 (admin, any sellerId)', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.cake.create.mockResolvedValue(fakeCake);
-    const res = await POST(makePostRequest({ cakeName: 'Schokoladenkuchen', sellerId: 1234 }));
+    const res = await POST(makePostRequest({ cakeName: 'Schokoladenkuchen', sellerId: 1234, basarId: BASAR }));
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.cakeName).toBe('Schokoladenkuchen');
     expect(prismaMock.cake.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { cakeName: 'Schokoladenkuchen', sellerId: 1234 } })
+      expect.objectContaining({ data: { cakeName: 'Schokoladenkuchen', sellerId: 1234, basarId: BASAR } })
     );
   });
 
   it('creates a cake for self → 200 (seller)', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.cake.create.mockResolvedValue(fakeCake);
-    const res = await POST(makePostRequest({ cakeName: 'Schokoladenkuchen', sellerId: 1234 }));
+    const res = await POST(makePostRequest({ cakeName: 'Schokoladenkuchen', sellerId: 1234, basarId: BASAR }));
     expect(res.status).toBe(200);
+  });
+
+  it('returns 400 when basarId is missing', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    const res = await POST(makePostRequest({ cakeName: 'Torte', sellerId: 1234 }));
+    expect(res.status).toBe(400);
+    expect(prismaMock.cake.create).not.toHaveBeenCalled();
   });
 
   it('accepts string sellerId (converts to int)', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.cake.create.mockResolvedValue(fakeCake);
-    const res = await POST(makePostRequest({ cakeName: 'Torte', sellerId: '5678' }));
+    const res = await POST(makePostRequest({ cakeName: 'Torte', sellerId: '5678', basarId: BASAR }));
     expect(res.status).toBe(200);
     expect(prismaMock.cake.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ sellerId: 5678 }) })
@@ -165,7 +176,7 @@ describe('POST /api/cakes', () => {
   it('returns 500 on DB error', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.cake.create.mockRejectedValue(new Error('DB error'));
-    const res = await POST(makePostRequest({ cakeName: 'Torte', sellerId: 1234 }));
+    const res = await POST(makePostRequest({ cakeName: 'Torte', sellerId: 1234, basarId: BASAR }));
     expect(res.status).toBe(500);
   });
 });

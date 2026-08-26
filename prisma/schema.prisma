@@ -47,23 +47,34 @@ model Task {
   signups   TaskSignup[]
 }
 
+// Eine Anmeldung gehört zu genau einem Basar. Task selbst bleibt bewusst basarübergreifend:
+// dieselben Schichten wiederholen sich jeden Basar, eine Kopie pro Basar wäre nur Pflegearbeit.
+// basarId gehört deshalb in den Unique-Key – ohne ihn könnte sich niemand im nächsten Basar
+// für eine Schicht eintragen, für die er im letzten schon eingetragen war.
 model TaskSignup {
   id        String   @id @default(cuid())
   taskId    String
   sellerId  Int
+  basarId   String
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
   seller    Seller   @relation(fields: [sellerId], references: [sellerId], onDelete: Cascade)
+  basar     Basar    @relation(fields: [basarId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
-  
-  @@unique([taskId, sellerId])
+
+  @@unique([taskId, sellerId, basarId])
+  @@index([basarId])
 }
 
 model Cake {
   id        String   @id @default(cuid())
   cakeName  String
   sellerId  Int
+  basarId   String
   seller    Seller   @relation(fields: [sellerId], references: [sellerId])
+  basar     Basar    @relation(fields: [basarId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+
+  @@index([basarId])
 }
 
 // ───────────────────────────────────────────────
@@ -134,6 +145,8 @@ model Basar {
   updatedAt            DateTime    @updatedAt
   basarSellers         BasarSeller[]
   sales                Sale[]
+  taskSignups          TaskSignup[]
+  cakes                Cake[]
 }
 
 model BasarSeller {

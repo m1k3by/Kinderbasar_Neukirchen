@@ -8,10 +8,19 @@ export async function GET(request: Request) {
     if (authResult.response) return authResult.response;
     const { auth } = authResult;
 
-    // Trimmed projection: only the fields the client pages actually read (employee/admin
-    // Helferliste views use signups[].sellerId + signups[].seller.{firstName,lastName,email}).
-    // _count.signups was previously sent alongside the full signups array but never read by
-    // any consumer, so it's dropped here.
+    // basarId ist Pflicht, bewusst ohne stillen Fallback auf "alle Basare": genau so ein
+    // stiller Fallback hat /admin/tasks monatelang 0 Helfer anzeigen lassen. Fehlt der
+    // Parameter, soll der Aufrufer das merken.
+    const { searchParams } = new URL(request.url);
+    const basarId = searchParams.get('basarId');
+    if (!basarId) {
+      return NextResponse.json({ error: 'basarId ist erforderlich' }, { status: 400 });
+    }
+
+    // Task selbst ist basarübergreifend (dieselben Schichten jeden Basar), nur die
+    // Anmeldungen werden auf den Basar eingegrenzt. Die Seiten zählen signups.length –
+    // ein zusätzliches _count wäre dieselbe Zahl doppelt und die nächste Gelegenheit,
+    // dass beide auseinanderlaufen.
     const tasks = await prisma.task.findMany({
       select: {
         id: true,
@@ -22,6 +31,7 @@ export async function GET(request: Request) {
         capacity: true,
         createdAt: true,
         signups: {
+          where: { basarId },
           select: {
             sellerId: true,
             seller: {
