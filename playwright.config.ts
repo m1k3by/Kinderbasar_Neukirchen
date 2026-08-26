@@ -1,8 +1,19 @@
+import { existsSync } from 'node:fs';
 import { defineConfig } from '@playwright/test';
 import { config as loadEnv } from 'dotenv';
 
 // .env.test statt .env: der E2E-Lauf leert Tabellen und darf die Produktivdatenbank niemals
 // sehen. Die Datei ist nicht eingecheckt, .env.test.example zeigt, was hineingehoert.
+//
+// Harter Abbruch bei fehlender Datei: dotenv meldet das nicht, und sowohl `next start` als
+// auch Prisma laden dann von sich aus `.env` – der Lauf zeigte damit auf die
+// Produktivdatenbank. Ein stiller Fallback ist hier der gefaehrlichste Fall, den es gibt.
+if (!existsSync('.env.test')) {
+  throw new Error(
+    '.env.test fehlt. Ohne diese Datei wuerde der E2E-Lauf auf die Datenbank aus .env ' +
+    'zeigen – also moeglicherweise auf die Produktivdatenbank. Vorlage: .env.test.example'
+  );
+}
 loadEnv({ path: '.env.test', override: true });
 
 const PORT = 3001;

@@ -264,8 +264,12 @@ describe('POST /api/register', () => {
       expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
       const sql = sqlOf(prismaMock.$queryRaw, 0);
       expect(sql).toContain('UPDATE "SellerIdCounter"');
-      expect(sql).toContain('SET "nextId" = "nextId" + 1');
-      expect(sql).toContain('"nextId" <= 9999');   // Obergrenze des Bereichs 1000-9999
+      // Die niedrigste *freie* Nummer, nicht die nächste nach der höchsten. Ein "+ 1" auf den
+      // alten Zählerstand ist genau der Fehler vom 26.08.2026 – siehe Regression unten.
+      expect(sql).toContain('generate_series(1000, 9999)');
+      expect(sql).toContain('MIN(gs)');
+      expect(sql).toContain('NOT EXISTS');
+      expect(sql).not.toContain('"nextId" + 1');
       expect(sql).toContain('RETURNING');
       // Im Normalfall wird nicht nachgesät – das kostet sonst eine Anweisung pro Registrierung
       expect(prismaMock.$executeRaw).not.toHaveBeenCalled();
@@ -300,7 +304,7 @@ describe('POST /api/register', () => {
         );
       });
 
-      it('sät die Zeile idempotent und leitet den Startwert aus der höchsten vergebenen Nummer ab', async () => {
+      it('sät die Zeile idempotent, ohne den Startwert aus der höchsten Nummer abzuleiten', async () => {
         prismaMock.seller.findUnique.mockResolvedValue(null);
         prismaMock.seller.create.mockResolvedValue(createdSeller);
         prismaMock.$executeRaw.mockResolvedValue(1);
@@ -315,13 +319,46 @@ describe('POST /api/register', () => {
         // Ohne ON CONFLICT würde eine parallele Registrierung hier auf einen Primärschlüssel-
         // konflikt laufen, statt einfach weiterzumachen.
         expect(seed).toContain('ON CONFLICT ("id") DO NOTHING');
-        // Der Startwert MUSS aus MAX("sellerId") kommen. Ein fest verdrahtetes 1000 würde die
-        // nächsten Registrierungen mit längst bestehenden Verkäufern kollidieren lassen.
-        expect(seed).toContain('MAX("sellerId")');
-        expect(seed).toContain('GREATEST(1000');
+        // Der Startwert ist bewusst egal – runAllocate() rechnet ihn ohnehin neu aus. Ein aus
+        // MAX("sellerId") abgeleiteter Startwert war der eigentliche Fehler: bei verstreuten
+        // Nummern brennt er den ganzen Bereich ab, sobald irgendwo die 9999 vergeben ist.
+        expect(seed).not.toContain('MAX("sellerId")');
       });
 
-      it('wirklich erschöpfter Bereich: meldet 400 erst, nachdem das Nachsäen nichts geändert hat', async () => {
+      // ── Regression zum Vorfall vom 26.08.2026 ───────────────────────────────
+      // Der Zähler stand auf 10000, weil irgendwann jemand die sellerId 9999 bekommen hatte
+      // und der Startwert aus MAX("sellerId") + 1 abgeleitet wurde. Belegt waren 301 von 9000
+      // Nummern – die Registrierung meldete trotzdem „alle Verkäufer-IDs sind vergeben".
+      // Entscheidend ist, dass eine freie Nummer auch dann vergeben wird, wenn eine hohe
+      // Nummer bereits belegt ist.
+      it('vergibt eine niedrige freie Nummer, obwohl die 9999 belegt ist', async () => {
+        prismaMock.seller.findUnique.mockResolvedValue(null);
+        prismaMock.seller.create.mockResolvedValue({ ...createdSeller, sellerId: 1002 });
+        // Was die neue Anweisung liefert: die niedrigste Lücke, nicht 9999 + 1.
+        prismaMock.$queryRaw.mockResolvedValue([{ allocated: 1002 }]);
+
+        const res = await POST(makeNextRequest(validBody));
+
+        expect(res.status).toBe(200);
+        expect(prismaMock.seller.create).toHaveBeenCalledWith(
+          expect.objectContaining({ data: expect.objectContaining({ sellerId: 1002 }) })
+        );
+      });
+
+      it('erschöpfter Bereich: 10000 aus der Anweisung bedeutet 400, nicht sellerId 10000', async () => {
+        // Ist keine Nummer mehr frei, liefert COALESCE(MIN(gs), 10000) den Wert 10000. Ohne
+        // Obergrenzenprüfung im Aufrufer entstünde daraus eine sellerId außerhalb des Bereichs.
+        prismaMock.seller.findUnique.mockResolvedValue(null);
+        prismaMock.$queryRaw.mockResolvedValue([{ allocated: 10000 }]);
+
+        const res = await POST(makeNextRequest(validBody));
+
+        expect(res.status).toBe(400);
+        expect((await res.json()).error).toMatch(/Alle Verkäufer-IDs sind vergeben/i);
+        expect(prismaMock.seller.create).not.toHaveBeenCalled();
+      });
+
+      it('fehlende Zählerzeile auch nach dem Nachsäen: meldet 400', async () => {
         prismaMock.seller.findUnique.mockResolvedValue(null);
         mockAllocateSellerId(null); // beide Läufe leer
 

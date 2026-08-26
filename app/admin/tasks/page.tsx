@@ -424,7 +424,8 @@ export default function TasksManagementPage() {
               {tasks.map((task) => {
                 // Eine Quelle fuer alle fuenf Anzeigen unten – Zaehler und Balken koennen
                 // damit nicht auseinanderlaufen.
-                const signupCount = task.signups?.length ?? 0;
+                const signups = task.signups ?? [];
+                const signupCount = signups.length;
                 return (
                 <div key={task.id} data-task-title={task.title} className="p-4 md:p-6 hover:bg-gray-50 transition-colors">
                   {editingTaskId === task.id ? (
@@ -558,6 +559,28 @@ export default function TasksManagementPage() {
                               }}
                             ></div>
                           </div>
+                        </div>
+
+                        {/* Wer sich eingetragen hat. GET /api/tasks liefert die Anmeldungen
+                            samt Namen längst mit – sichtbar waren sie bisher nur auf der
+                            Admin-Startseite, nicht hier, wo die Schichten verwaltet werden.
+                            Die Verkäufernummer steht dabei, weil Namen sich wiederholen. */}
+                        <div className="mt-3">
+                          {signupCount === 0 ? (
+                            <p className="text-sm text-gray-400">Noch niemand eingetragen</p>
+                          ) : (
+                            <div className="flex flex-wrap gap-1.5">
+                              {signups.map((signup) => (
+                                <span
+                                  key={signup.sellerId}
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-100 text-gray-800 text-sm"
+                                >
+                                  {signup.seller.firstName} {signup.seller.lastName}
+                                  <span className="text-gray-400">#{signup.sellerId}</span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
 

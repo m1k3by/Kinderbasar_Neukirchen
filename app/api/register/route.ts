@@ -9,40 +9,51 @@ import crypto from 'crypto';
 import { getAuth } from '../../lib/apiAuth';
 import { normalizeEmail } from '../../lib/auth';
 
-// Legt die Zählerzeile an, falls sie fehlt. Startwert ist eins über der höchsten bereits
-// vergebenen sellerId, damit bestehende Installationen nicht mit registrierten Verkäufern
-// kollidieren. Idempotent durch ON CONFLICT DO NOTHING.
+// Legt die Zählerzeile an, falls sie fehlt. Der Startwert ist beliebig: runAllocate()
+// berechnet ihn bei jedem Aufruf ohnehin neu aus der tatsächlichen Belegung. Idempotent
+// durch ON CONFLICT DO NOTHING.
 async function seedSellerIdCounter(): Promise<void> {
   await prisma.$executeRaw`
     INSERT INTO "SellerIdCounter" ("id", "nextId")
-    SELECT 'default', GREATEST(1000, COALESCE((SELECT MAX("sellerId") FROM "Seller" WHERE "sellerId" BETWEEN 1000 AND 9999), 999) + 1)
+    VALUES ('default', 1000)
     ON CONFLICT ("id") DO NOTHING
   `;
 }
 
+// Setzt nextId auf die *niedrigste freie* Nummer im Bereich 1000-9999 und gibt sie zurück.
+//
+// Bewusst nicht MAX("sellerId") + 1: die vorhandenen Nummern sind über den ganzen Bereich
+// verstreut (historisch selbst vergeben, nicht fortlaufend). Am 26.08.2026 stand der Zähler
+// deshalb auf 10000, weil irgendwann jemand die 9999 bekommen hatte – bei 301 von 9000
+// belegten Nummern meldete die Registrierung „alle Verkäufer-IDs sind vergeben".
+//
+// Die Zeile in "SellerIdCounter" bleibt als Serialisierungspunkt erhalten: das UPDATE sperrt
+// sie auf Zeilenebene. Der Wert wird nicht fortgeschrieben, sondern jedes Mal neu berechnet –
+// ein einmal falsch gesetzter Zähler heilt damit von selbst.
+//
+// Ist der Bereich erschöpft, liefert die Anweisung eine Zeile mit 10000 statt gar keiner.
+// Das ist wichtig: „keine Zeile" bedeutet dann eindeutig „Zählerzeile fehlt" (siehe unten)
+// und nicht mehr zweierlei.
 function runAllocate() {
-  return prisma.$queryRaw<{ allocated: number }[]>`
+  return prisma.$queryRaw<{ allocated: number | bigint }[]>`
     UPDATE "SellerIdCounter"
-    SET "nextId" = "nextId" + 1
-    WHERE "id" = 'default' AND "nextId" <= 9999
-    RETURNING "nextId" - 1 AS "allocated"
+    SET "nextId" = (
+      SELECT COALESCE(MIN(gs), 10000)
+      FROM generate_series(1000, 9999) AS gs
+      WHERE NOT EXISTS (SELECT 1 FROM "Seller" s WHERE s."sellerId" = gs)
+    )
+    WHERE "id" = 'default'
+    RETURNING "nextId" AS "allocated"
   `;
 }
 
-// Allocates the next sellerId atomically (range 1000-9999). A single UPDATE...RETURNING
-// statement, serialized by Postgres at the row level, so two concurrent registrations always
-// get different ids. Replaces the old approach of loading every existing sellerId and
-// scanning for the first free slot, which was O(n) per request (repeated on every retry) and
-// still raced under parallel load – two requests could compute the same "free" id and one
-// would lose to a P2002 on create. Returns null once the range is exhausted (nextId > 9999).
+// Gibt die niedrigste freie sellerId zurück, oder null wenn der Bereich 1000-9999 voll ist.
 async function allocateSellerId(): Promise<number | null> {
   let rows = await runAllocate();
 
-  // Null Treffer heißt zweierlei: Bereich erschöpft ODER die Zählerzeile fehlt. Letzteres
-  // passiert auf Installationen, die per `prisma db push` eingerichtet wurden – das legt die
-  // Tabelle aus dem Schema an, führt aber das INSERT der Migration nicht aus. Die Tabelle
-  // bleibt leer, das UPDATE trifft nichts, und die Registrierung meldete fälschlich
-  // „alle IDs vergeben". Einmal nachsäen und erneut versuchen unterscheidet die beiden Fälle.
+  // Keine betroffene Zeile heißt: die Zählerzeile fehlt. Das passiert auf Installationen, die
+  // per `prisma db push` eingerichtet wurden – das legt die Tabelle aus dem Schema an, führt
+  // aber das INSERT der Migration nicht aus. Einmal nachsäen und erneut versuchen.
   if (rows.length === 0) {
     await seedSellerIdCounter();
     rows = await runAllocate();
@@ -52,7 +63,8 @@ async function allocateSellerId(): Promise<number | null> {
   }
 
   if (!rows || rows.length === 0) return null;
-  return rows[0].allocated;
+  const allocated = Number(rows[0].allocated);
+  return allocated <= 9999 ? allocated : null;
 }
 
 export async function POST(request: NextRequest) {
@@ -157,7 +169,12 @@ export async function POST(request: NextRequest) {
 
     let seller: Awaited<ReturnType<typeof prisma.seller.create>> | undefined;
     let sellerId: number | null = null;
-    const MAX_ATTEMPTS = 3;
+    // ponytail: nebenläufige Registrierungen berechnen dieselbe niedrigste freie Nummer und
+    // kollidieren deshalb absichtlich – der P2002-Zweig unten vergibt dann die nächste. Deckt
+    // bis zu 5 gleichzeitige Registrierungen ab, was hier reicht (301 Verkäufer insgesamt).
+    // Wird das je knapp: Allokation und create in eine $transaction, dann hält die Zeilensperre
+    // bis zum Insert und es kollidiert gar nichts mehr.
+    const MAX_ATTEMPTS = 5;
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       // Atomic allocation – no more loading every existing id and scanning for a gap.
