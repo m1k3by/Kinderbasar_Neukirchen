@@ -193,6 +193,19 @@ describe('POST /api/register', () => {
     expect(html).not.toMatch(/Abholung/i);
   });
 
+  // Der Anhang "Generelle_Verkäuferinformationen.jpeg" wurde am 26.08.2026 entfernt. Er hing
+  // als absoluter Pfad in der Warteschlange und war der einzige Grund, warum überhaupt Zeilen
+  // mit attempts>0 entstanden (ENOENT, wenn die zustellende Invocation eine andere war als die
+  // einreihende – siehe app/lib/mailQueue.ts). Ohne Anhang gibt es diese Fehlerklasse hier nicht mehr.
+  it('the confirmation email carries no attachment', async () => {
+    prismaMock.seller.findUnique.mockResolvedValue(null);
+    prismaMock.seller.create.mockResolvedValue(createdSeller);
+    await POST(makeNextRequest(validBody));
+    const data = prismaMock.mailQueue.create.mock.calls[0][0].data;
+    expect(data.attachmentsJson).toBeUndefined();
+    expect(data.html as string).not.toMatch(/Anhang|Verkäuferinformationen/i);
+  });
+
   it('registration still succeeds (201) even if enqueueing the confirmation email fails', async () => {
     prismaMock.seller.findUnique.mockResolvedValue(null);
     prismaMock.seller.create.mockResolvedValue(createdSeller);

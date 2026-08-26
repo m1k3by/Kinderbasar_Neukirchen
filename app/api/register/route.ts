@@ -1,8 +1,6 @@
 import { NextResponse, NextRequest, after } from 'next/server';
 import { prisma } from '../../lib/prisma';
 import { generateQR, generateBarcode } from '../../lib/qr';
-import path from 'path';
-import fs from 'fs';
 import { rateLimit } from '../../lib/rateLimit';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
@@ -238,17 +236,6 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      // Attachments: add general info JPEG from project root if present
-      const attachments: any[] = [];
-      const generalInfoPath = path.join(process.cwd(), 'Generelle_Verkäuferinformationen.jpeg');
-      if (fs.existsSync(generalInfoPath)) {
-        attachments.push({ filename: 'Generelle_Verkäuferinformationen.jpeg', path: generalInfoPath });
-      }
-
-      const attachmentNotice = attachments.length > 0
-        ? `<p style="margin-top:12px;">Im Anhang finden Sie weitere Informationen: <strong>Generelle_Verkäuferinformationen.jpeg</strong></p>`
-        : '';
-
       const passwordSection = tempPassword
         ? `<div style="margin-top: 20px; padding: 15px; background-color: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 4px;">
              <h3 style="margin: 0 0 10px 0; color: #92400e;">Ihr Login</h3>
@@ -264,7 +251,6 @@ export async function POST(request: NextRequest) {
           <p>Vielen Dank für Ihre Registrierung!</p>
           <p>Ihre Verkäufer-Nummer: <strong>${sellerId}</strong></p>
           ${passwordSection}
-          ${attachmentNotice}
           <p style="margin-top:18px;">Bewahren Sie diese Informationen gut auf!</p>
           <p style="margin-top:18px;">Mit freundlichen Grüßen,<br/><strong>Dein Basar-Team</strong></p>
         </div>
@@ -282,7 +268,6 @@ export async function POST(request: NextRequest) {
           to: email,
           subject: 'Ihre Registrierung beim Kinderbasar Neukirchen',
           html: emailHtml,
-          attachmentsJson: attachments.length > 0 ? JSON.stringify(attachments) : null,
         },
       });
 
