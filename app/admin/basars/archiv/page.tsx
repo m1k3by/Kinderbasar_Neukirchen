@@ -12,7 +12,8 @@ interface Basar {
   location?: string;
   status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
   isArchived: boolean;
-  _count?: { basarSellers: number };
+  /** Nur **aktive** Teilnahmen (where in app/api/basars/route.ts). Nicht optional: die Route liefert es immer. */
+  _count: { basarSellers: number };
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -114,7 +115,7 @@ export default function BasarArchivPage() {
                     <p className="text-sm text-gray-400">
                       {new Date(basar.eventDate).toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}
                       {basar.location && ` · ${basar.location}`}
-                      {` · ${basar._count?.basarSellers ?? 0} Verkäufer`}
+                      {` · ${basar._count.basarSellers} Verkäufer`}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2 sm:flex-shrink-0 sm:justify-end">

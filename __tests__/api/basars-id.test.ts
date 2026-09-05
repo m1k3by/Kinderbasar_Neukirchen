@@ -130,3 +130,40 @@ describe('PUT /api/basars/[id]', () => {
     expect((await res.json()).title).toBe('Updated');
   });
 });
+
+/**
+ * Die Adminantwort enthaelt zwei verschieden grosse Mengen von Verkaeufern, und die
+ * Verwechslung war sichtbar: der Reiter zeigte „Verkaeufer (4)", waehrend darunter neun
+ * Zeilen standen. `_count.basarSellers` zaehlt nur aktive Teilnahmen (Kapazitaet gegen
+ * maxSellers), `basarSellers` liefert *alle* Zeilen inklusive der abgemeldeten.
+ *
+ * Ein gemocktes Prisma ignoriert `include` vollstaendig – die Antwort im Test beweist
+ * darueber nichts. Geprueft werden deshalb die Argumente von findUnique.
+ */
+describe('GET /api/basars/[id] – aktive Teilnehmer vs. vollstaendige Liste', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('zaehlt nur aktive Teilnahmen, liefert die Liste aber ungefiltert', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.basar.findUnique.mockResolvedValue(fakeBasar);
+
+    await GET(makeGetRequest(), makeContext());
+
+    const include = prismaMock.basar.findUnique.mock.calls[0][0].include;
+    expect(include._count.select.basarSellers).toEqual({ where: { isActive: true } });
+    expect(include.basarSellers.where).toBeUndefined();
+  });
+
+  it('liefert Verkaeuferzeilen nur an Admins', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basar.findUnique.mockResolvedValue(fakeBasar);
+    prismaMock.basarSeller.findUnique.mockResolvedValue(null);
+    prismaMock.seller.findUnique.mockResolvedValue({ isOrga: false });
+
+    await GET(makeGetRequest(), makeContext());
+
+    const include = prismaMock.basar.findUnique.mock.calls[0][0].include;
+    expect(include.basarSellers).toBeUndefined();
+    expect(include._count.select.basarSellers).toEqual({ where: { isActive: true } });
+  });
+});

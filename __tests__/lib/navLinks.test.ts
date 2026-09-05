@@ -64,6 +64,7 @@ describe('getNavLinks – Admin', () => {
       '/admin/list',
       '/admin/tasks',
       '/admin/hilfe',
+      '/admin/logs',
       '/',
     ]);
   });

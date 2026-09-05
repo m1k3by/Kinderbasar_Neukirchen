@@ -16,6 +16,11 @@ async function login(page: Page, user: string, password: string) {
   await page.locator('input[type="text"]').first().fill(user);
   await page.locator('input[type="password"]').fill(password);
   await page.getByRole('button', { name: 'Anmelden' }).click();
+  // Die Login-Seite navigiert per window.location.href weiter (voller Seitenwechsel, damit
+  // das Root-Layout das frische Cookie sieht). Ohne dieses Warten laeuft der naechste
+  // page.goto in die noch offene Navigation und bricht mit net::ERR_ABORTED ab – auf einem
+  // langsamen Rechner faellt das nicht auf, auf einem schnellen immer.
+  await page.waitForURL(url => !url.pathname.startsWith('/login'));
 }
 
 // Es gibt keine Logout-Route – der "Logout"-Link fuehrt nur auf die Startseite und laesst

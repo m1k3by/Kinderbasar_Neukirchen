@@ -52,8 +52,18 @@ export const faqData: FaqItem[] = [
     id: 'seller-etiketten',
     question: 'Wie drucke ich Etiketten aus?',
     answer:
-      'In deiner Artikelliste gibt es den Button **"🖨 Etiketten drucken"** (blau). Klicke darauf – es öffnet sich ein Druckfenster mit allen QR-Code-Etiketten.\n\nJedes Etikett zeigt: QR-Code, deine Verkäufernummer, Beschreibung, Größe und Preis. Schneide sie aus und klebe sie auf die Artikel.',
-    keywords: ['etiketten', 'drucken', 'ausdrucken', 'label', 'pdf', 'qr', 'aufkleber', 'zettel', 'print'],
+      'In deiner Artikelliste gibt es den blauen Button **"🖨 Etiketten als PDF"** – er erscheint, solange der Basar den Status **"Anmeldung offen"** hat. Klicke darauf: du bekommst eine fertige PDF-Datei mit allen QR-Code-Etiketten.\n\nJedes Etikett zeigt: QR-Code, deine Verkäufernummer, Beschreibung, Größe und Preis.\n\n**Wichtig beim Drucken:** Wähle im Druckdialog **"Tatsächliche Größe" / 100 %** – *nicht* "An Seite anpassen". Sonst passen die Etiketten nicht auf den Bogen.\n\nPapier: A4, Etikettenbögen 70 × 36 mm (z. B. Avery Zweckform 3475). Über den Link **"Testseite für Normalpapier"** kannst du vorher auf normalem Papier prüfen, ob dein Drucker maßhaltig druckt.',
+    keywords: ['etiketten', 'drucken', 'ausdrucken', 'label', 'pdf', 'qr', 'aufkleber', 'zettel', 'print', 'avery', '3475', 'bogen'],
+    roles: ['seller', 'employee'],
+    category: 'Artikel & Etiketten',
+  },
+
+  {
+    id: 'seller-etiketten-selbst',
+    question: 'Kann ich Etiketten selbst gestalten oder von Hand schreiben?',
+    answer:
+      'Nein. Das Etikett muss aus dem System kommen.\n\nAn der Kasse wird ausschließlich der **QR-Code** gescannt – er verbindet den Artikel mit dir und deinem Preis. Ein selbst geschriebenes oder selbst gestaltetes Etikett hat diesen Code nicht und lässt sich nicht verkaufen.\n\nWas du dagegen frei wählen darfst:\n\n– **Das Papier.** Vorgestanzte Bögen (Avery 3475) sind bequem, nötig sind sie nicht – du kannst das PDF auch auf normales Papier drucken und die Etiketten ausschneiden.\n– **Die Befestigung.** Ankleben, antackern, mit Faden anbinden – Hauptsache, das Etikett hält und der QR-Code bleibt flach und gut sichtbar.\n\nNicht ändern darfst du den Inhalt: QR-Code, Verkäufernummer und Preis müssen so bleiben, wie sie im PDF stehen.',
+    keywords: ['selbst', 'selber', 'eigene', 'machen', 'handschriftlich', 'hand', 'schreiben', 'malen', 'basteln', 'gestalten', 'etikett', 'etiketten', 'anhänger', 'ausschneiden', 'normales', 'papier'],
     roles: ['seller', 'employee'],
     category: 'Artikel & Etiketten',
   },

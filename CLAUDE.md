@@ -119,6 +119,29 @@ Nach jeder Änderung an einer PDF-Ausgabe: Datei erzeugen und die Geometrie mess
 - Beträge über `fmt()` formatieren, Währung `€` mit schmalem Abstand davor.
 - Verkäufernummer (`sellerId`) ist permanent und basarübergreifend stabil; QR-Codes von Artikeln dürfen sich bei Wiederverwendung über Basare hinweg **nicht** ändern (sonst müsste neu gedruckt werden).
 - Fehler in Route Handlern: `console.error` mit Routenpfad als Präfix, nach außen generische Meldung.
+
+- **`console.error` ist eine überwachte Schnittstelle, kein Ausguss.** `instrumentation.ts`
+  installiert beim Start `installErrorLogger()` (`app/lib/errorLog.ts`); der ersetzte
+  `console.error` ruft erst das Original auf und schreibt danach eine Zeile in `ErrorLog`,
+  sichtbar unter `/admin/logs` samt Zahl in der Admin-Navigation. Deshalb ist die Konvention
+  `console.error('METHODE /pfad error:', error)` keine Kosmetik mehr: alles vor dem ersten
+  Doppelpunkt landet als Fundstelle in der Tabelle, ein `Error` unter den Argumenten liefert
+  den Stack. Wer stattdessen still schluckt (`catch {}`) oder eine Ausnahme in eine harmlose
+  Antwort verwandelt, macht den Fehler weiterhin unsichtbar – genau der Zustand, den
+  `/admin/logs` beenden soll.
+  *Warum zentral statt 93 Aufrufe umschreiben:* ein `logError()`-Helfer hätte 93 Änderungen
+  gekostet und beim 94. Aufruf schon wieder gefehlt. Der Abgriff erfasst auch jede Stelle,
+  die es noch nicht gibt.
+  Der Import in `instrumentation.ts` ist **dynamisch und auf `NEXT_RUNTIME === 'nodejs'`
+  beschränkt**: `middleware.ts` läuft in der Edge Runtime, und Prisma ist dort nicht lauffähig.
+  Browserfehler kommen über `app/components/ErrorReporter.tsx` und `app/global-error.tsx`
+  nach `POST /api/errors` – die Route liegt bewusst **nicht** im `matcher` von
+  `middleware.ts`, weil ein Absturz auf `/login` gerade Nichtangemeldete trifft. Nur dieser
+  Weg kennt die Verkäufernummer; Serverzeilen haben keinen Request-Kontext und lassen
+  `sellerId` leer. `ADMIN_ALERT_EMAIL` schaltet zusätzlich eine Alarmmail frei (höchstens
+  eine pro Stunde, über die bestehende `MailQueue`). Aufgeräumt wird nach 30 Tagen im
+  täglichen Lauf von `GET /api/cron/mail-queue` – ohne Aufräumer wächst eine Tabelle, die
+  bei jedem `console.error` beschrieben wird, unbegrenzt.
 - **Orga (`Seller.isOrga`) ist ein Zusatzkennzeichen für Mitarbeiter, kein eigener Rang.**
   Nur der Admin setzt es (`app/api/admin/toggle-orga-status`), und es hat genau zwei
   Wirkungen: die Person gilt in **jedem** Basar als teilnehmend, ohne sich zu aktivieren

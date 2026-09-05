@@ -29,9 +29,11 @@ export interface NavLink {
   href: string;
   label: string;
   active?: boolean;
+  /** Marker fuer eine Zahl neben dem Label. Den Wert holt sich app/components/Header selbst. */
+  badge?: 'errors';
 }
 
-export type AdminNavKey = 'basarliste' | 'basare' | 'archiv' | 'helferliste' | 'aufgaben' | 'hilfe';
+export type AdminNavKey = 'basarliste' | 'basare' | 'archiv' | 'helferliste' | 'aufgaben' | 'hilfe' | 'logs';
 export type SellerNavKey = 'verkaeufer' | 'mitarbeiter' | 'kasse';
 export type NavKey = AdminNavKey | SellerNavKey;
 
@@ -39,6 +41,7 @@ interface NavLinkDef {
   key: NavKey;
   href: string;
   label: string;
+  badge?: 'errors';
 }
 
 const ADMIN_LINKS: NavLinkDef[] = [
@@ -48,6 +51,7 @@ const ADMIN_LINKS: NavLinkDef[] = [
   { key: 'helferliste', href: '/admin/list', label: 'Helferliste' },
   { key: 'aufgaben', href: '/admin/tasks', label: 'Aufgaben' },
   { key: 'hilfe', href: '/admin/hilfe', label: 'Hilfe-Statistik' },
+  { key: 'logs', href: '/admin/logs', label: 'Logs', badge: 'errors' },
 ];
 
 /**
@@ -73,7 +77,7 @@ export function getNavLinks(user: NavUser, activeKey?: NavKey, opts?: { kasseHre
     }
   }
 
-  const links: NavLink[] = defs.map(({ key, href, label }) => ({ href, label, active: key === activeKey }));
+  const links: NavLink[] = defs.map(({ key, href, label, badge }) => ({ href, label, badge, active: key === activeKey }));
   links.push({ href: '/', label: 'Logout' });
   return links;
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { prisma } from '../../../lib/prisma';
 import { drainMailQueue, MAIL_QUEUE_BATCH_SIZE } from '../../../lib/mailQueue';
 
 // Vercel bricht Funktionen sonst früher ab; Zustellung über SMTP ist langsam.
@@ -9,6 +10,9 @@ export const maxDuration = 60;
 // nicht in die Zeitgrenze der Funktion läuft.
 const MAX_BATCHES = 5;
 const DEADLINE_MS = 45_000;
+
+/** Aufbewahrungsdauer im Fehlerprotokoll (app/lib/errorLog.ts). */
+const ERROR_LOG_RETENTION_DAYS = 30;
 
 /** Zeitkonstanter Vergleich – ein `===` auf ein Geheimnis verrät es über die Laufzeit. */
 function secretMatches(provided: string, expected: string): boolean {
@@ -63,8 +67,14 @@ export async function GET(request: Request) {
       if (Date.now() - started > DEADLINE_MS) break;
     }
 
-    console.log('[CRON] mail-queue:', { processed, sent, failed });
-    return NextResponse.json({ processed, sent, failed });
+    // Aufraeumen des Fehlerprotokolls haengt hier mit dran statt an einem eigenen Cron:
+    // ein taeglicher Lauf existiert schon, und Cron-Eintraege sind bei Vercel knapp. Ohne
+    // das waechst die Tabelle unbegrenzt – sie wird bei jedem console.error beschrieben.
+    const cutoff = new Date(Date.now() - ERROR_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+    const prunedErrors = (await prisma.errorLog.deleteMany({ where: { createdAt: { lt: cutoff } } })).count;
+
+    console.log('[CRON] mail-queue:', { processed, sent, failed, prunedErrors });
+    return NextResponse.json({ processed, sent, failed, prunedErrors });
   } catch (error) {
     console.error('GET /api/cron/mail-queue error:', error);
     return NextResponse.json({ error: 'Interner Serverfehler' }, { status: 500 });

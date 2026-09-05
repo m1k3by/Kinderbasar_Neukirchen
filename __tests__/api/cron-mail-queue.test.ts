@@ -10,6 +10,11 @@ vi.mock('@/app/lib/mailQueue', () => ({
   MAIL_QUEUE_MAX_ATTEMPTS: 5,
 }));
 
+// Der Lauf raeumt zusaetzlich das Fehlerprotokoll auf (app/lib/errorLog.ts) – ohne das
+// waechst die Tabelle unbegrenzt, weil sie bei jedem console.error beschrieben wird.
+const prismaMock = vi.hoisted(() => ({ errorLog: { deleteMany: vi.fn() } }));
+vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
+
 import { GET } from '@/app/api/cron/mail-queue/route';
 
 const SECRET = 'geheim-und-lang-genug';
@@ -27,6 +32,7 @@ const restStapel = { processed: 3, sent: 3, failed: 0 };
 describe('GET /api/cron/mail-queue', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    prismaMock.errorLog.deleteMany.mockResolvedValue({ count: 0 });
     process.env.CRON_SECRET = SECRET;
   });
   afterEach(() => {
@@ -69,7 +75,7 @@ describe('GET /api/cron/mail-queue', () => {
     const res = await GET(makeRequest(SECRET));
     expect(res.status).toBe(200);
     expect(drainMock).toHaveBeenCalledTimes(1);
-    expect(await res.json()).toEqual({ processed: 3, sent: 3, failed: 0 });
+    expect(await res.json()).toMatchObject({ processed: 3, sent: 3, failed: 0 });
   });
 
   it('holt weitere Stapel, solange volle zurückkommen, und summiert sie', async () => {
@@ -82,7 +88,7 @@ describe('GET /api/cron/mail-queue', () => {
     const res = await GET(makeRequest(SECRET));
 
     expect(drainMock).toHaveBeenCalledTimes(2);
-    expect(await res.json()).toEqual({ processed: 36, sent: 35, failed: 1 });
+    expect(await res.json()).toMatchObject({ processed: 36, sent: 35, failed: 1 });
   });
 
   it('läuft nicht endlos, wenn immer volle Stapel zurückkommen', async () => {
@@ -96,5 +102,36 @@ describe('GET /api/cron/mail-queue', () => {
     drainMock.mockRejectedValue(new Error('SMTP kaputt'));
     const res = await GET(makeRequest(SECRET));
     expect(res.status).toBe(500);
+  });
+});
+
+// Ohne diesen Lauf gibt es keinen Aufraeumer: ErrorLog waechst mit jedem erfassten Fehler.
+// Ein deleteMany ohne where-Klausel wuerde dabei genauso 200 liefern – und alles loeschen.
+describe('GET /api/cron/mail-queue – Aufräumen des Fehlerprotokolls', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prismaMock.errorLog.deleteMany.mockResolvedValue({ count: 4 });
+    drainMock.mockResolvedValue(restStapel);
+    process.env.CRON_SECRET = SECRET;
+  });
+  afterEach(() => {
+    delete process.env.CRON_SECRET;
+  });
+
+  it('löscht Einträge, die älter als 30 Tage sind – und nur die', async () => {
+    const res = await GET(makeRequest(SECRET));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ prunedErrors: 4 });
+
+    const where = prismaMock.errorLog.deleteMany.mock.calls[0][0].where;
+    const cutoff: Date = where.createdAt.lt;
+    const alterInTagen = (Date.now() - cutoff.getTime()) / (24 * 60 * 60 * 1000);
+    expect(alterInTagen).toBeCloseTo(30, 1);
+  });
+
+  it('räumt nicht auf, wenn die Autorisierung fehlschlägt', async () => {
+    const res = await GET(makeRequest('falsch'));
+    expect(res.status).toBe(401);
+    expect(prismaMock.errorLog.deleteMany).not.toHaveBeenCalled();
   });
 });

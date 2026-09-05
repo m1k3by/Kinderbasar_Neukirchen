@@ -327,3 +327,41 @@ model ChatLog {
 
   @@index([createdAt])
 }
+
+// ───────────────────────────────────────────────
+// Fehler-Monitoring
+// ───────────────────────────────────────────────
+
+enum ErrorSource {
+  SERVER
+  CLIENT
+}
+
+// Ein Eintrag pro erfasstem Fehler.
+//
+// SERVER-Zeilen entstehen *automatisch*: app/lib/errorLog.ts greift `console.error` einmal
+// zentral ab (installiert über instrumentation.ts). Die 93 bestehenden Aufrufe in
+// app/api/** liefern über ihre Konvention `console.error('GET /api/x error:', error)`
+// Route und Ursache frei Haus – keine davon musste angefasst werden, und jede künftige
+// Stelle ist ohne Zutun mit erfasst.
+//
+// CLIENT-Zeilen kommen aus dem Browser des Nutzers (app/api/errors), inklusive
+// Verkäufernummer: nur dort ist bekannt, *wem* etwas nicht geklappt hat.
+//
+// Gelesen von app/admin/logs.
+model ErrorLog {
+  id        String      @id @default(cuid())
+  source    ErrorSource
+  route     String?     @db.VarChar(200)
+  message   String      @db.VarChar(500)
+  stack     String?     @db.VarChar(4000)
+  sellerId  Int?
+  role      String?
+  userAgent String?     @db.VarChar(300)
+  resolved  Boolean     @default(false)
+  alerted   Boolean     @default(false)
+  createdAt DateTime    @default(now())
+
+  @@index([resolved, createdAt])
+  @@index([createdAt])
+}

@@ -24,7 +24,21 @@ export default async function globalSetup() {
   try {
     // Schema herstellen, bevor irgendetwas gezaehlt wird – auf einer frischen Datenbank
     // gibt es die Tabellen sonst gar nicht.
-    execSync('npx prisma migrate deploy', { stdio: 'inherit' });
+    //
+    // `db push` statt `migrate deploy`, und das ist hier ausnahmsweise richtig: die
+    // Migrationskette laesst sich auf einer leeren Datenbank *nicht* abspielen. Sie beginnt
+    // mit 20260105142219_use_sellerid_as_primary_key, das Tabellen aendert, die keine
+    // Migration je anlegt – die Produktivdatenbank wurde damals per `db push` eingerichtet.
+    // `migrate deploy` scheitert deshalb sofort mit 42P01 "relation Cake does not exist".
+    //
+    // Der uebliche Einwand gegen `db push` (CLAUDE.md) ist, dass von Migrationen angelegte
+    // Daten fehlen. Konkret betrifft das genau eine Zeile: SellerIdCounter.default. Die saet
+    // allocateSellerId() inzwischen selbst nach, wenn sie fehlt – der Testlauf haengt also
+    // nicht daran.
+    //
+    // Sobald es eine Baseline-Migration gibt, gehoert hier wieder `migrate deploy` hin:
+    // dann testet der Lauf auch, dass die Kette selbst funktioniert.
+    execSync('npx prisma db push --skip-generate --accept-data-loss', { stdio: 'inherit' });
 
     const foreign = await prisma.seller.count({ where: { email: { not: HELFER.email } } });
     if (foreign > 0) {

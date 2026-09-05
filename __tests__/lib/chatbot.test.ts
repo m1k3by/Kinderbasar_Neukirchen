@@ -9,6 +9,29 @@ describe('findAnswer – acceptance queries', () => {
     if (result.type === 'answer') expect(result.item.id).toBe('seller-etiketten');
   });
 
+  // Beide Fragen enthalten "Etikett" und konkurrieren deshalb direkt. Vor dem 26.08.2026 gab
+  // es "selbst machen" gar nicht – die Frage landete auf der Druck-Anleitung und wurde damit
+  // nicht beantwortet, sondern nur in der Nähe des Themas abgelegt.
+  it('separates "Etikett selber machen" from "Etiketten drucken"', () => {
+    const selbst = findAnswer('kann ich mein Etikett selber machen?', ['seller']);
+    expect(selbst.type).toBe('answer');
+    if (selbst.type === 'answer') expect(selbst.item.id).toBe('seller-etiketten-selbst');
+
+    const drucken = findAnswer('Wie drucke ich Etiketten aus?', ['seller']);
+    expect(drucken.type).toBe('answer');
+    if (drucken.type === 'answer') expect(drucken.item.id).toBe('seller-etiketten');
+  });
+
+  // Die Antwort beschrieb bis zum 26.08.2026 ein "Druckfenster" – also genau den
+  // window.print()-Weg, den CLAUDE.md verbietet und den es hier nie gab. Der Pflichthinweis
+  // aus derselben Regel (Punkt 5) fehlte dafür. Beides wird hier festgenagelt.
+  it('the label answer describes the PDF download, not a print dialog', () => {
+    const item = faqData.find((i) => i.id === 'seller-etiketten')!;
+    expect(item.answer).not.toMatch(/Druckfenster/i);
+    expect(item.answer).toMatch(/PDF/);
+    expect(item.answer).toMatch(/Tatsächliche Größe/);
+  });
+
   it('folds ASCII umlaut substitutes ("groesse" -> "größe")', () => {
     const result = findAnswer('groesse eingeben', ['seller']);
     expect(result.type).toBe('answer');

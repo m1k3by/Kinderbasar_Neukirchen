@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import type { NavLink } from '../lib/navLinks';
 
 interface HeaderProps {
   title?: string;
-  links?: { href: string; label: string; active?: boolean }[];
+  links?: NavLink[];
   sellerInfo?: { name: string; sellerId: number } | null;
   noTitleLink?: boolean;
 }
@@ -17,6 +18,31 @@ export default function Header({
   noTitleLink = false
 }: HeaderProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [errorCount, setErrorCount] = useState(0);
+
+  // Nur Admin-Navigationen enthalten den Marker (app/lib/navLinks.ts). Dadurch fragt keine
+  // Verkaeufer- oder Mitarbeiterseite eine Admin-Route an, die ihr ohnehin 403 antworten wuerde.
+  const hasErrorBadge = links.some((link) => link.badge === 'errors');
+
+  // ponytail: einmal beim Mounten, kein Polling. Der Admin laedt die Seite ohnehin neu;
+  // ein Intervall waere eine Dauerlast fuer eine Zahl, die sich selten aendert.
+  useEffect(() => {
+    if (!hasErrorBadge) return;
+    fetch('/api/admin/errors?count=1')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setErrorCount(data?.unresolved ?? 0))
+      .catch(() => {});
+  }, [hasErrorBadge]);
+
+  const badge = (link: NavLink) =>
+    link.badge === 'errors' && errorCount > 0 ? (
+      <span
+        className="ml-1.5 inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full bg-red-600 text-white text-xs font-bold"
+        aria-label={`${errorCount} offene Fehler`}
+      >
+        {errorCount}
+      </span>
+    ) : null;
 
   return (
     <header className="sticky top-0 z-50 bg-yellow-500 text-gray-800 shadow-md">
@@ -52,6 +78,7 @@ export default function Header({
                 }`}
               >
                 {link.label}
+                {badge(link)}
               </Link>
             ))}
           </nav>
@@ -88,6 +115,7 @@ export default function Header({
                   }`}
                 >
                   {link.label}
+                  {badge(link)}
                 </Link>
               ))}
             </div>

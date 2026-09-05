@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import { cookies } from 'next/headers';
 import LegalFooter from './components/LegalFooter';
 import ChatWidget from './components/ChatWidget';
+import ErrorReporter from './components/ErrorReporter';
 import type { Metadata, Viewport } from 'next';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -76,6 +77,7 @@ export default async function RootLayout({
           <LegalFooter />
         </div>
         {contexts.length > 0 && <ChatWidget contexts={contexts} />}
+        <ErrorReporter />
       </body>
     </html>
   );

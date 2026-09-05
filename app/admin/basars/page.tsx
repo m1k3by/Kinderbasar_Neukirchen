@@ -19,7 +19,8 @@ interface Basar {
   entryFee: number;
   status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
   isArchived: boolean;
-  _count?: { basarSellers: number };
+  /** Nur **aktive** Teilnahmen (where in app/api/basars/route.ts). Nicht optional: die Route liefert es immer. */
+  _count: { basarSellers: number };
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -194,7 +195,7 @@ export default function AdminBasarsPage() {
                       {basar.location && ` · ${basar.location}`}
                     </p>
                     <p className="text-sm text-gray-500 mt-0.5">
-                      {basar._count?.basarSellers ?? 0} Verkäufer · Max. {basar.maxArticlesPerSeller} Artikel{basar.maxArticlesPerEmployee != null && basar.maxArticlesPerEmployee !== basar.maxArticlesPerSeller ? ` (Mitarbeiter ${basar.maxArticlesPerEmployee})` : ''} · {basar.commissionPercent}% Provision · {Number(basar.entryFee).toFixed(2)} € Gebühr
+                      {basar._count.basarSellers} Verkäufer · Max. {basar.maxArticlesPerSeller} Artikel{basar.maxArticlesPerEmployee != null && basar.maxArticlesPerEmployee !== basar.maxArticlesPerSeller ? ` (Mitarbeiter ${basar.maxArticlesPerEmployee})` : ''} · {basar.commissionPercent}% Provision · {Number(basar.entryFee).toFixed(2)} € Gebühr
                     </p>
                   </div>
                   {/* flex-1 nur auf dem Handy: dort teilen sich die Buttons die volle Breite

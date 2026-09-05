@@ -18,7 +18,18 @@ interface Basar {
   entryFee: number;
   status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
   basarSellers: BasarSellerEntry[];
-  _count?: { basarSellers: number; sales: number };
+  /**
+   * `_count.basarSellers` zaehlt nur die **aktiven** Teilnahmen (siehe das `where` in
+   * app/api/basars/[id]/route.ts) – abgemeldete Zeilen bleiben wegen der Artikel-Historie
+   * erhalten, duerfen aber nicht gegen `maxSellers` zaehlen. `basarSellers` enthaelt
+   * dagegen **alle** Zeilen. Zwei verschiedene Mengen: fuer Kapazitaetsangaben `_count`,
+   * fuer alles, was die Liste beschreibt, `basarSellers.length`.
+   *
+   * Nicht optional: die Route liefert `_count` immer. Waere es optional, machte ein
+   * `?? 0` aus einer entfernten Projektion wortlos eine 0 – genau der Fall, der
+   * /admin/tasks monatelang „0 / 8 Helfer" anzeigen liess (siehe CLAUDE.md).
+   */
+  _count: { basarSellers: number; sales: number };
 }
 
 interface BasarSellerEntry {
@@ -527,7 +538,10 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
 
   const tabLabels: Record<'overview' | 'sellers' | 'stats', string> = {
     overview: 'Übersicht',
-    sellers: `Verkäufer (${basar?._count?.basarSellers ?? 0})`,
+    // Die Zahl muss die Liste im Reiter beschreiben, und die zeigt aktive *und* abgemeldete
+    // Teilnehmer. `_count.basarSellers` zaehlt nur die aktiven – damit stand hier eine
+    // kleinere Zahl, als direkt darunter Zeilen zu sehen waren.
+    sellers: `Verkäufer (${basar?.basarSellers.length ?? 0})`,
     stats: 'Statistik',
   };
 
@@ -622,7 +636,8 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
         {tab === 'overview' && (
           <div className="grid md:grid-cols-3 gap-4">
             {[
-              { label: 'Verkäufer', value: basar._count?.basarSellers ?? 0, sub: `/ ${basar.maxSellers} max.` },
+              // Hier ist die aktive Zahl richtig: gegen `maxSellers` zaehlen nur aktive Teilnahmen.
+              { label: 'Verkäufer', value: basar._count.basarSellers, sub: `/ ${basar.maxSellers} max.` },
               { label: 'Provision', value: `${basar.commissionPercent}%`, sub: '' },
               { label: 'Gebühr', value: `${Number(basar.entryFee).toFixed(2)} €`, sub: 'Teilnahme' },
             ].map(card => (

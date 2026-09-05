@@ -18,6 +18,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const basar = await prisma.basar.findUnique({
       where: { id },
       include: {
+        // Zaehlt nur aktive Teilnahmen – abgemeldete BasarSeller-Zeilen bleiben wegen der
+        // Artikel-Historie erhalten, duerfen aber nicht gegen maxSellers zaehlen. Die Liste
+        // `basarSellers` darunter ist bewusst *ungefiltert*: die Adminsicht zeigt auch
+        // Abgemeldete (mit Kennzeichen „inaktiv"). Wer die Laenge der Liste meint, darf
+        // deshalb nicht diese Zahl nehmen.
         _count: { select: { basarSellers: { where: { isActive: true } }, sales: true } },
         ...(isAdmin
           ? {
