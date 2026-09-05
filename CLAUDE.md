@@ -186,6 +186,14 @@ Nach jeder Änderung an einer PDF-Ausgabe: Datei erzeugen und die Geometrie mess
   Konsequenz: Felder, die eine Seite tatsächlich braucht, nicht optional deklarieren, und
   bei Projektionsänderungen die *Argumente* von `findMany` testen – ein gemocktes Prisma
   ignoriert `select` vollständig, die Antwort im Test beweist darüber nichts.
+  **Die Regel lautet „so deklarieren, wie die Route es tatsächlich liefert", nicht „nie
+  optional".** Umgekehrt geht es genauso schief: `GET /api/basars/[id]` hängt `basarSellers`
+  nur in den Admin-Zweig, `/admin/basars/[id]` ist laut `middleware.ts` aber auch für
+  Kassierer erreichbar. Als Pflichtfeld deklariert, winkte TypeScript ein
+  `basarSellers.length` durch – und die Seite stürzte am 05.09.2026 für jeden Kassierer beim
+  Rendern ab (`Cannot read properties of undefined`). Ein bedingt geliefertes Feld gehört
+  optional deklariert; dann erzwingt der Compiler die Absicherung an jeder Zugriffsstelle.
+  Gefunden hat das nicht ein Test, sondern `/admin/logs` – mit Route und Verkäufernummer.
 
 - **`npm run test:e2e` (Playwright) deckt die Naht zwischen API und Seite ab**, die die
   Unit-Tests strukturell nicht erreichen: Helfer meldet sich an, trägt sich in mehrere

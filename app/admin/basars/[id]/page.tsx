@@ -17,7 +17,16 @@ interface Basar {
   commissionPercent: number;
   entryFee: number;
   status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
-  basarSellers: BasarSellerEntry[];
+  /**
+   * **Optional, und das mit Absicht**: app/api/basars/[id]/route.ts haengt die Liste nur in
+   * den Admin-Zweig (`...(isAdmin ? { basarSellers: … } : {})`). Diese Seite ist laut
+   * middleware.ts aber auch fuer Kassierer erreichbar – bei denen ist das Feld `undefined`.
+   * Stand es hier als Pflichtfeld, winkte TypeScript ein `basarSellers.length` durch und die
+   * Seite stuerzte fuer jeden Kassierer beim Rendern ab (genau so passiert, 05.09.2026).
+   * Ein Feld, das die API nur manchmal liefert, muss optional deklariert sein – erst dann
+   * erzwingt der Compiler die Absicherung an jeder Zugriffsstelle.
+   */
+  basarSellers?: BasarSellerEntry[];
   /**
    * `_count.basarSellers` zaehlt nur die **aktiven** Teilnahmen (siehe das `where` in
    * app/api/basars/[id]/route.ts) – abgemeldete Zeilen bleiben wegen der Artikel-Historie
@@ -541,7 +550,7 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
     // Die Zahl muss die Liste im Reiter beschreiben, und die zeigt aktive *und* abgemeldete
     // Teilnehmer. `_count.basarSellers` zaehlt nur die aktiven – damit stand hier eine
     // kleinere Zahl, als direkt darunter Zeilen zu sehen waren.
-    sellers: `Verkäufer (${basar?.basarSellers.length ?? 0})`,
+    sellers: `Verkäufer (${basar?.basarSellers?.length ?? 0})`,
     stats: 'Statistik',
   };
 
