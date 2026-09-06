@@ -8,7 +8,7 @@ vi.mock('next/headers', () => ({
 
 const prismaMock = vi.hoisted(() => ({
   basar: { findUnique: vi.fn() },
-  article: { findUnique: vi.fn(), delete: vi.fn(), count: vi.fn() },
+  article: { findUnique: vi.fn(), delete: vi.fn(), count: vi.fn(), updateMany: vi.fn() },
   sellerArticle: { delete: vi.fn() },
   $transaction: vi.fn(),
 }));
@@ -129,9 +129,10 @@ describe('DELETE /api/basars/[id]/articles/[artId] – Archiveintrag', () => {
     prismaMock.article.findUnique.mockResolvedValue(fakeArticle);
     prismaMock.article.delete.mockResolvedValue({ id: 'art-1' });
     prismaMock.sellerArticle.delete.mockResolvedValue({ id: 'sa-1' });
+    prismaMock.article.updateMany.mockResolvedValue({ count: 0 });
   });
 
-  it('löscht den Archiveintrag mit, wenn es der letzte Artikel daran war', async () => {
+  it('löscht den Archiveintrag mit, wenn nichts davon verkauft wurde', async () => {
     prismaMock.article.count.mockResolvedValue(0);
 
     const res = await DELETE(makeRequest(), makeContext());
@@ -141,15 +142,30 @@ describe('DELETE /api/basars/[id]/articles/[artId] – Archiveintrag', () => {
     expect(prismaMock.sellerArticle.delete).toHaveBeenCalledWith({ where: { id: 'sa-1' } });
   });
 
-  it('zählt nur Artikel, die an genau diesem Archiveintrag hängen', async () => {
+  it('zählt verkaufte Artikel an genau diesem Archiveintrag – nicht alle', async () => {
+    // Der Unterschied, an dem die erste Fassung scheiterte: ohne status SOLD zählen auch
+    // AVAILABLE-Reste aus archivierten Basaren mit, und der Eintrag überlebt jedes Löschen.
     prismaMock.article.count.mockResolvedValue(0);
     await DELETE(makeRequest(), makeContext());
-    expect(prismaMock.article.count).toHaveBeenCalledWith({ where: { sellerArticleId: 'sa-1' } });
+    expect(prismaMock.article.count).toHaveBeenCalledWith({
+      where: { sellerArticleId: 'sa-1', status: 'SOLD' },
+    });
   });
 
-  it('behält den Archiveintrag, wenn noch Artikel aus anderen Basaren daran hängen', async () => {
-    // Historie: SellerArticle überlebt das Basar-Ende (CLAUDE.md). Ein Eintrag, der in
-    // Basar A verkauft wurde, darf beim Aufräumen in Basar B nicht verschwinden.
+  it('hängt die verbleibenden Artikel ab, bevor der Eintrag gelöscht wird', async () => {
+    // Sonst hinge das Löschen an einem Fremdschlüsselverhalten, das im Prisma-Schema gar
+    // nicht steht (dort fehlt onDelete; in der Datenbank ist es SET NULL).
+    prismaMock.article.count.mockResolvedValue(0);
+    await DELETE(makeRequest(), makeContext());
+    expect(prismaMock.article.updateMany).toHaveBeenCalledWith({
+      where: { sellerArticleId: 'sa-1' },
+      data: { sellerArticleId: null },
+    });
+  });
+
+  it('behält den Archiveintrag, wenn ein verknüpfter Artikel verkauft wurde', async () => {
+    // Historie: ein verkaufter Artikel macht den Eintrag dauerhaft unübernehmbar
+    // (CLAUDE.md, soldPreviously) – der darf beim Aufräumen nicht verschwinden.
     prismaMock.article.count.mockResolvedValue(1);
 
     const res = await DELETE(makeRequest(), makeContext());
@@ -157,6 +173,7 @@ describe('DELETE /api/basars/[id]/articles/[artId] – Archiveintrag', () => {
     expect(res.status).toBe(200);
     expect(prismaMock.article.delete).toHaveBeenCalled();
     expect(prismaMock.sellerArticle.delete).not.toHaveBeenCalled();
+    expect(prismaMock.article.updateMany).not.toHaveBeenCalled();
   });
 
   it('kommt ohne Archiveintrag zurecht', async () => {

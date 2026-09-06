@@ -47,10 +47,26 @@ export async function DELETE(
       await tx.article.delete({ where: { id: artId } });
 
       if (article.sellerArticleId) {
-        const verbleibende = await tx.article.count({
-          where: { sellerArticleId: article.sellerArticleId },
+        // Maßgeblich ist SOLD, nicht „existiert": laut CLAUDE.md entscheidet ausschließlich
+        // ein verkaufter Artikel darüber, ob ein Archiveintrag dauerhaft belegt ist –
+        // AVAILABLE und RETURNED bleiben übernehmbar und tragen keine Historie.
+        //
+        // Eine erste Fassung zählte alle verbleibenden Artikel und ließ den Eintrag deshalb
+        // stehen, sobald irgendein Rest in einem längst archivierten Basar hing. Genau so
+        // ein Fall wurde gemeldet: „qweqwe" hatte drei AVAILABLE-Reste aus geschlossenen
+        // Basaren, der Eintrag überlebte das Löschen und stand sofort wieder auf der
+        // Übernahmeliste.
+        const verkaufte = await tx.article.count({
+          where: { sellerArticleId: article.sellerArticleId, status: 'SOLD' },
         });
-        if (verbleibende === 0) {
+        if (verkaufte === 0) {
+          // Erst abhängen, dann löschen – wie in DELETE /api/seller-articles. Die Reste
+          // gehören zur Aufzeichnung ihres jeweiligen Basars und bleiben bestehen; der
+          // Fremdschlüssel steht zwar auf SET NULL, aber das steht nirgends im Schema.
+          await tx.article.updateMany({
+            where: { sellerArticleId: article.sellerArticleId },
+            data: { sellerArticleId: null },
+          });
           await tx.sellerArticle.delete({ where: { id: article.sellerArticleId } });
         }
       }
