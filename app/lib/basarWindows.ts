@@ -47,6 +47,84 @@ export function isActivationOpen(basar: BasarWindows, isEmployee: boolean, now?:
     : isWindowOpen(basar.activationSellerStart, basar.activationSellerEnd, now);
 }
 
+/** Das Fenster, das für diese Person gilt. Zwei Rollen, zwei getrennte Zeiträume. */
+function activationWindow(basar: BasarWindows, isEmployee: boolean) {
+  return isEmployee
+    ? { start: basar.activationEmployeeStart, end: basar.activationEmployeeEnd }
+    : { start: basar.activationSellerStart, end: basar.activationSellerEnd };
+}
+
+function formatGermanDateTime(value: Date): string {
+  return value.toLocaleString('de-DE', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+    timeZone: 'Europe/Berlin',
+  }) + ' Uhr';
+}
+
+export interface ActivationBasar extends BasarWindows {
+  status: string;
+  isArchived?: boolean;
+}
+
+export interface ActivationNotice {
+  /** Darf sich diese Person jetzt selbst anmelden? */
+  canActivate: boolean;
+  /** Satz für die Karte – auch im offenen Fenster (dann das Ende). null = nichts zu sagen. */
+  message: string | null;
+}
+
+/**
+ * Was die Oberfläche über die Anmeldung an diesem Basar sagen soll – und ob sie den Knopf
+ * überhaupt anbieten darf.
+ *
+ * Vorher stand auf der Karte nur „Teilnahme: INAKTIV". Man konnte klicken und bekam erst
+ * danach vom Server ein rotes „Der Aktivierungszeitraum ist geschlossen" – ohne zu erfahren,
+ * ab wann es denn geht. Diese Funktion nimmt dieselbe Entscheidung vorweg und benennt den
+ * Termin dazu.
+ *
+ * Sie ersetzt die serverseitige Prüfung **nicht**: PUT /api/basars/[id]/participation prüft
+ * weiter selbst. Ein ausgegrauter Knopf ist Bedienkomfort, keine Zugriffskontrolle.
+ *
+ * Die Ja/Nein-Entscheidung kommt aus isActivationOpen, damit Text und Knopf nicht
+ * auseinanderlaufen können; nur der Text wird hier zusätzlich gebildet.
+ */
+export function activationNotice(
+  basar: ActivationBasar,
+  isEmployee: boolean,
+  now: Date = new Date()
+): ActivationNotice {
+  if (basar.isArchived || basar.status === 'CLOSED' || basar.status === 'DRAFT') {
+    return { canActivate: false, message: 'Für diesen Basar ist keine Anmeldung möglich.' };
+  }
+
+  const { start, end } = activationWindow(basar, isEmployee);
+  const from = toDate(start);
+  const to = toDate(end);
+  const rolle = isEmployee ? 'Mitarbeiter' : 'Verkäufer';
+
+  // Gleiche Regel wie isWindowOpen: ein unvollständig gepflegtes Fenster schränkt nicht ein.
+  // Dann gibt es auch keinen Termin, den man nennen könnte.
+  if (!from || !to) return { canActivate: true, message: null };
+
+  if (now < from) {
+    return {
+      canActivate: false,
+      message: `Anmeldung für ${rolle} ab ${formatGermanDateTime(from)}.`,
+    };
+  }
+  if (now > to) {
+    return {
+      canActivate: false,
+      message: `Die Anmeldung für ${rolle} endete am ${formatGermanDateTime(to)}.`,
+    };
+  }
+  return {
+    canActivate: true,
+    message: `Anmeldung für ${rolle} noch bis ${formatGermanDateTime(to)}.`,
+  };
+}
+
 export interface BasarDays {
   dateFriday?: WindowBound;
   dateSaturday?: WindowBound;

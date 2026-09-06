@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Header from '../components/Header';
 import { getNavLinks } from '../lib/navLinks';
 import { formatArticleLimit, maxArticlesFor } from '../lib/articleLimits';
+import { activationNotice } from '../lib/basarWindows';
 
 interface Basar {
   id: string;
@@ -18,6 +19,13 @@ interface Basar {
   entryFee: number;
   status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
   isArchived: boolean;
+  // Zwei getrennte Anmeldezeitraeume, je nach Rolle. GET /api/basars liefert sie schon
+  // immer mit (include, kein select) – deklariert waren sie hier bisher nicht, deshalb
+  // konnte die Karte den Knopf nicht vorab sperren.
+  activationSellerStart?: string | null;
+  activationSellerEnd?: string | null;
+  activationEmployeeStart?: string | null;
+  activationEmployeeEnd?: string | null;
   // viaOrga: die Teilnahme kommt aus dem Orga-Kennzeichen, nicht aus einer eigenen
   // Aktivierung – dann gibt es nichts umzuschalten (app/lib/participation.ts).
   myParticipation: { isActive: boolean; activatedAt: string | null; viaOrga?: boolean } | null;
@@ -269,7 +277,11 @@ export default function SellerPage() {
               {basars.map(basar => {
                 const isActive = basar.myParticipation?.isActive ?? false;
                 const viaOrga = basar.myParticipation?.viaOrga ?? false;
-                const canToggle = !viaOrga && (basar.status === 'OPEN' || basar.status === 'ACTIVE' || isActive);
+                // Dieselbe Entscheidung wie serverseitig in PUT /api/basars/[id]/participation,
+                // nur vorgezogen: der Knopf ist gesperrt, statt den Klick erst hinterher
+                // abzulehnen. Abmelden bleibt immer erlaubt – auch das entspricht dem Server.
+                const notice = activationNotice(basar, isEmployee);
+                const canToggle = !viaOrga && (isActive || notice.canActivate);
                 return (
                   <div key={basar.id} className="border border-gray-200 rounded-xl p-4">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -289,8 +301,10 @@ export default function SellerPage() {
                     <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-4">
                       <button
                         onClick={() => toggleParticipation(basar)}
-                        disabled={viaOrga || togglingBasarId === basar.id || (!canToggle && !isActive)}
-                        title={viaOrga ? 'Als Orga bist du in jedem Basar automatisch angemeldet.' : undefined}
+                        disabled={viaOrga || togglingBasarId === basar.id || !canToggle}
+                        title={viaOrga
+                          ? 'Als Orga bist du in jedem Basar automatisch angemeldet.'
+                          : !canToggle ? notice.message ?? undefined : undefined}
                         className={`px-6 py-3 rounded-xl font-bold transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed ${
                           isActive
                             ? 'bg-green-500 hover:bg-green-600 text-white'
@@ -308,6 +322,14 @@ export default function SellerPage() {
                         {CTA_LABELS[basar.status]} →
                       </Link>
                     </div>
+                    {/* Der Termin steht auf der Karte, nicht erst in der Fehlermeldung nach
+                        dem Klick. Für Orga ist er gegenstandslos – die Teilnahme kommt dort
+                        nicht aus einer Aktivierung. */}
+                    {!viaOrga && notice.message && (
+                      <p className={`text-sm mt-2 ${notice.canActivate ? 'text-gray-500' : 'text-amber-700'}`}>
+                        {notice.message}
+                      </p>
+                    )}
                   </div>
                 );
               })}

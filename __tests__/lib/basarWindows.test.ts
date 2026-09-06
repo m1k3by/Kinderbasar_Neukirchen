@@ -4,6 +4,7 @@ import {
   isActivationOpen,
   deriveEventDate,
   dateForWeekday,
+  activationNotice,
 } from '@/app/lib/basarWindows';
 
 describe('isWindowOpen', () => {
@@ -122,5 +123,96 @@ describe('dateForWeekday', () => {
   it('returns null for an unknown day or an unset field', () => {
     expect(dateForWeekday(basar, 'Montag')).toBeNull();
     expect(dateForWeekday({ dateFriday: null }, 'Freitag')).toBeNull();
+  });
+});
+
+// ─── activationNotice ────────────────────────────────────────────────────────
+// Anlass: die Karte unter "Meine Basare" bot den Teilnahme-Knopf immer an. Erst der Klick
+// brachte vom Server ein rotes "Der Aktivierungszeitraum ist geschlossen" – ohne Termin.
+// Geprüft wird deshalb beides: die Ja/Nein-Entscheidung *und* der Text, denn ein gesperrter
+// Knopf ohne Begründung wäre keine Verbesserung.
+describe('activationNotice', () => {
+  // Fenster in deutscher Zeit: 01.09. 18:00 bis 10.09. 20:00 (MESZ = UTC+2).
+  const basar = {
+    status: 'OPEN',
+    isArchived: false,
+    activationSellerStart: '2026-09-01T16:00:00.000Z',
+    activationSellerEnd: '2026-09-10T18:00:00.000Z',
+    activationEmployeeStart: '2026-08-20T16:00:00.000Z',
+    activationEmployeeEnd: '2026-08-25T18:00:00.000Z',
+  };
+
+  const vorher = new Date('2026-08-30T12:00:00.000Z');
+  const mittendrin = new Date('2026-09-05T12:00:00.000Z');
+  const danach = new Date('2026-09-15T12:00:00.000Z');
+
+  it('sperrt vor dem Start und nennt den Beginn', () => {
+    const n = activationNotice(basar, false, vorher);
+    expect(n.canActivate).toBe(false);
+    expect(n.message).toBe('Anmeldung für Verkäufer ab 01.09.2026, 18:00 Uhr.');
+  });
+
+  it('gibt im offenen Fenster frei und nennt das Ende', () => {
+    const n = activationNotice(basar, false, mittendrin);
+    expect(n.canActivate).toBe(true);
+    expect(n.message).toBe('Anmeldung für Verkäufer noch bis 10.09.2026, 20:00 Uhr.');
+  });
+
+  it('sperrt nach dem Ende und nennt den Schluss', () => {
+    const n = activationNotice(basar, false, danach);
+    expect(n.canActivate).toBe(false);
+    expect(n.message).toBe('Die Anmeldung für Verkäufer endete am 10.09.2026, 20:00 Uhr.');
+  });
+
+  // Der Kern der Sache: zwei Rollen, zwei Zeiträume. Am selben Tag darf der Verkäufer
+  // noch nicht und der Mitarbeiter nicht mehr.
+  it('wertet für Mitarbeiter das andere Fenster aus', () => {
+    const amDreißigsten = new Date('2026-08-30T12:00:00.000Z');
+    expect(activationNotice(basar, false, amDreißigsten)).toEqual({
+      canActivate: false,
+      message: 'Anmeldung für Verkäufer ab 01.09.2026, 18:00 Uhr.',
+    });
+    expect(activationNotice(basar, true, amDreißigsten)).toEqual({
+      canActivate: false,
+      message: 'Die Anmeldung für Mitarbeiter endete am 25.08.2026, 20:00 Uhr.',
+    });
+  });
+
+  it('lässt den Mitarbeiter in seinem eigenen Fenster durch, den Verkäufer nicht', () => {
+    const imMitarbeiterfenster = new Date('2026-08-22T12:00:00.000Z');
+    expect(activationNotice(basar, true, imMitarbeiterfenster).canActivate).toBe(true);
+    expect(activationNotice(basar, false, imMitarbeiterfenster).canActivate).toBe(false);
+  });
+
+  it('stimmt mit isActivationOpen überein', () => {
+    // Text und Knopf dürfen nicht auseinanderlaufen: was die Karte freigibt, muss der
+    // Server auch akzeptieren – beide entscheiden über dasselbe Fenster.
+    for (const now of [vorher, mittendrin, danach, new Date('2026-08-22T12:00:00.000Z')]) {
+      for (const isEmployee of [false, true]) {
+        expect(activationNotice(basar, isEmployee, now).canActivate)
+          .toBe(isActivationOpen(basar, isEmployee, now));
+      }
+    }
+  });
+
+  it.each(['DRAFT', 'CLOSED'])('sperrt bei Status %s unabhängig vom Fenster', (status) => {
+    const n = activationNotice({ ...basar, status }, false, mittendrin);
+    expect(n.canActivate).toBe(false);
+    expect(n.message).toBe('Für diesen Basar ist keine Anmeldung möglich.');
+  });
+
+  it('sperrt einen archivierten Basar', () => {
+    expect(activationNotice({ ...basar, isArchived: true }, false, mittendrin).canActivate).toBe(false);
+  });
+
+  it('gibt bei unvollständigem Fenster frei, ohne einen Termin zu erfinden', () => {
+    // Gleiche Regel wie isWindowOpen – sonst liesse ein frisch angelegter Basar ohne
+    // gepflegte Fenster niemanden durch.
+    const n = activationNotice(
+      { status: 'OPEN', activationSellerStart: '2026-09-01T16:00:00.000Z', activationSellerEnd: null },
+      false,
+      vorher
+    );
+    expect(n).toEqual({ canActivate: true, message: null });
   });
 });
