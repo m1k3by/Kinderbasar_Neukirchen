@@ -9,6 +9,13 @@ vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
 const deliverMailMock = vi.hoisted(() => vi.fn());
 vi.mock('@/app/lib/mailQueue', () => ({ deliverMail: deliverMailMock }));
 
+/**
+ * `after()` hält die Serverless-Invocation offen, bis der Rückruf durch ist. Der Mock führt
+ * ihn sofort aus – das entspricht dem Fall „Request-Kontext vorhanden".
+ */
+const afterMock = vi.hoisted(() => vi.fn((fn: () => unknown) => { fn(); }));
+vi.mock('next/server', () => ({ after: afterMock }));
+
 const realConsoleError = console.error;
 
 /**
@@ -28,6 +35,7 @@ async function load() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  afterMock.mockImplementation((fn: () => unknown) => { fn(); });
   console.error = realConsoleError;
   delete process.env.ADMIN_ALERT_EMAIL;
   prismaMock.errorLog.create.mockResolvedValue({ id: 'err-1' });
@@ -213,6 +221,35 @@ describe('installErrorLogger', () => {
     await vi.waitFor(() => expect(prismaMock.errorLog.create).toHaveBeenCalled());
     await new Promise((resolve) => setImmediate(resolve));
     expect(prismaMock.errorLog.create).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * Der Kern des Ausfalls vom 06.09.2026: der Schreibvorgang lief als freischwebendes Promise.
+   * `console.error` steht fast immer im catch-Block direkt vor dem `return` – auf Vercel fror
+   * die Invocation nach der Antwort ein, während der Insert noch unterwegs war. Ergebnis: null
+   * SERVER-Zeilen in der Tabelle, obwohl der Abgriff selbst funktionierte. `after()` hält die
+   * Invocation offen; ohne diesen Aufruf ist die Zeile in Produktion wieder verloren.
+   */
+  it('hands the write to after() so the invocation stays alive until it is done', async () => {
+    const { mod } = await load();
+    mod.installErrorLogger();
+
+    console.error('GET /api/basars error:', new Error('boom'));
+
+    expect(afterMock).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(prismaMock.errorLog.create).toHaveBeenCalled());
+  });
+
+  it('still writes when there is no request scope and after() throws', async () => {
+    const { mod } = await load();
+    mod.installErrorLogger();
+    afterMock.mockImplementation(() => {
+      throw new Error('`after()` was called outside a request scope');
+    });
+
+    console.error('Serverstart error:', new Error('boom'));
+
+    await vi.waitFor(() => expect(prismaMock.errorLog.create).toHaveBeenCalled());
   });
 
   it('patches only once', async () => {

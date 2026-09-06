@@ -279,6 +279,50 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
     }
   }
 
+  /**
+   * Löscht einen Archiveintrag direkt aus der Übernahmeliste.
+   *
+   * Vorher ging das nur über den Umweg „in den Basar übernehmen, dort löschen" – zwei
+   * Schritte für etwas, das man beim Durchsehen der alten Artikel nebenbei erledigt.
+   * Der Endpunkt konnte es längst, es fehlte nur der Knopf.
+   *
+   * Betrifft ausschließlich das persönliche Archiv (SellerArticle). Bereits in einen Basar
+   * übernommene Artikel bleiben bestehen; die Route hängt sie nur vom Archiveintrag ab.
+   */
+  async function handleDeleteArchive(id: string) {
+    const entry = archiveItems.find(a => a.id === id);
+    if (!entry) return;
+    if (!confirm(`„${entry.title}" dauerhaft aus dem Archiv löschen?`)) return;
+
+    // Optimistisch entfernen, Position für den Fehlerfall merken – die Liste hat keinen
+    // Sortierschlüssel, ein Anhängen am Ende würde sie beim Zurücknehmen umsortieren.
+    const index = archiveItems.findIndex(a => a.id === id);
+    setArchiveItems(prev => prev.filter(a => a.id !== id));
+    setSelectedArchiveIds(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+
+    const res = await fetch('/api/seller-articles', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+
+    if (res.ok) {
+      showMsg('Artikel aus dem Archiv gelöscht', true);
+    } else {
+      setArchiveItems(prev => {
+        const next = [...prev];
+        next.splice(index, 0, entry);
+        return next;
+      });
+      const data = await res.json().catch(() => ({}));
+      showMsg(data.error || 'Fehler beim Löschen', false);
+    }
+  }
+
   function showMsg(text: string, ok: boolean) {
     setMessage(text);
     setMessageOk(ok);
@@ -487,25 +531,41 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
                   <p className="text-xs text-gray-500 mb-2">Artikel auswählen und auf <strong>Importieren</strong> klicken.</p>
                   <div className="space-y-1.5 mb-3 max-h-64 overflow-y-auto pr-1">
                     {archiveAvailable.map(a => (
-                      <label key={a.id} className="flex items-center gap-3 p-2.5 bg-white rounded-lg border border-amber-100 hover:border-amber-300 cursor-pointer transition-colors">
-                        <input
-                          type="checkbox"
-                          checked={selectedArchiveIds.has(a.id)}
-                          onChange={() => {
-                            setSelectedArchiveIds(prev => {
-                              const next = new Set(prev);
-                              next.has(a.id) ? next.delete(a.id) : next.add(a.id);
-                              return next;
-                            });
-                          }}
-                          className="w-4 h-4 accent-yellow-500 flex-shrink-0"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <span className="font-medium text-sm text-gray-800 truncate block">{a.title}</span>
-                          {a.sizeLabel && <span className="text-xs text-gray-500">{a.sizeLabel}</span>}
-                        </div>
-                        <span className="text-sm font-bold text-gray-700 flex-shrink-0">{fmt(a.price)} €</span>
-                      </label>
+                      // Der Löschknopf steht *neben* dem <label>, nicht darin: ein <button>
+                      // ist labelable content und darf laut HTML nicht in einem <label>
+                      // stehen. Das Label deckt weiterhin die ganze Zeile bis zum Preis ab,
+                      // die Auswahl per Klick auf den Eintrag bleibt also erhalten.
+                      <div key={a.id} className="flex items-center gap-2 p-2.5 bg-white rounded-lg border border-amber-100 hover:border-amber-300 transition-colors">
+                        <label className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedArchiveIds.has(a.id)}
+                            onChange={() => {
+                              setSelectedArchiveIds(prev => {
+                                const next = new Set(prev);
+                                next.has(a.id) ? next.delete(a.id) : next.add(a.id);
+                                return next;
+                              });
+                            }}
+                            className="w-4 h-4 accent-yellow-500 flex-shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <span className="font-medium text-sm text-gray-800 truncate block">{a.title}</span>
+                            {a.sizeLabel && <span className="text-xs text-gray-500">{a.sizeLabel}</span>}
+                          </div>
+                          <span className="text-sm font-bold text-gray-700 flex-shrink-0">{fmt(a.price)} €</span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteArchive(a.id)}
+                          className="p-1 text-red-400 hover:text-red-600 transition-colors flex-shrink-0"
+                          title="Aus Archiv löschen"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
                     ))}
                   </div>
                   <div className="flex items-center justify-between gap-3">

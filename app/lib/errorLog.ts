@@ -5,6 +5,7 @@
 // erfasst, ohne dass eine einzige davon angefasst werden musste – und jede künftige
 // Fehlerstelle ebenfalls. Ein `logError()`-Helfer hätte 93 Änderungen bedeutet und beim
 // 94. Aufruf schon wieder gefehlt.
+import { after } from 'next/server';
 import { prisma } from './prisma';
 import { deliverMail } from './mailQueue';
 
@@ -163,9 +164,21 @@ export function installErrorLogger(): void {
     // jeder Datenbankhänger sich selbst.
     if (writing > 0 || (typeof args[0] === 'string' && args[0].startsWith('prisma:'))) return;
 
-    // ponytail: bewusst ohne `await` – die Antwort soll nicht auf die Datenbank warten.
-    // Bricht die Serverless-Instanz unmittelbar danach ab, fehlt die Zeile; der Fehler steht
-    // dann immer noch im Vercel-Log.
-    recordError({ source: 'SERVER', ...parseConsoleErrorArgs(args) }).catch(() => {});
+    // Der Schreibvorgang darf die Antwort nicht aufhalten – aber ein freischwebendes Promise
+    // genügt dafür nicht: auf Vercel friert die Invocation direkt nach der Antwort ein, und
+    // der Insert nach Supabase ist zu diesem Zeitpunkt noch unterwegs. `console.error` steht
+    // fast immer im catch-Block unmittelbar vor dem `return` – die Zeile ging deshalb
+    // praktisch immer verloren (bis 06.09.2026: null SERVER-Zeilen in der Tabelle, während
+    // der CLIENT-Weg über POST /api/errors mit seinem `await` funktionierte).
+    //
+    // `after()` hält die Invocation offen, bis der Schreibvorgang durch ist – dieselbe
+    // Lösung wie bei der MailQueue. Außerhalb eines Requests (Serverstart, Cron-Lauf) gibt
+    // es keinen Request-Kontext und `after()` wirft; dort bleibt nur der direkte Aufruf.
+    const write = () => recordError({ source: 'SERVER', ...parseConsoleErrorArgs(args) }).catch(() => {});
+    try {
+      after(write);
+    } catch {
+      write();
+    }
   };
 }
