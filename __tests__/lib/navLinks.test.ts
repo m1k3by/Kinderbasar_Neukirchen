@@ -106,3 +106,28 @@ describe('basarsAdminActiveKey', () => {
     expect(links.find(l => l.active)?.href).toBe('/admin/basars');
   });
 });
+
+/**
+ * Der Verkäufer meldete am 06.09.2026: „wenn ich links oben auf Kinderbasar gehe, loggt es
+ * mich aus". Abgemeldet wurde nie jemand – das Logo zeigte auf '/', die öffentliche
+ * Startseite, die ausschließlich „Login" anbietet. Umgekehrt war der „Logout"-Eintrag
+ * derselbe Link und beendete deshalb gar nichts.
+ */
+describe('Logo-Ziel und Abmelden', () => {
+  it('markiert den eigenen Bereich als Logo-Ziel statt der öffentlichen Startseite', () => {
+    expect(getNavLinks({ role: 'admin' }).find((l) => l.home)?.href).toBe('/admin');
+    expect(getNavLinks({ role: 'seller' }).find((l) => l.home)?.href).toBe('/seller');
+    expect(getNavLinks({ role: 'employee', isEmployee: true }).find((l) => l.home)?.href).toBe('/seller');
+  });
+
+  it('markiert genau einen Eintrag als Logo-Ziel', () => {
+    const links = getNavLinks({ role: 'employee', isEmployee: true, isCashier: true });
+    expect(links.filter((l) => l.home)).toHaveLength(1);
+  });
+
+  it('macht aus Logout eine Aktion, nicht bloß einen Link auf die Startseite', () => {
+    const logout = getNavLinks({ role: 'seller' }).find((l) => l.label === 'Logout');
+    expect(logout?.action).toBe('logout');
+    expect(logout?.home).toBeUndefined();
+  });
+});

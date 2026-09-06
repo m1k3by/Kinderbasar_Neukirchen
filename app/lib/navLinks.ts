@@ -31,6 +31,10 @@ export interface NavLink {
   active?: boolean;
   /** Marker fuer eine Zahl neben dem Label. Den Wert holt sich app/components/Header selbst. */
   badge?: 'errors';
+  /** Ziel des Logos oben links. Genau ein Eintrag traegt das. */
+  home?: true;
+  /** Beendet die Sitzung statt zu navigieren – siehe app/components/Header. */
+  action?: 'logout';
 }
 
 export type AdminNavKey = 'basarliste' | 'basare' | 'archiv' | 'helferliste' | 'aufgaben' | 'hilfe' | 'logs';
@@ -78,7 +82,14 @@ export function getNavLinks(user: NavUser, activeKey?: NavKey, opts?: { kasseHre
   }
 
   const links: NavLink[] = defs.map(({ key, href, label, badge }) => ({ href, label, badge, active: key === activeKey }));
-  links.push({ href: '/', label: 'Logout' });
+
+  // Der erste Eintrag ist immer der eigene Bereich (/admin bzw. /seller) und damit das Ziel
+  // des Logos. Ohne diesen Marker zeigte das Logo auf '/' – die oeffentliche Startseite, die
+  // nur "Login" anbietet und deshalb wie eine Abmeldung aussieht.
+  if (links[0]) links[0].home = true;
+
+  // href bleibt '/' als Verhalten ohne JavaScript; abgemeldet wird ueber action.
+  links.push({ href: '/', label: 'Logout', action: 'logout' });
   return links;
 }
 

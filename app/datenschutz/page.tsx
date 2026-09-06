@@ -1,15 +1,18 @@
 import Link from 'next/link';
+import { homeHref } from '../lib/apiAuth';
 import { PRIVACY_VERSION, legalVersionLabel } from '../lib/legalDocs';
 
-export default function DatenschutzPage() {
+export default async function DatenschutzPage() {
+  const home = await homeHref();
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="sticky top-0 z-50 bg-yellow-500 text-gray-800 p-4 shadow-md">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <Link href="/" className="text-2xl font-bold hover:underline">
+          <Link href={home} className="text-2xl font-bold hover:underline">
             Kinderbasar Neukirchen
           </Link>
-          <Link href="/" className="hover:underline text-lg">
+          <Link href={home} className="hover:underline text-lg">
             Zurück zur Startseite
           </Link>
         </div>

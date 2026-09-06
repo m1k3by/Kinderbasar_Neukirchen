@@ -6,10 +6,18 @@ const DOPPEL = [
   '110/116', '122/128', '134/140', '146/152', '158/164', '170/176',
 ];
 
+/** Kopfumfang für Mützen, in cm – Bindestrich, nicht Schrägstrich. */
+const KOPFUMFANG = ['36-41', '41-44', '44-46', '46-48', '48-50', '50-52'];
+
 describe('DEFAULT_SIZES', () => {
   it('enthält alle Doppelgrößen', () => {
     const alle = parseSizes(DEFAULT_SIZES);
     for (const d of DOPPEL) expect(alle).toContain(d);
+  });
+
+  it('enthält die Kopfumfänge für Mützen', () => {
+    const alle = parseSizes(DEFAULT_SIZES);
+    for (const k of KOPFUMFANG) expect(alle).toContain(k);
   });
 
   it('behält die Einzelgrößen daneben', () => {
@@ -28,17 +36,29 @@ describe('sizeGroups', () => {
   const gruppen = sizeGroups(parseSizes(DEFAULT_SIZES));
   const von = (label: string) => gruppen.find(g => g.label === label)!.sizes;
 
-  it('steckt die Doppelgrößen in die cm-Gruppe, nicht in eine eigene', () => {
-    // Vorgabe: an der Bedienung soll sich nichts ändern – also keine fünfte Gruppe.
-    expect(gruppen).toHaveLength(4);
+  it('steckt die Doppelgrößen zu den cm-Größen, nicht in eine eigene Gruppe', () => {
+    // Doppelgrößen sind Körpergrößen wie die Einzelwerte – sie gehören zusammen.
     for (const d of DOPPEL) expect(von('Kleidung – Größentabelle (cm)')).toContain(d);
   });
 
-  it('lässt keine Doppelgröße in die Schuhgruppe rutschen', () => {
-    // 50/56 beginnt mit einer Zahl im Schuhbereich – ohne die Slash-Prüfung
-    // könnte sie dort landen.
+  it('gibt dem Kopfumfang eine eigene Gruppe', () => {
+    // Anders als die Doppelgrößen ist das keine Körpergröße, und der Zahlenbereich
+    // überschneidet sich mit den Schuhgrößen – ohne eigene Gruppe wäre „44-46" dort gelandet.
+    expect(gruppen.map(g => g.label)).toEqual([
+      'Kleidung – Buchstaben',
+      'Kleidung – Größentabelle (cm)',
+      'Mützen (Kopfumfang cm)',
+      'Hosen (W-Größen)',
+      'Schuhe',
+    ]);
+    expect(von('Mützen (Kopfumfang cm)')).toEqual(KOPFUMFANG);
+  });
+
+  it('lässt weder Doppelgröße noch Kopfumfang in die Schuhgruppe rutschen', () => {
+    // 50/56 und 44-46 beginnen mit einer Zahl im Schuhbereich – nur Schrägstrich bzw.
+    // Bindestrich halten sie auseinander.
     const schuhe = von('Schuhe');
-    for (const d of DOPPEL) expect(schuhe).not.toContain(d);
+    for (const d of [...DOPPEL, ...KOPFUMFANG]) expect(schuhe).not.toContain(d);
   });
 
   it('ordnet jede Größe genau einer Gruppe zu', () => {

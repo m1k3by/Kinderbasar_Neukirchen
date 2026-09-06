@@ -20,6 +20,30 @@ export default function Header({
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [errorCount, setErrorCount] = useState(0);
 
+  // Das Logo führte fest auf '/'. Das ist die öffentliche Startseite, die nur "Login"
+  // anbietet – für Angemeldete sah jeder Klick darauf nach einer Abmeldung aus, obwohl das
+  // Cookie unverändert gültig blieb. Ziel ist stattdessen der eigene Bereich; welcher das
+  // ist, weiß app/lib/navLinks.ts (Marker `home`).
+  const homeHref = links.find((link) => link.home)?.href ?? '/';
+
+  /**
+   * "Logout" war bis zum 06.09.2026 ein gewöhnlicher Link auf '/' und hat nie etwas
+   * abgemeldet – auf einem geteilten Kassenrechner blieb die Sitzung volle 24 Stunden offen.
+   * Der href bleibt als Verhalten ohne JavaScript bestehen; hier wird er abgefangen.
+   *
+   * `window.location` statt router.push: der harte Neuladevorgang verwirft auch den
+   * Router-Cache, sonst zeigten die Server-Komponenten weiter die Daten der alten Sitzung.
+   */
+  const handleLogout = (event: React.MouseEvent) => {
+    event.preventDefault();
+    setIsMenuOpen(false);
+    fetch('/api/logout', { method: 'POST' })
+      .catch(() => {})
+      .finally(() => {
+        window.location.href = '/';
+      });
+  };
+
   // Nur Admin-Navigationen enthalten den Marker (app/lib/navLinks.ts). Dadurch fragt keine
   // Verkaeufer- oder Mitarbeiterseite eine Admin-Route an, die ihr ohnehin 403 antworten wuerde.
   const hasErrorBadge = links.some((link) => link.badge === 'errors');
@@ -54,7 +78,7 @@ export default function Header({
             {noTitleLink ? (
               <span className="text-xl md:text-2xl font-bold leading-tight">{title}</span>
             ) : (
-              <Link href="/" className="text-xl md:text-2xl font-bold leading-tight hover:underline">
+              <Link href={homeHref} className="text-xl md:text-2xl font-bold leading-tight hover:underline">
                 {title}
               </Link>
             )}
@@ -71,6 +95,7 @@ export default function Header({
               <Link
                 key={link.href}
                 href={link.href}
+                onClick={link.action === 'logout' ? handleLogout : undefined}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                   link.active
                     ? 'bg-gray-900 text-white'
@@ -109,7 +134,7 @@ export default function Header({
                 <Link
                   key={link.href}
                   href={link.href}
-                  onClick={() => setIsMenuOpen(false)}
+                  onClick={link.action === 'logout' ? handleLogout : () => setIsMenuOpen(false)}
                   className={`text-base py-2 px-3 rounded-md transition-colors ${
                     link.active ? 'bg-gray-900 text-white font-medium' : 'hover:bg-yellow-600'
                   }`}

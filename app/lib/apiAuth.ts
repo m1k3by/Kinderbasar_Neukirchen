@@ -23,6 +23,22 @@ export async function getAuth(): Promise<TokenPayload | null> {
   }
 }
 
+/**
+ * Wohin „zurück" für die gerade angemeldete Person führt – `/` nur für Nichtangemeldete.
+ *
+ * Gedacht für die Kopfzeilen der öffentlichen Seiten (Impressum, Datenschutz, AGB). Die
+ * verlinkten bis zum 06.09.2026 fest auf `/`, und `/` ist die öffentliche Startseite, die
+ * ausschließlich „Login" anbietet. Wer aus der laufenden Sitzung heraus auf das Impressum
+ * klickte – der Footer steht über app/layout.tsx auf *jeder* Seite – landete deshalb auf
+ * einer Seite, die wie eine Abmeldung aussieht. Abgemeldet wurde dabei nie jemand: das
+ * Cookie blieb gültig, nur die Kopfzeile wusste nichts davon.
+ */
+export async function homeHref(): Promise<string> {
+  const auth = await getAuth();
+  if (!auth) return '/';
+  return auth.role === 'admin' ? '/admin' : '/seller';
+}
+
 type AuthResult = { auth: TokenPayload; response?: undefined } | { auth?: undefined; response: NextResponse };
 
 /** Any authenticated user (admin, seller, or employee). */

@@ -15,6 +15,10 @@ export const DEFAULT_SIZES =
   '50,56,62,68,74,80,86,92,98,104,110,116,122,128,134,140,146,152,158,164,170,176,' +
   // Doppelgrößen – gehören in dieselbe Gruppe wie die Einzelgrößen, nur zusätzlich.
   '50/56,62/68,74/80,86/92,98/104,110/116,122/128,134/140,146/152,158/164,170/176,' +
+  // Kopfumfang für Mützen, in cm. Bindestrich statt Schrägstrich – der ist von den
+  // Doppelgrößen belegt, und ohne eigene Schreibweise wäre „44-46" von der Schuhgröße 44
+  // nicht zu unterscheiden.
+  '36-41,41-44,44-46,46-48,48-50,50-52,' +
   'W24,W25,W26,W27,W28,W29,W30,W31,W32,W33,W34,W36,W38,W40,W42,W44,' +
   '18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49';
 
@@ -41,6 +45,13 @@ export function sizeGroups(sizes: string[] = parseSizes()) {
       sizes: sizes.filter(s =>
         /^\d+\/\d+$/.test(s) || (/^\d+$/.test(s) && +s >= 50 && +s <= 176)
       ),
+    },
+    {
+      // Eigene Gruppe statt zu den cm-Größen: das ist ein Kopfumfang, keine Körpergröße.
+      // Der Zahlenbereich überschneidet sich mit den Schuhgrößen (36-49), nur der
+      // Bindestrich trennt sie – deshalb landet er nicht in einem der bestehenden Filter.
+      label: 'Mützen (Kopfumfang cm)',
+      sizes: sizes.filter(s => /^\d+-\d+$/.test(s)),
     },
     {
       label: 'Hosen (W-Größen)',

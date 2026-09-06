@@ -1,9 +1,28 @@
+import Link from 'next/link';
 import LegalFooter from '../components/LegalFooter';
+import { homeHref } from '../lib/apiAuth';
 import { TERMS_VERSION, legalVersionLabel } from '../lib/legalDocs';
 
-export default function AGBPage() {
+export default async function AGBPage() {
+  const home = await homeHref();
+
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Diese Seite hatte bis zum 06.09.2026 überhaupt keine Kopfzeile. Erreichbar ist sie
+          über den Footer aus app/layout.tsx, also aus jeder laufenden Sitzung heraus – und
+          dort angekommen führte kein Weg zurück außer dem Zurück-Knopf des Browsers, den die
+          App als PWA (display: standalone) gar nicht anzeigt. */}
+      <header className="sticky top-0 z-50 bg-yellow-500 text-gray-800 p-4 shadow-md">
+        <div className="max-w-6xl mx-auto flex justify-between items-center">
+          <Link href={home} className="text-2xl font-bold hover:underline">
+            Kinderbasar Neukirchen b. Su.-Ro.
+          </Link>
+          <Link href={home} className="hover:underline text-lg">
+            Zurück zur Startseite
+          </Link>
+        </div>
+      </header>
+
       <div className="max-w-4xl mx-auto px-4 py-12">
         <h1 className="text-4xl font-bold mb-8 text-gray-800">
           Allgemeine Geschäftsbedingungen (AGB)
