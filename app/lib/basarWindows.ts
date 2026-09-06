@@ -54,12 +54,21 @@ function activationWindow(basar: BasarWindows, isEmployee: boolean) {
     : { start: basar.activationSellerStart, end: basar.activationSellerEnd };
 }
 
+/** "06.09.2026, 08:00" – deutsche Zeit, unabhaengig von der Zeitzone des Browsers. */
 function formatGermanDateTime(value: Date): string {
   return value.toLocaleString('de-DE', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
     timeZone: 'Europe/Berlin',
-  }) + ' Uhr';
+  });
+}
+
+/**
+ * Der Zeitraum als von–bis, wie im Admin-Formular ("Verkäufer – von / – bis"), plus der
+ * Stand in Klammern. Ohne den Zusatz bliebe unerklärt, warum der Knopf grau ist.
+ */
+function windowText(rolle: string, from: Date, to: Date, stand: string): string {
+  return `Anmeldung für ${rolle}: ${formatGermanDateTime(from)} – ${formatGermanDateTime(to)} Uhr (${stand})`;
 }
 
 export interface ActivationBasar extends BasarWindows {
@@ -108,21 +117,12 @@ export function activationNotice(
   if (!from || !to) return { canActivate: true, message: null };
 
   if (now < from) {
-    return {
-      canActivate: false,
-      message: `Anmeldung für ${rolle} ab ${formatGermanDateTime(from)}.`,
-    };
+    return { canActivate: false, message: windowText(rolle, from, to, 'noch nicht geöffnet') };
   }
   if (now > to) {
-    return {
-      canActivate: false,
-      message: `Die Anmeldung für ${rolle} endete am ${formatGermanDateTime(to)}.`,
-    };
+    return { canActivate: false, message: windowText(rolle, from, to, 'beendet') };
   }
-  return {
-    canActivate: true,
-    message: `Anmeldung für ${rolle} noch bis ${formatGermanDateTime(to)}.`,
-  };
+  return { canActivate: true, message: windowText(rolle, from, to, 'läuft') };
 }
 
 export interface BasarDays {

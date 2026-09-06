@@ -149,19 +149,19 @@ describe('activationNotice', () => {
   it('sperrt vor dem Start und nennt den Beginn', () => {
     const n = activationNotice(basar, false, vorher);
     expect(n.canActivate).toBe(false);
-    expect(n.message).toBe('Anmeldung für Verkäufer ab 01.09.2026, 18:00 Uhr.');
+    expect(n.message).toBe('Anmeldung für Verkäufer: 01.09.2026, 18:00 – 10.09.2026, 20:00 Uhr (noch nicht geöffnet)');
   });
 
   it('gibt im offenen Fenster frei und nennt das Ende', () => {
     const n = activationNotice(basar, false, mittendrin);
     expect(n.canActivate).toBe(true);
-    expect(n.message).toBe('Anmeldung für Verkäufer noch bis 10.09.2026, 20:00 Uhr.');
+    expect(n.message).toBe('Anmeldung für Verkäufer: 01.09.2026, 18:00 – 10.09.2026, 20:00 Uhr (läuft)');
   });
 
   it('sperrt nach dem Ende und nennt den Schluss', () => {
     const n = activationNotice(basar, false, danach);
     expect(n.canActivate).toBe(false);
-    expect(n.message).toBe('Die Anmeldung für Verkäufer endete am 10.09.2026, 20:00 Uhr.');
+    expect(n.message).toBe('Anmeldung für Verkäufer: 01.09.2026, 18:00 – 10.09.2026, 20:00 Uhr (beendet)');
   });
 
   // Der Kern der Sache: zwei Rollen, zwei Zeiträume. Am selben Tag darf der Verkäufer
@@ -170,11 +170,11 @@ describe('activationNotice', () => {
     const amDreißigsten = new Date('2026-08-30T12:00:00.000Z');
     expect(activationNotice(basar, false, amDreißigsten)).toEqual({
       canActivate: false,
-      message: 'Anmeldung für Verkäufer ab 01.09.2026, 18:00 Uhr.',
+      message: 'Anmeldung für Verkäufer: 01.09.2026, 18:00 – 10.09.2026, 20:00 Uhr (noch nicht geöffnet)',
     });
     expect(activationNotice(basar, true, amDreißigsten)).toEqual({
       canActivate: false,
-      message: 'Die Anmeldung für Mitarbeiter endete am 25.08.2026, 20:00 Uhr.',
+      message: 'Anmeldung für Mitarbeiter: 20.08.2026, 18:00 – 25.08.2026, 20:00 Uhr (beendet)',
     });
   });
 
