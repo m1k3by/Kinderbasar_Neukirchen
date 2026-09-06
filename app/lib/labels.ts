@@ -49,8 +49,14 @@ const TEXT_X = PAD + QR_SIZE + QR_GAP;  // 38 mm ab Etikettenkante
 /** Grundlinie der ersten Titelzeile, mm ab Etikettenoberkante. */
 const TITLE_Y = 14.5;
 
-/** Grundlinie der Zielgruppe (eigene Zeile, mittig über dem Band). */
-const GENDER_Y = 26.6;
+/**
+ * Grundlinie der Zielgruppe (eigene Zeile, mittig über dem Band).
+ *
+ * 25,9 statt 26,6: die 0,7 mm gehen an die größere Feldbeschriftung darunter (8 pt statt
+ * 6 pt, siehe drawFieldLabel). Über dieser Zeile lag mit 1,11 mm die einzige Reserve im
+ * unteren Drittel; nach oben zur dritten Titelzeile bleiben 0,41 mm.
+ */
+const GENDER_Y = 25.9;
 
 /** Grundlinie des unteren Bands (Größe links, Preis rechts), mm ab Etikettenoberkante. */
 const BAND_Y = 33;
@@ -136,10 +142,20 @@ export function drawQr(doc: jsPDF, text: string, x: number, y: number, sizeMm: n
  * Nach oben begrenzt die Zielgruppenzeile (Grundlinie 26,6 mm, Unterlänge bis 27,4 mm),
  * darunter beginnt bei 6 pt die Oberkante der Beschriftung erst bei 27,7 mm.
  */
+/**
+ * Feldbeschriftung („Bezeichnung", „Größe", „Preis").
+ *
+ * 8 pt statt der früheren 6 pt und dunkleres Grau: bei 6 pt in Grauwert 110 ging die
+ * Beschriftung neben dem 12-pt-Wert unter. Die zwei Punkte sind erkauft, indem GENDER_Y
+ * um 0,7 mm nach oben rückt – dort lag als einzige Stelle im unteren Drittel noch Luft
+ * (1,11 mm über der Zielgruppenzeile). Der engste Abstand im Etikett beträgt danach
+ * 0,34 mm statt 0,32 mm, wird also nicht kleiner. Mehr als 8 pt geht nicht: bei 9 pt
+ * blieben nur 0,09 mm zur Zielgruppe.
+ */
 function drawFieldLabel(doc: jsPDF, text: string, x: number, y: number, align?: 'right') {
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6);
-  doc.setTextColor(110);
+  doc.setFontSize(8);
+  doc.setTextColor(70);
   doc.text(text, x, y, align ? { align } : undefined);
   doc.setTextColor(0);
 }
@@ -183,8 +199,10 @@ function drawLabel(doc: jsPDF, a: LabelData, sellerNr: number | string, x: numbe
   const size = a.sizeLabel?.trim() || '–';
   const price = fmtPrice(a.price);
 
-  drawFieldLabel(doc, 'Größe', colX, y + BAND_Y - 3.8);
-  drawFieldLabel(doc, 'Preis', rightX, y + BAND_Y - 3.8, 'right');
+  // 4,0 statt 3,8 mm über dem Band: die 8-pt-Beschriftung ist höher, die Grundlinie muss
+  // entsprechend weiter weg vom Wert liegen.
+  drawFieldLabel(doc, 'Größe', colX, y + BAND_Y - 4.0);
+  drawFieldLabel(doc, 'Preis', rightX, y + BAND_Y - 4.0, 'right');
 
   // Größe und Preis gleich groß. Passen beide nebeneinander nicht in die Spalte
   // ("W32/L34" neben "123,50 €"), wird gemeinsam verkleinert statt überlappt –
