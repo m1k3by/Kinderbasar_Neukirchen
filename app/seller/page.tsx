@@ -299,6 +299,10 @@ export default function SellerPage() {
                       {Number(basar.entryFee) > 0 && ` · ${fmt(Number(basar.entryFee))} € Gebühr`}
                     </p>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-4">
+                      {/* Beschriftung sagt den Stand *und* was ein Klick tut: "Teilnahme: AKTIV"
+                          war beides nicht – ein Knopf, der wie ein Statusschild aussieht, und im
+                          gesperrten Fall ein totes „INAKTIV" ohne Handlungsangebot. Die Farbe
+                          trägt den Stand weiterhin mit (grün = angemeldet). */}
                       <button
                         onClick={() => toggleParticipation(basar)}
                         disabled={viaOrga || togglingBasarId === basar.id || !canToggle}
@@ -311,7 +315,7 @@ export default function SellerPage() {
                             : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300'
                         }`}
                       >
-                        {togglingBasarId === basar.id ? '…' : viaOrga ? 'Teilnahme: AKTIV (Orga)' : isActive ? 'Teilnahme: AKTIV' : 'Teilnahme: INAKTIV'}
+                        {togglingBasarId === basar.id ? '…' : viaOrga ? 'Angemeldet (Orga)' : isActive ? '✓ Angemeldet – abmelden' : 'Anmelden'}
                       </button>
                       {/* Auch für Nicht-Teilnehmer sichtbar – was ohne aktive Teilnahme
                           erlaubt ist, entscheidet die Detailseite, nicht diese Karte. */}

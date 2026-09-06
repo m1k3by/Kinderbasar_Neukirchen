@@ -64,11 +64,25 @@ function formatGermanDateTime(value: Date): string {
 }
 
 /**
- * Der Zeitraum als von–bis, wie im Admin-Formular ("Verkäufer – von / – bis"), plus der
- * Stand in Klammern. Ohne den Zusatz bliebe unerklärt, warum der Knopf grau ist.
+ * Anrede in der zweiten Person, und pro Stand nur der Termin, der jetzt zählt.
+ *
+ * Die Rolle wird bewusst **nicht** genannt. Vorher hieß es "Anmeldung für Mitarbeiter:
+ * <von> – <bis> (noch nicht geöffnet)" – das las sich wie ein Aushang über eine fremde
+ * Gruppe, obwohl ein Mitarbeiter immer auch Verkäufer ist. Der Ablauf ist für beide
+ * identisch, nur activationWindow() greift auf andere Spalten zu; welche das sind, ist
+ * eine interne Angelegenheit des Basars. Der Satz nennt deshalb nur noch die Termine, die
+ * für den Lesenden tatsächlich gelten.
  */
-function windowText(rolle: string, from: Date, to: Date, stand: string): string {
-  return `Anmeldung für ${rolle}: ${formatGermanDateTime(from)} – ${formatGermanDateTime(to)} Uhr (${stand})`;
+function windowText(from: Date, to: Date, stand: string): string {
+  const ab = formatGermanDateTime(from);
+  const bis = formatGermanDateTime(to);
+  if (stand === 'noch nicht geöffnet') {
+    return `Du kannst dich ab ${ab} Uhr anmelden – bis ${bis} Uhr.`;
+  }
+  if (stand === 'beendet') {
+    return `Die Anmeldung war bis ${bis} Uhr möglich.`;
+  }
+  return `Du kannst dich noch bis ${bis} Uhr anmelden.`;
 }
 
 export interface ActivationBasar extends BasarWindows {
@@ -110,19 +124,18 @@ export function activationNotice(
   const { start, end } = activationWindow(basar, isEmployee);
   const from = toDate(start);
   const to = toDate(end);
-  const rolle = isEmployee ? 'Mitarbeiter' : 'Verkäufer';
 
   // Gleiche Regel wie isWindowOpen: ein unvollständig gepflegtes Fenster schränkt nicht ein.
   // Dann gibt es auch keinen Termin, den man nennen könnte.
   if (!from || !to) return { canActivate: true, message: null };
 
   if (now < from) {
-    return { canActivate: false, message: windowText(rolle, from, to, 'noch nicht geöffnet') };
+    return { canActivate: false, message: windowText(from, to, 'noch nicht geöffnet') };
   }
   if (now > to) {
-    return { canActivate: false, message: windowText(rolle, from, to, 'beendet') };
+    return { canActivate: false, message: windowText(from, to, 'beendet') };
   }
-  return { canActivate: true, message: windowText(rolle, from, to, 'läuft') };
+  return { canActivate: true, message: windowText(from, to, 'läuft') };
 }
 
 export interface BasarDays {
