@@ -4,7 +4,7 @@ import { useState, useEffect, use, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Header from '../../../components/Header';
-import { parseSizes } from '../../../lib/sizes';
+import { parseSizes, sizeGroups } from '../../../lib/sizes';
 import { getNavLinks } from '../../../lib/navLinks';
 import { formatArticleLimit, maxArticlesFor } from '../../../lib/articleLimits';
 
@@ -668,13 +668,12 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
                           <span className="font-semibold text-sm text-gray-800">Unterstützte Größen</span>
                           <button type="button" onClick={() => setShowSizeTooltip(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
                         </div>
-                        {[
-                          { label: 'Kleidung (Buchstaben)', filter: (s: string) => /^(XXS|XS|S|M|L|XL|XXL|3XL|4XL|5XL)$/.test(s) },
-                          { label: 'Kleidung (cm)', filter: (s: string) => /^\d+$/.test(s) && parseInt(s) >= 50 && parseInt(s) <= 176 },
-                          { label: 'Hosen (W-Größen)', filter: (s: string) => /^W\d+$/.test(s) },
-                          { label: 'Schuhe', filter: (s: string) => /^\d+$/.test(s) && parseInt(s) >= 18 && parseInt(s) <= 49 },
-                        ].map(group => {
-                          const items = allowedSizes.filter(group.filter);
+                        {/* Gruppierung aus app/lib/sizes.ts statt einer zweiten Kopie: die
+                            vier Gruppen standen hier wortgleich noch einmal, und eine neue
+                            Größe wäre im Admin-Formular erschienen, hier aber stillschweigend
+                            durch den Filter gefallen. */}
+                        {sizeGroups(allowedSizes).map(group => {
+                          const items = group.sizes;
                           if (!items.length) return null;
                           return (
                             <div key={group.label} className="mb-2 last:mb-0">
