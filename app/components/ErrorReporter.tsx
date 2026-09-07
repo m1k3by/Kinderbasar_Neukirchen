@@ -20,6 +20,14 @@ export function reportClientError(message: string, stack?: string | null): void 
   // Ressourcenfehler (fehlgeschlagenes <img>/<script>) kommen ohne Meldung an und sagen nichts.
   if (!message || reportCount >= MAX_REPORTS_PER_PAGELOAD) return;
 
+  // Dasselbe in Grün: "Script error." ist die Antwort des Browsers auf eine Ausnahme aus
+  // einem fremden Ursprung – Browser-Erweiterung, injiziertes Skript. Ohne Meldung, ohne
+  // Datei, ohne Zeile, ohne Stack; die Same-Origin-Policy hält alles zurück. Die Anwendung
+  // lädt kein einziges fremdes Skript, an der Quelle ist hier also nichts zu reparieren.
+  // Eine Zeile, die niemand untersuchen kann, verdrängt unter /admin/logs nur die, die es
+  // könnte.
+  if (message.trim().replace(/\.$/, '') === 'Script error') return;
+
   const key = `${message}|${(stack ?? '').slice(0, 200)}`;
   if (reported.has(key)) return;
   reported.add(key);
