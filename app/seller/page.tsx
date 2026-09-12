@@ -421,11 +421,7 @@ export default function SellerPage() {
               </p>
               <ul className="text-sm text-gray-600 space-y-1 mb-4 list-disc list-inside">
                 <li>Der <strong>Mitarbeiterbereich</strong> verschwindet – keine Schichten und kein Kuchen mehr.</li>
-                <li>Für die Anmeldung zu einem Basar gilt wieder der <strong>Verkäufer-Zeitraum</strong> und das Verkäufer-Artikellimit.</li>
                 <li><strong>Schon eingetragene Schichten und Kuchen bleiben bestehen.</strong> Willst du sie abgeben, trag dich vorher im Mitarbeiterbereich aus.</li>
-                {isOrga && (
-                  <li>Dein <strong>Orga-Kennzeichen</strong> wird entfernt. Zurückgeben kann es dir nur das Orga-Team.</li>
-                )}
                 <li>Artikel, Verkäufernummer und Abrechnungen bleiben unverändert.</li>
               </ul>
               <button
@@ -443,8 +439,6 @@ export default function SellerPage() {
               </p>
               <ul className="text-sm text-gray-600 space-y-1 mb-4 list-disc list-inside">
                 <li>Du bekommst den <strong>Mitarbeiterbereich</strong>: dort trägst du dich für Schichten ein und meldest deinen Kuchen an.</li>
-                <li>Für die Anmeldung zu einem Basar gilt dann der <strong>Mitarbeiter-Zeitraum</strong> – er ist meist früher als der für Verkäufer.</li>
-                <li>Hat der Basar ein eigenes Mitarbeiter-Artikellimit, gilt für dich dieses.</li>
                 <li>Am Verkaufen ändert sich nichts: Verkäufernummer, Artikel und Abrechnung bleiben, wie sie sind.</li>
                 <li>Du kannst die Rolle jederzeit wieder abgeben.</li>
               </ul>
@@ -478,15 +472,9 @@ export default function SellerPage() {
 
               <p className="text-sm text-gray-600 mb-4">
                 {roleConfirm === 'promote'
-                  ? 'Danach steht dir der Mitarbeiterbereich offen und du kannst dich für Schichten und Kuchen eintragen. Für die Anmeldung zu einem Basar gilt ab dann der Mitarbeiter-Zeitraum.'
+                  ? 'Danach steht dir der Mitarbeiterbereich offen und du kannst dich für Schichten und Kuchen eintragen.'
                   : 'Danach verschwindet der Mitarbeiterbereich. Bereits eingetragene Schichten und Kuchen bleiben bestehen – trag dich vorher dort aus, wenn du sie abgeben möchtest.'}
               </p>
-
-              {roleConfirm === 'demote' && isOrga && (
-                <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
-                  Dein <strong>Orga-Kennzeichen</strong> wird dabei entfernt. Zurückgeben kann es dir nur das Orga-Team.
-                </p>
-              )}
 
               <p className="text-sm text-gray-500 mb-5">Du kannst das jederzeit wieder ändern.</p>
 

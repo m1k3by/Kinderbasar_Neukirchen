@@ -358,7 +358,7 @@ export const faqData: FaqItem[] = [
     id: 'general-rolle-wechseln',
     question: 'Wie werde ich Mitarbeiter – oder wieder nur Verkäufer?',
     answer:
-      'Im **Verkäuferbereich** gibt es die Karte **"Meine Rolle"**. Dort stellst du dich selbst um – in beide Richtungen, jederzeit.\n\n**Als Mitarbeiter bekommst du:**\n– den **Mitarbeiterbereich**, in dem du dich für Schichten einträgst und deinen Kuchen anmeldest\n– den **Mitarbeiter-Anmeldezeitraum** für Basare, meist früher als den für Verkäufer\n– das Mitarbeiter-Artikellimit des Basars, falls eines gesetzt ist\n\nAm Verkaufen ändert sich nichts: Verkäufernummer, Artikel und Abrechnung bleiben, wie sie sind.\n\n**Beim Zurückstufen** verschwindet der Mitarbeiterbereich wieder. Bereits eingetragene Schichten und Kuchen bleiben bestehen – trag dich vorher dort aus, wenn du sie abgeben willst. Ein **Orga-Kennzeichen** fällt dabei weg; zurückgeben kann es dir nur das Orga-Team.',
+      'Im **Verkäuferbereich** gibt es die Karte **"Meine Rolle"**. Dort stellst du dich selbst um – in beide Richtungen, jederzeit.\n\n**Als Mitarbeiter bekommst du:**\n– den **Mitarbeiterbereich**, in dem du dich für Schichten einträgst und deinen Kuchen anmeldest\n\nAm Verkaufen ändert sich nichts: Verkäufernummer, Artikel und Abrechnung bleiben, wie sie sind.\n\n**Beim Zurückstufen** verschwindet der Mitarbeiterbereich wieder. Bereits eingetragene Schichten und Kuchen bleiben bestehen – trag dich vorher dort aus, wenn du sie abgeben willst.',
     keywords: ['mitarbeiter', 'werden', 'helfen', 'helfer', 'rolle', 'wechseln', 'umstellen', 'ändern', 'verkäufer', 'zurück', 'abgeben', 'aufhören', 'schicht', 'mithelfen'],
     roles: ['seller', 'employee'],
     category: 'Konto & Login',
