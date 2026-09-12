@@ -68,6 +68,8 @@ export default function SellerPage() {
   const [changingPassword, setChangingPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [roleConfirm, setRoleConfirm] = useState<null | 'promote' | 'demote'>(null);
+  const [changingRole, setChangingRole] = useState(false);
 
   useEffect(() => {
     // Get sellerId from cookie
@@ -144,6 +146,37 @@ export default function SellerPage() {
     if (!basar || !agbAccepted || !privacyAccepted) return;
     setActivateConfirm(null);
     await applyParticipationToggle(basar, true);
+  }
+
+  // Rollenwechsel in Selbstbedienung. Der Server stellt dabei das Token neu aus; hier
+  // reicht es, isEmployee/isOrga nachzuziehen – Kopfzeile und Rollenkarte haengen daran.
+  async function confirmRoleChange() {
+    if (!roleConfirm || changingRole) return;
+    const target = roleConfirm === 'promote';
+    setChangingRole(true);
+    try {
+      const res = await fetch('/api/me/role', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isEmployee: target }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setIsEmployee(data.isEmployee);
+        setIsOrga(data.isOrga);
+        setMessage(target
+          ? 'Du bist jetzt Mitarbeiter. Der Mitarbeiterbereich steht oben in der Navigation.'
+          : 'Du bist jetzt wieder Verkäufer.');
+      } else {
+        setMessage('Fehler: ' + (data.error || 'Rolle konnte nicht geändert werden'));
+      }
+    } catch {
+      setMessage('Fehler: Rolle konnte nicht geändert werden');
+    } finally {
+      setTimeout(() => setMessage(''), 4000);
+      setChangingRole(false);
+      setRoleConfirm(null);
+    }
   }
 
   async function applyParticipationToggle(basar: Basar, nextActive: boolean) {
@@ -370,6 +403,109 @@ export default function SellerPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Rollenwechsel in Selbstbedienung. Bis zum 12.09.2026 konnte das nur der Admin –
+            im Hilfe-Protokoll stellte am 07.09. eine Person binnen zwei Minuten vier Fragen
+            danach und bekam den Registrierungsweg genannt, der bei bestehendem Konto gar
+            nicht funktioniert (Seller.email ist @unique). Deshalb steht es jetzt hier. */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+          <h2 className="text-2xl font-bold mb-2 text-gray-900">Meine Rolle</h2>
+          {isEmployee ? (
+            <>
+              <p className="text-gray-700 mb-3">
+                Du bist <strong>Mitarbeiter</strong> und hilfst beim Basar mit. Wenn du nur noch
+                verkaufen möchtest, kannst du die Rolle wieder abgeben. Das passiert dann:
+              </p>
+              <ul className="text-sm text-gray-600 space-y-1 mb-4 list-disc list-inside">
+                <li>Der <strong>Mitarbeiterbereich</strong> verschwindet – keine Schichten und kein Kuchen mehr.</li>
+                <li>Für die Anmeldung zu einem Basar gilt wieder der <strong>Verkäufer-Zeitraum</strong> und das Verkäufer-Artikellimit.</li>
+                <li><strong>Schon eingetragene Schichten und Kuchen bleiben bestehen.</strong> Willst du sie abgeben, trag dich vorher im Mitarbeiterbereich aus.</li>
+                {isOrga && (
+                  <li>Dein <strong>Orga-Kennzeichen</strong> wird entfernt. Zurückgeben kann es dir nur das Orga-Team.</li>
+                )}
+                <li>Artikel, Verkäufernummer und Abrechnungen bleiben unverändert.</li>
+              </ul>
+              <button
+                onClick={() => setRoleConfirm('demote')}
+                className="bg-amber-600 hover:bg-amber-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+              >
+                Mitarbeiter-Rolle abgeben
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-gray-700 mb-3">
+                Du bist <strong>Verkäufer</strong>. Wenn du beim Basar mithelfen möchtest, kannst du
+                dich selbst zum <strong>Mitarbeiter</strong> machen. Das passiert dann:
+              </p>
+              <ul className="text-sm text-gray-600 space-y-1 mb-4 list-disc list-inside">
+                <li>Du bekommst den <strong>Mitarbeiterbereich</strong>: dort trägst du dich für Schichten ein und meldest deinen Kuchen an.</li>
+                <li>Für die Anmeldung zu einem Basar gilt dann der <strong>Mitarbeiter-Zeitraum</strong> – er ist meist früher als der für Verkäufer.</li>
+                <li>Hat der Basar ein eigenes Mitarbeiter-Artikellimit, gilt für dich dieses.</li>
+                <li>Am Verkaufen ändert sich nichts: Verkäufernummer, Artikel und Abrechnung bleiben, wie sie sind.</li>
+                <li>Du kannst die Rolle jederzeit wieder abgeben.</li>
+              </ul>
+              <button
+                onClick={() => setRoleConfirm('promote')}
+                className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+              >
+                Mitarbeiter werden
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Rollenwechsel-Bestätigung */}
+        {roleConfirm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+              <div className="flex items-start gap-3 mb-4">
+                <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${roleConfirm === 'promote' ? 'bg-green-100' : 'bg-amber-100'}`}>
+                  <svg className={`w-5 h-5 ${roleConfirm === 'promote' ? 'text-green-600' : 'text-amber-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">
+                    {roleConfirm === 'promote' ? 'Mitarbeiter werden?' : 'Mitarbeiter-Rolle abgeben?'}
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-0.5">{sellerName}{sellerId && ` · Nr. ${sellerId}`}</p>
+                </div>
+              </div>
+
+              <p className="text-sm text-gray-600 mb-4">
+                {roleConfirm === 'promote'
+                  ? 'Danach steht dir der Mitarbeiterbereich offen und du kannst dich für Schichten und Kuchen eintragen. Für die Anmeldung zu einem Basar gilt ab dann der Mitarbeiter-Zeitraum.'
+                  : 'Danach verschwindet der Mitarbeiterbereich. Bereits eingetragene Schichten und Kuchen bleiben bestehen – trag dich vorher dort aus, wenn du sie abgeben möchtest.'}
+              </p>
+
+              {roleConfirm === 'demote' && isOrga && (
+                <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+                  Dein <strong>Orga-Kennzeichen</strong> wird dabei entfernt. Zurückgeben kann es dir nur das Orga-Team.
+                </p>
+              )}
+
+              <p className="text-sm text-gray-500 mb-5">Du kannst das jederzeit wieder ändern.</p>
+
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setRoleConfirm(null)}
+                  disabled={changingRole}
+                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors font-medium disabled:opacity-50"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={confirmRoleChange}
+                  disabled={changingRole}
+                  className={`px-4 py-2 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${roleConfirm === 'promote' ? 'bg-green-600 hover:bg-green-700' : 'bg-amber-600 hover:bg-amber-700'}`}
+                >
+                  {changingRole ? '…' : roleConfirm === 'promote' ? 'Mitarbeiter werden' : 'Rolle abgeben'}
+                </button>
+              </div>
             </div>
           </div>
         )}

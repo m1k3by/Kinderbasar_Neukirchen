@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '../../../lib/prisma';
 import { requireAdmin } from '../../../lib/apiAuth';
+import { setEmployeeStatus } from '../../../lib/employeeRole';
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,14 +33,9 @@ export async function POST(request: NextRequest) {
 
     const nextIsEmployee = !seller.isEmployee;
 
-    // Orga ist ein Zusatz zum Mitarbeiter und fällt beim Zurückstufen mit weg. Bliebe das
-    // Kennzeichen stehen, hätte ein reiner Verkäufer weiterhin kein Artikellimit und wäre in
-    // jedem Basar angemeldet – unsichtbar, weil die Oberfläche den Orga-Schalter für
-    // Verkäufer gar nicht anzeigt.
-    const updatedSeller = await prisma.seller.update({
-      where: { sellerId: sellerIdInt },
-      data: { isEmployee: nextIsEmployee, ...(nextIsEmployee ? {} : { isOrga: false }) },
-    });
+    // Orga faellt beim Zurueckstufen mit weg – die Regel steht in setEmployeeStatus,
+    // weil sie seit der Selbstbedienung (app/api/me/role) zwei Aufrufer hat.
+    const updatedSeller = await setEmployeeStatus(sellerIdInt, nextIsEmployee);
 
     const orgaRemoved = !nextIsEmployee && seller.isOrga;
 

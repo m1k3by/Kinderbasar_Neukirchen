@@ -214,8 +214,8 @@ export const faqData: FaqItem[] = [
     id: 'employee-verkaeufer-aktivieren',
     question: 'Wie aktiviere ich meinen Verkäuferstatus als Mitarbeiter?',
     answer:
-      'Die Teilnahme gilt pro Basar. Auf deiner Startseite steht bei jedem Basar der Schalter **"Teilnahme"**:\n\n– Grau = **INAKTIV** → klicken zum Aktivieren\n– Grün = **AKTIV** → klicken zum Abmelden\n\nBeim Aktivieren erscheint ein Dialog, in dem du die **AGB** und die **Datenschutzerklärung** bestätigen musst. Danach kannst du für diesen Basar Artikel anlegen.',
-    keywords: ['verkäufer', 'aktivieren', 'status', 'aktiv', 'umschalten', 'toggle', 'schalter', 'mitarbeiter'],
+      'Die Teilnahme gilt pro Basar. Auf deiner Startseite steht bei jedem Basar ein Knopf:\n\n– Grau, **"Inaktiv – anmelden"** → klicken, um dich anzumelden\n– Grün, **"✓ Aktiv – abmelden"** → klicken, um dich wieder abzumelden\n\nBeim Anmelden erscheint ein Dialog, in dem du die **AGB** und die **Datenschutzerklärung** bestätigen musst. Danach kannst du für diesen Basar Artikel anlegen.\n\n**Der Knopf reagiert nicht?** Dann läuft im Moment kein Anmeldezeitraum. Direkt darunter steht, ab wann oder bis wann eine Anmeldung möglich ist. Für Mitarbeiter gilt ein anderer Zeitraum als für Verkäufer – der Termin unter dem Knopf ist immer der, der für dich gilt. Ist er abgelaufen, kannst du dich nicht mehr selbst anmelden; wende dich dann an das Orga-Team.',
+    keywords: ['verkäufer', 'aktivieren', 'status', 'aktiv', 'inaktiv', 'umschalten', 'toggle', 'schalter', 'mitarbeiter', 'geht', 'grau', 'ausgegraut', 'gesperrt', 'geschlossen', 'aktivierungszeitraum', 'zeitraum', 'anmeldezeitraum', 'teilnahme'],
     roles: ['employee'],
     category: 'Konto & Login',
   },
@@ -348,9 +348,19 @@ export const faqData: FaqItem[] = [
     id: 'general-registrierung-mitarbeiter',
     question: 'Wie registriere ich mich als Mitarbeiter?',
     answer:
-      'Gehe zur **Login-Seite** und wähle den Registrierungslink für Mitarbeiter. Du brauchst:\n\n– E-Mail-Adresse\n– Vorname & Nachname\n– AGB akzeptieren\n\nNach Registrierung erhältst du deine **Login-Daten per E-Mail** (Passwort wird zugeschickt).',
+      'Gehe zur **Login-Seite** und wähle den Registrierungslink für Mitarbeiter. Du brauchst:\n\n– E-Mail-Adresse\n– Vorname & Nachname\n– AGB akzeptieren\n\nNach Registrierung erhältst du deine **Login-Daten per E-Mail** (Passwort wird zugeschickt).\n\n**Du hast schon ein Konto als Verkäufer?** Dann registriere dich nicht noch einmal – mit derselben E-Mail-Adresse geht das gar nicht. Du stellst deine Rolle im Verkäuferbereich unter **"Meine Rolle"** selbst um.',
     keywords: ['registrieren', 'mitarbeiter', 'helfer', 'neu', 'konto', 'anmeldung'],
     roles: ['seller', 'employee', 'cashier'],
+    category: 'Konto & Login',
+  },
+
+  {
+    id: 'general-rolle-wechseln',
+    question: 'Wie werde ich Mitarbeiter – oder wieder nur Verkäufer?',
+    answer:
+      'Im **Verkäuferbereich** gibt es die Karte **"Meine Rolle"**. Dort stellst du dich selbst um – in beide Richtungen, jederzeit.\n\n**Als Mitarbeiter bekommst du:**\n– den **Mitarbeiterbereich**, in dem du dich für Schichten einträgst und deinen Kuchen anmeldest\n– den **Mitarbeiter-Anmeldezeitraum** für Basare, meist früher als den für Verkäufer\n– das Mitarbeiter-Artikellimit des Basars, falls eines gesetzt ist\n\nAm Verkaufen ändert sich nichts: Verkäufernummer, Artikel und Abrechnung bleiben, wie sie sind.\n\n**Beim Zurückstufen** verschwindet der Mitarbeiterbereich wieder. Bereits eingetragene Schichten und Kuchen bleiben bestehen – trag dich vorher dort aus, wenn du sie abgeben willst. Ein **Orga-Kennzeichen** fällt dabei weg; zurückgeben kann es dir nur das Orga-Team.',
+    keywords: ['mitarbeiter', 'werden', 'helfen', 'helfer', 'rolle', 'wechseln', 'umstellen', 'ändern', 'verkäufer', 'zurück', 'abgeben', 'aufhören', 'schicht', 'mithelfen'],
+    roles: ['seller', 'employee'],
     category: 'Konto & Login',
   },
 
