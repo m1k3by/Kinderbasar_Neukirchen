@@ -389,3 +389,69 @@ describe('GET /api/basars/[id]/labels.pdf – Fehlerbehandlung', () => {
     spy.mockRestore();
   });
 });
+
+describe('GET /api/basars/[id]/labels.pdf?ids= – Einzelauswahl', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cookiesGetMock.mockReturnValue({ value: sellerToken(9001) });
+  });
+
+  /**
+   * Das gemockte Prisma filtert nichts – die Rückgabe beweist über die Auswahl also nichts.
+   * Belegt wird sie ausschließlich über die Argumente von findMany.
+   */
+  it('filtert die Abfrage auf die ausgewählten IDs, gebunden an den eigenen BasarSeller', async () => {
+    happyPath(makeArticles(2));
+    const res = await GET(makeRequest('?ids=art-1,art-2'), makeContext());
+    expect(res.status).toBe(200);
+
+    const args = prismaMock.article.findMany.mock.calls[0][0];
+    expect(args.where).toEqual({ basarSellerId: 'bs-1', id: { in: ['art-1', 'art-2'] } });
+    // Reihenfolge bleibt die Anlagereihenfolge – das PDF selbst ändert sich nicht.
+    expect(args.orderBy).toEqual({ createdAt: 'asc' });
+  });
+
+  it('ohne ids bleibt die Abfrage ungefiltert', async () => {
+    happyPath(makeArticles(3));
+    const res = await GET(makeRequest(), makeContext());
+    expect(res.status).toBe(200);
+    expect(prismaMock.article.findMany.mock.calls[0][0].where).toEqual({ basarSellerId: 'bs-1' });
+  });
+
+  it('erzeugt genau so viele Etiketten wie ausgewählt', async () => {
+    happyPath(makeArticles(2));
+    const content = contentStream(await pdfBuffer(await GET(makeRequest('?ids=a,b'), makeContext())));
+    expect(content).toContain('Artikel 0');
+    expect(content).toContain('Artikel 1');
+    expect(content).not.toContain('Artikel 2');
+  });
+
+  it('409, wenn ein ausgewählter Artikel nicht mehr existiert', async () => {
+    // Zwei ausgewählt, einer davon zwischenzeitlich gelöscht: der Bogen käme still um ein
+    // Etikett kürzer heraus und wäre danach verbraucht.
+    happyPath(makeArticles(1));
+    const res = await GET(makeRequest('?ids=art-1,art-weg'), makeContext());
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toContain('nicht mehr aktuell');
+  });
+
+  it('409, wenn keiner der ausgewählten Artikel gefunden wird', async () => {
+    happyPath([]);
+    const res = await GET(makeRequest('?ids=fremd-1'), makeContext());
+    expect(res.status).toBe(409);
+  });
+
+  it('doppelte IDs gelten als eine Auswahl', async () => {
+    happyPath(makeArticles(1));
+    const res = await GET(makeRequest('?ids=art-1,art-1'), makeContext());
+    expect(res.status).toBe(200);
+    expect(prismaMock.article.findMany.mock.calls[0][0].where.id).toEqual({ in: ['art-1'] });
+  });
+
+  it('leerer ids-Parameter druckt den ganzen Bogen', async () => {
+    happyPath(makeArticles(3));
+    const res = await GET(makeRequest('?ids='), makeContext());
+    expect(res.status).toBe(200);
+    expect(prismaMock.article.findMany.mock.calls[0][0].where).toEqual({ basarSellerId: 'bs-1' });
+  });
+});

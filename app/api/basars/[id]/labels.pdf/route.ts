@@ -53,6 +53,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const from =
       Number.isFinite(fromParam) && fromParam >= 0 && fromParam < LABELS_PER_SHEET ? fromParam : 0;
 
+    // Auswahl einzelner Artikel. Leer = alle, wie bisher. Doppelte Einträge werden entfernt,
+    // sonst schlüge der Abgleich mit der gefundenen Anzahl weiter unten fälschlich fehl.
+    const ids = [...new Set((url.searchParams.get('ids') || '').split(',').filter(Boolean))];
+
     const requestedSeller = url.searchParams.get('sellerId');
     let sellerId: number;
     if (auth.role === 'admin') {
@@ -86,13 +90,25 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'Keine Teilnahme an diesem Basar' }, { status: 404 });
     }
 
+    // Das where bleibt an basarSellerId gebunden: eine fremde Artikel-ID trifft damit nichts,
+    // die Auswahl kann keinen fremden Bogen erzeugen. Reihenfolge und Layout bleiben
+    // unangetastet – es ändert sich ausschließlich, welche Zeilen im Array landen.
     const articles = await prisma.article.findMany({
-      where: { basarSellerId: basarSeller.id },
+      where: { basarSellerId: basarSeller.id, ...(ids.length ? { id: { in: ids } } : {}) },
       select: { title: true, sizeLabel: true, gender: true, price: true, qrCode: true },
       orderBy: { createdAt: 'asc' },
     });
     if (articles.length === 0) {
       return NextResponse.json({ error: 'Keine Artikel vorhanden' }, { status: 409 });
+    }
+    // Fehlt auch nur ein ausgewählter Artikel (zwischenzeitlich gelöscht, fremde ID), wird der
+    // Bogen NICHT gedruckt: er käme sonst still um ein Etikett kürzer heraus – und ein
+    // vorgestanzter Bogen ist danach physisch verbraucht.
+    if (ids.length && articles.length !== ids.length) {
+      return NextResponse.json(
+        { error: 'Die Artikelliste ist nicht mehr aktuell. Bitte die Seite neu laden.' },
+        { status: 409 }
+      );
     }
 
     const labels: LabelData[] = articles.map(a => ({

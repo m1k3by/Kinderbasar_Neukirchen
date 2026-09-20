@@ -88,6 +88,9 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   // Bewusst nicht Teil von `form`: nach dem Absenden wird das Formular geleert, die Kategorie
   // bleibt aber stehen – wer zehn Spielsachen erfasst, will nicht zehnmal umschalten.
   const [isClothing, setIsClothing] = useState(true);
+  // Etiketten-Dialog: 'choice' = Abfrage ganzer Bogen oder Einzelauswahl, 'pick' = Auswahlliste.
+  const [labelDialog, setLabelDialog] = useState<null | 'choice' | 'pick'>(null);
+  const [selectedLabelIds, setSelectedLabelIds] = useState<Set<string>>(new Set());
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -352,6 +355,30 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   const canAddArticles = basar.status === 'OPEN';
   const isReadOnly = basar.status === 'ACTIVE' || basar.status === 'CLOSED';
   const archiveAvailable = archiveItems.filter(a => !a.alreadyInBasar && !a.soldPreviously);
+
+  // Neueste zuerst – bewusst aus createdAt gerechnet und nicht aus der Reihenfolge von
+  // `articles`: das optimistische Anlegen stellt neue Artikel vorne ein, ein fehlgeschlagenes
+  // Löschen sortiert wieder aufsteigend. Die Array-Reihenfolge stimmt also je nach
+  // Vorgeschichte mal so und mal so.
+  const labelPickList = [...articles].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  // Sind alle ausgewählt, entfällt der Parameter – dann ist es derselbe Aufruf wie „Alle",
+  // und die URL bleibt kurz.
+  // ponytail: IDs in der URL, bei ~200 Artikeln rund 5 KB. Trägt jeder Browser; erst wenn
+  // jemand vierstellig auswählt (Orga hat kein Artikellimit), bräuchte es POST + Token.
+  const labelHref =
+    selectedLabelIds.size > 0 && selectedLabelIds.size < articles.length
+      ? `/api/basars/${basarId}/labels.pdf?ids=${[...selectedLabelIds].join(',')}`
+      : `/api/basars/${basarId}/labels.pdf`;
+
+  const toggleLabel = (id: string) => {
+    setSelectedLabelIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -814,22 +841,19 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
           <div className="bg-white rounded-xl shadow-sm overflow-hidden">
             <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-gray-100">
               <h2 className="font-semibold text-gray-700">Meine Artikel ({articles.length})</h2>
-              {/* target="_blank" ist auf dem iPhone Pflicht, nicht Geschmackssache: die App
-                  läuft als PWA mit display:standalone (public/manifest.json), also ohne
-                  Adressleiste, Tabs und Zurück-Knopf. Wird dieses eine Fenster zum PDF
-                  navigiert, führt kein Weg zurück – die App muss beendet und neu gestartet
-                  werden. Mit _blank übernimmt Safari das PDF, das App-Fenster bleibt stehen.
-                  Gilt für jeden PDF-Link in dieser Anwendung. */}
+              {/* Öffnet die Abfrage „ganzer Bogen oder einzelne Artikel". Der eigentliche
+                  Download bleibt auch dort ein <a> – siehe Kommentar am Dialog. */}
               {basar.status === 'OPEN' && (
-                <a
-                  href={`/api/basars/${basarId}/labels.pdf`}
-                  download
-                  target="_blank"
-                  rel="noopener"
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedLabelIds(new Set());
+                    setLabelDialog('choice');
+                  }}
                   className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
                 >
                   🖨 Etiketten als PDF
-                </a>
+                </button>
               )}
             </div>
             {basar.status === 'OPEN' && (
@@ -891,6 +915,137 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
         {articles.length === 0 && canAddArticles && (
           <div className="text-center py-12 text-gray-400">
             Noch keine Artikel. Füge deinen ersten Artikel oben hinzu!
+          </div>
+        )}
+
+        {/* Etiketten-Dialog: ganzer Bogen oder einzelne Artikel.
+            Der Druckknopf ist in beiden Fällen ein <a> und kein window.open(): die App läuft
+            als PWA mit display:standalone (public/manifest.json), also ohne Adressleiste,
+            Tabs und Zurück-Knopf. Wird dieses eine Fenster zum PDF navigiert, führt kein Weg
+            zurück – die App müsste beendet und neu gestartet werden. Mit target="_blank"
+            übernimmt Safari das PDF und das App-Fenster bleibt stehen. Gilt für jeden
+            PDF-Link in dieser Anwendung.
+            Höhe über max-h-[85vh] mit scrollender Mitte: damit passt der Dialog auch auf ein
+            Telefon im Querformat, ohne dass der Druckknopf unten aus dem Bild rutscht. */}
+        {labelDialog && (
+          <div
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            onClick={() => setLabelDialog(null)}
+          >
+            <div
+              className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="px-5 py-4 border-b border-gray-100">
+                <h3 className="text-lg font-bold text-gray-800">Etiketten drucken</h3>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  {labelDialog === 'choice'
+                    ? 'Den ganzen Bogen drucken oder nur einzelne Artikel?'
+                    : `${selectedLabelIds.size} von ${articles.length} ausgewählt`}
+                </p>
+              </div>
+
+              {labelDialog === 'choice' ? (
+                <div className="p-5 space-y-3">
+                  <a
+                    href={labelHref}
+                    download
+                    target="_blank"
+                    rel="noopener"
+                    onClick={() => setLabelDialog(null)}
+                    className="block w-full text-center px-4 py-3 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-lg transition-colors"
+                  >
+                    Alle Artikel ({articles.length})
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setLabelDialog('pick')}
+                    className="block w-full px-4 py-3 border-2 border-dashed border-blue-300 text-blue-700 font-semibold rounded-lg hover:bg-blue-50 hover:border-blue-400 transition-colors"
+                  >
+                    Einzelne Artikel auswählen →
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="px-5 py-2.5 border-b border-gray-100 flex items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedLabelIds(prev =>
+                          prev.size === articles.length ? new Set() : new Set(articles.map(a => a.id))
+                        )
+                      }
+                      className="text-sm text-blue-600 hover:underline font-medium"
+                    >
+                      {selectedLabelIds.size === articles.length ? 'Auswahl aufheben' : 'Alle auswählen'}
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto px-5 py-3 space-y-1.5">
+                    {labelPickList.map(a => (
+                      <label
+                        key={a.id}
+                        className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 hover:border-blue-300 cursor-pointer select-none"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedLabelIds.has(a.id)}
+                          onChange={() => toggleLabel(a.id)}
+                          className="w-5 h-5 accent-blue-500 flex-shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="font-medium text-sm text-gray-800 truncate block">{a.title}</span>
+                          <span className="text-xs text-gray-500">
+                            {a.sizeLabel && `Größe: ${a.sizeLabel} · `}{fmt(Number(a.price))} €
+                            {a.status === 'SOLD' && ' · verkauft'}
+                          </span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Pflichthinweis an der Download-Stelle: ohne „Tatsächliche Größe" skaliert der
+                  Druckdialog den Bogen und die Etiketten passen nicht mehr auf die Stanzung. */}
+              <div className="px-5 py-2.5 text-xs text-gray-700 bg-amber-50 border-t border-amber-100">
+                Beim Drucken <strong>{'„Tatsächliche Größe" / 100 %'}</strong> wählen – nicht{' '}
+                {'„An Seite anpassen".'}
+              </div>
+
+              <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => (labelDialog === 'pick' ? setLabelDialog('choice') : setLabelDialog(null))}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium text-sm"
+                >
+                  {labelDialog === 'pick' ? '← Zurück' : 'Abbrechen'}
+                </button>
+                {labelDialog === 'pick' && (
+                  // Ein <a> kennt kein disabled – ohne Auswahl wird es deshalb über
+                  // aria-disabled und pointer-events-none stillgelegt.
+                  <a
+                    href={labelHref}
+                    download
+                    target="_blank"
+                    rel="noopener"
+                    aria-disabled={selectedLabelIds.size === 0}
+                    onClick={e => {
+                      if (selectedLabelIds.size === 0) e.preventDefault();
+                      else setLabelDialog(null);
+                    }}
+                    className={`px-4 py-2 bg-blue-500 text-white font-semibold text-sm rounded-lg transition-colors ${
+                      selectedLabelIds.size === 0
+                        ? 'opacity-50 pointer-events-none'
+                        : 'hover:bg-blue-600'
+                    }`}
+                  >
+                    {selectedLabelIds.size > 0
+                      ? `${selectedLabelIds.size} Etiketten drucken`
+                      : 'Etiketten drucken'}
+                  </a>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>
