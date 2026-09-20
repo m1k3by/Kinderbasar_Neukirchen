@@ -14,6 +14,16 @@ const DEADLINE_MS = 45_000;
 /** Aufbewahrungsdauer im Fehlerprotokoll (app/lib/errorLog.ts). */
 const ERROR_LOG_RETENTION_DAYS = 30;
 
+/**
+ * Aufbewahrungsdauer für **zugestellte** Mails in der Warteschlange.
+ *
+ * `MailQueue.html` enthält den vollständigen Mailtext, bei Registrierungen also das
+ * Temp-Passwort im Klartext. Ohne Aufräumen bleibt das unbegrenzt in der Datenbank und
+ * wandert in jede Sicherung (`/api/admin/backup`) mit hinaus – gemessen am 20.09.2026:
+ * 194 Zeilen, 230 KB, 5,5 % der Sicherungsdatei, ohne jede Obergrenze wachsend.
+ */
+const MAIL_QUEUE_RETENTION_DAYS = 30;
+
 /** Zeitkonstanter Vergleich – ein `===` auf ein Geheimnis verrät es über die Laufzeit. */
 function secretMatches(provided: string, expected: string): boolean {
   const a = Buffer.from(provided);
@@ -73,8 +83,20 @@ export async function GET(request: Request) {
     const cutoff = new Date(Date.now() - ERROR_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000);
     const prunedErrors = (await prisma.errorLog.deleteMany({ where: { createdAt: { lt: cutoff } } })).count;
 
-    console.log('[CRON] mail-queue:', { processed, sent, failed, prunedErrors });
-    return NextResponse.json({ processed, sent, failed, prunedErrors });
+    // Nur `SENT` wird geloescht, und das `status` im `where` ist Pflicht:
+    //  - PENDING ist eine Mail, auf die noch jemand wartet. Weg damit hiesse, sie kommt nie.
+    //  - FAILED ist der Beleg, dass eine Mail *nicht* ankam, und die Grundlage zum Nachsenden.
+    //    Sie stillschweigend zu entfernen macht den Fehler unsichtbar – genau der Zustand, den
+    //    /admin/logs beenden soll.
+    // Gefiltert wird ueber createdAt statt sentAt: eine SENT-Zeile ohne sentAt (Altbestand)
+    // wuerde von `sentAt: { lt: ... }` nie erfasst und bliebe fuer immer liegen.
+    const mailCutoff = new Date(Date.now() - MAIL_QUEUE_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+    const prunedMails = (await prisma.mailQueue.deleteMany({
+      where: { status: 'SENT', createdAt: { lt: mailCutoff } },
+    })).count;
+
+    console.log('[CRON] mail-queue:', { processed, sent, failed, prunedErrors, prunedMails });
+    return NextResponse.json({ processed, sent, failed, prunedErrors, prunedMails });
   } catch (error) {
     console.error('GET /api/cron/mail-queue error:', error);
     return NextResponse.json({ error: 'Interner Serverfehler' }, { status: 500 });

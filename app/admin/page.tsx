@@ -215,6 +215,34 @@ export default function AdminPage() {
           </a>
         </div>
 
+        {/* Sicherung Card */}
+        <div className="mb-8 bg-yellow-50 border border-yellow-200 rounded-lg shadow-sm p-6 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-gray-800">Datensicherung herunterladen</h2>
+            <p className="text-gray-600 mt-1 text-sm">
+              Kopie aller Daten als JSON-Datei – Verkäufer, Artikel, Verkäufe, Abrechnungen.
+              Am besten vor und nach jedem Basartag.
+            </p>
+            <p className="text-gray-500 mt-1 text-xs">
+              Die Datei enthält personenbezogene Daten und Zugangs-Hashes. Bitte nicht
+              weitergeben und nicht in einer Cloud ablegen.
+            </p>
+          </div>
+          {/*
+            target="_blank" wie bei den PDF-Links: als PWA im Standalone-Modus gibt es
+            keinen Zurück-Knopf, und dieses eine Fenster zum Download zu navigieren würde
+            den Admin aus der App werfen (siehe CLAUDE.md, PDF-Regel 7).
+          */}
+          <a
+            href="/api/admin/backup"
+            target="_blank"
+            rel="noopener"
+            className="flex-shrink-0 px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold rounded-xl transition-colors shadow-sm"
+          >
+            Sicherung laden →
+          </a>
+        </div>
+
         {/* Helferliste */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h2 className="text-2xl font-bold text-gray-800">Helferliste (Admin)</h2>

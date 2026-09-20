@@ -13,6 +13,8 @@ import { useEffect } from 'react';
 // hunderte Male und macht die Adminsicht unlesbar – genau das, was sie verhindern soll.
 const MAX_REPORTS_PER_PAGELOAD = 5;
 
+const NETWORK_ABORTS = ['Failed to fetch', 'Load failed', 'NetworkError'];
+
 const reported = new Set<string>();
 let reportCount = 0;
 
@@ -27,6 +29,15 @@ export function reportClientError(message: string, stack?: string | null): void 
   // Eine Zeile, die niemand untersuchen kann, verdrängt unter /admin/logs nur die, die es
   // könnte.
   if (message.trim().replace(/\.$/, '') === 'Script error') return;
+
+  // Abgebrochene Netzwerkanfragen. Wortlaut je Engine: Chrome "Failed to fetch", Safari/iOS
+  // "Load failed", Firefox "NetworkError ...". Sie entstehen, wenn die Verbindung während
+  // eines fetch() wegbricht – Mobilfunk wechselt, Bildschirm aus, Seite gewechselt – und
+  // kommen hier an, weil die Ladefunktionen der Seiten kein catch haben (35 Aufrufstellen).
+  // An der Quelle ist nichts zu reparieren: ein Nutzer, der das Tab schließt, ist kein
+  // Fehler. Aussagekraft null (keine Zeile, kein Stack), Menge groß – genau das verdrängt
+  // unter /admin/logs die Einträge, die jemand untersuchen könnte.
+  if (NETWORK_ABORTS.some((m) => message.startsWith(m))) return;
 
   const key = `${message}|${(stack ?? '').slice(0, 200)}`;
   if (reported.has(key)) return;

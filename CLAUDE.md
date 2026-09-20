@@ -161,6 +161,13 @@ Nach jeder Änderung an einer PDF-Ausgabe: Datei erzeugen und die Geometrie mess
   der Antwort, aber in derselben Invocation – der Nutzer wartet nicht auf SMTP, die Mail
   geht trotzdem sofort raus. Zweiter Riegel: `GET /api/cron/mail-queue` (Vercel Cron,
   `vercel.json`, abgesichert über `CRON_SECRET`) arbeitet ab, was liegen blieb.
+  Derselbe Lauf löscht **zugestellte** Mails nach 30 Tagen. `MailQueue.html` enthält den
+  vollständigen Mailtext, bei Registrierungen also das Temp-Passwort im Klartext – ohne
+  Aufräumer bleibt das unbegrenzt liegen und wandert in jede Sicherung mit hinaus (am
+  20.09.2026 gemessen: 194 Zeilen, 5,5 % der Sicherungsdatei). Gelöscht wird **nur**
+  `SENT`: `PENDING` ist eine Mail, auf die jemand wartet, `FAILED` der Beleg, dass eine
+  nicht ankam, und die Grundlage zum Nachsenden. Ein `deleteMany` ohne den Statusfilter
+  räumt beides mit weg und liefert dabei genauso 200.
   *Warum zwei:* vom 06.08. bis 26.08.2026 gab es **keinen** Auslöser. Commit `6988ac7`
   ersetzte `await sendMail(...)` durch `mailQueue.create(...)` und legte die
   Verarbeitungs-Route samt 187 Zeilen Tests an – nur niemanden, der sie aufruft. 36 Mails
@@ -204,3 +211,56 @@ Nach jeder Änderung an einer PDF-Ausgabe: Datei erzeugen und die Geometrie mess
   Build – der läuft auf Vercel gegen die Produktivdatenbank.
 
 - **Artikel-Archiv (`SellerArticle`) überlebt das Basar-Ende.** Ob ein Archiv-Eintrag beim nächsten Basar wieder übernehmbar ist, entscheidet ausschließlich, ob ein damit verknüpfter `Article` den Status `SOLD` erreicht hat (`app/api/seller-articles/route.ts`, `soldPreviously`): nicht verkaufte Artikel (`AVAILABLE`/`RETURNED`) bleiben übernehmbar, verkaufte Artikel dauerhaft nicht – unabhängig davon, in wie vielen weiteren Basaren der Eintrag seitdem aufgetaucht ist.
+
+---
+
+## Wächter (`.claude/guard.js`)
+
+Ein `PreToolUse`-Hook (`.claude/settings.json`) verweigert drei Befehlsklassen, die
+hier nachweislich Schaden angerichtet haben. Die Regeln standen vorher als Prosa in
+dieser Datei und wurden trotzdem gebrochen – deshalb jetzt als Schranke:
+
+| Blockiert | Grund | Stattdessen |
+|---|---|---|
+| Lint-, Test-, Build- und `tsc`-Läufe **mit Pipe** | `$?` stammt vom letzten Glied der Pipeline. Hat dreimal ein falsches „Lint sauber" erzeugt | Ohne Pipe, Ausgabe in eine Datei umleiten, Datei lesen |
+| `git checkout --`, `git restore`, `git stash` | Setzt auf HEAD, nicht auf den Arbeitsstand. Hat drei fertige API-Routen gelöscht | `git show HEAD:<datei>` für den Vergleich |
+| `prisma db push`, wenn die URL aus `.env` nicht lokal ist | Führt die Migrations-SQL nicht aus – Ursache der Ausfälle vom 11.08. und 19.08.2026 | `prisma migrate deploy` (läuft ohnehin im Build) |
+
+Geprüft wird `POSTGRES_PRISMA_URL` bzw. `DATABASE_URL` aus `.env.local`/`.env`.
+Heredoc-Rümpfe werden ignoriert, damit Doku über diese Befehle möglich bleibt; ein
+Skript, das diese Befehle als Zeichenkette enthält, löst den Wächter trotzdem aus –
+solche Testfälle gehören in eine Datei, nicht auf die Kommandozeile.
+Gibt es einen belegten Grund für einen blockierten Befehl, wird der Hook bewusst
+abgeschaltet – nicht der Befehl umformuliert, bis er durchrutscht.
+
+Die allgemeinen Arbeitsregeln (belegen statt behaupten, Testlauf-Scope,
+Regressionsnachweis) stehen projektübergreifend in `~/.claude/CLAUDE.md`.
+
+---
+
+## Fachliche Wahrheiten
+
+Regeln, die sich **nicht** aus dem Code erschließen lassen und deshalb nicht neu
+hergeleitet werden dürfen. Mehrere teure Fehler entstanden genau so: plausible
+Regel erfunden, Test dazu geschrieben, beide einig, beide falsch.
+
+- **Verkäufernummern werden als niedrigste freie Nummer vergeben**, per
+  `generate_series(1000, 9999)` gegen die belegten IDs – **nicht** als `MAX + 1`.
+  Der Unterschied ist nicht kosmetisch: mit `MAX + 1` stand der Zähler am 26.08.2026
+  auf 10000, obwohl nur 301 von 9000 Nummern belegt waren, und die Registrierung war
+  tot. Die jetzige Form heilt einen falschen Zählerstand von selbst.
+- **Übernehmbarkeit aus dem Archiv entscheidet allein `SOLD`** – siehe letzter Punkt
+  unter „Sonstige Konventionen". Nicht „solange noch ein Artikel dranhängt".
+- **Orga ist ein Zusatzkennzeichen, kein Rang** – siehe `Seller.isOrga` oben.
+
+### Ungeklärt – nicht erfinden, sondern fragen
+
+- **Etiketten: Papierart und Befestigung.** Ob Normalpapier zulässig ist und womit
+  befestigt wird, ist eine Orga-Entscheidung. Stand versehentlich schon zweimal als
+  erfundene Regel in Nutzertexten (FAQ, Anleitung).
+- **Helferschichten: Überschneidungen.** Eine Prüfung auf zeitliche Überschneidung
+  gibt es nicht. Ob das gewollt ist oder eine Lücke, ist offen – bis dahin wird in
+  Anleitungen nicht behauptet, Überschneidungen seien ausgeschlossen.
+
+Was hier nicht steht und im Code nicht nachlesbar ist, wird in Nutzertexten als
+Vermutung gekennzeichnet oder weggelassen.

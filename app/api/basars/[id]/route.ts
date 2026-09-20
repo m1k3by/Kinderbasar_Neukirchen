@@ -1,5 +1,5 @@
 ﻿import { NextResponse } from 'next/server';
-import { participationPayload } from '../../../lib/participation';
+import { isParticipating, participationPayload } from '../../../lib/participation';
 import { prisma } from '../../../lib/prisma';
 import { requireAuth, requireAdmin } from '../../../lib/apiAuth';
 import { buildBasarData, lockedFieldsForActiveBasar } from '../../../lib/basarPayload';
@@ -28,7 +28,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           ? {
               basarSellers: {
                 include: {
-                  seller: { select: { sellerId: true, firstName: true, lastName: true, email: true } },
+                  // isOrga muss mit heraus: ohne das Kennzeichen laesst sich die Teilnahme
+                  // unten nicht aufloesen, und die Liste zeigte Orga-Personen als „inaktiv".
+                  seller: { select: { sellerId: true, firstName: true, lastName: true, email: true, isOrga: true } },
                   _count: { select: { articles: true } },
                 },
                 orderBy: { sellerId: 'asc' as const },
@@ -41,7 +43,30 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (!basar) return NextResponse.json({ error: 'Basar nicht gefunden' }, { status: 404 });
 
     if (isAdmin || !auth.sellerId) {
-      return NextResponse.json(basar);
+      // Adminsicht: Teilnahme aufgeloest ausliefern – dieselbe Regel wie bei myParticipation
+      // weiter unten. Vorher ging `isActive` roh aus der Zeile hinaus, und die Oberfläche
+      // hätte das Orga-Kennzeichen selbst auswerten müssen, um zur richtigen Anzeige zu
+      // kommen. Genau das ist am 20.09.2026 aufgefallen: 10 Orga-Personen standen auf
+      // /admin/basars/[id] als „inaktiv", obwohl sie in jedem Basar teilnehmen.
+      // Der bedingte Spread im `include` oben nimmt Prisma die Typinferenz: `basarSellers`
+      // kommt ohne die genestete `seller`-Relation heraus, obwohl die Abfrage sie mitlaedt.
+      // Eng gefasste Zusicherung statt einer zweiten Abfrage – die Form garantiert das
+      // `include` direkt darueber, und der Test prueft die Projektion.
+      const adminRows = basar.basarSellers as unknown as
+        ({ isActive: boolean; seller: { isOrga: boolean } } & Record<string, unknown>)[] | undefined;
+
+      return NextResponse.json(
+        adminRows
+          ? {
+              ...basar,
+              basarSellers: adminRows.map((bs) => ({
+                ...bs,
+                isActive: isParticipating(bs.seller, bs),
+                viaOrga: !!bs.seller.isOrga,
+              })),
+            }
+          : basar
+      );
     }
 
     // isOrga wird aus der Datenbank gelesen, nicht aus dem Token: das Kennzeichen setzt der

@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+/** ESC-Byte, aus dem die ANSI-Codes des Dev-Servers bestehen. */
+const ESC = String.fromCharCode(27);
+
 const prismaMock = vi.hoisted(() => ({
   errorLog: { create: vi.fn(), count: vi.fn(), update: vi.fn() },
   mailQueue: { create: vi.fn() },
@@ -259,5 +262,21 @@ describe('installErrorLogger', () => {
     mod.installErrorLogger();
 
     expect(console.error).toBe(patched);
+  });
+});
+
+describe('installErrorLogger – Dev-Spiegelung der Browser-Konsole', () => {
+  it('ignores browser logs that the Next dev server mirrors into the terminal', async () => {
+    const { mod, original } = await load();
+    mod.installErrorLogger();
+
+    // Wortlaut des Dev-Servers, inklusive ANSI-Farbcodes um das Präfix.
+    console.error(
+      `${ESC}[36m[browser]${ESC}[39m Failed to fetch RSC payload for http://localhost:3000/seller/basars/abc.`
+    );
+
+    expect(original).toHaveBeenCalled();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(prismaMock.errorLog.create).not.toHaveBeenCalled();
   });
 });

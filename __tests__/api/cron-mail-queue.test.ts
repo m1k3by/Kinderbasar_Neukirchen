@@ -10,9 +10,13 @@ vi.mock('@/app/lib/mailQueue', () => ({
   MAIL_QUEUE_MAX_ATTEMPTS: 5,
 }));
 
-// Der Lauf raeumt zusaetzlich das Fehlerprotokoll auf (app/lib/errorLog.ts) – ohne das
-// waechst die Tabelle unbegrenzt, weil sie bei jedem console.error beschrieben wird.
-const prismaMock = vi.hoisted(() => ({ errorLog: { deleteMany: vi.fn() } }));
+// Der Lauf raeumt zusaetzlich zwei Tabellen auf, die sonst unbegrenzt wachsen:
+// das Fehlerprotokoll (app/lib/errorLog.ts, beschrieben bei jedem console.error) und die
+// zugestellten Mails (MailQueue.html enthaelt den kompletten Mailtext samt Temp-Passwort).
+const prismaMock = vi.hoisted(() => ({
+  errorLog: { deleteMany: vi.fn() },
+  mailQueue: { deleteMany: vi.fn() },
+}));
 vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
 
 import { GET } from '@/app/api/cron/mail-queue/route';
@@ -33,6 +37,7 @@ describe('GET /api/cron/mail-queue', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     prismaMock.errorLog.deleteMany.mockResolvedValue({ count: 0 });
+    prismaMock.mailQueue.deleteMany.mockResolvedValue({ count: 0 });
     process.env.CRON_SECRET = SECRET;
   });
   afterEach(() => {
@@ -111,6 +116,7 @@ describe('GET /api/cron/mail-queue – Aufräumen des Fehlerprotokolls', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     prismaMock.errorLog.deleteMany.mockResolvedValue({ count: 4 });
+    prismaMock.mailQueue.deleteMany.mockResolvedValue({ count: 0 });
     drainMock.mockResolvedValue(restStapel);
     process.env.CRON_SECRET = SECRET;
   });
@@ -133,5 +139,44 @@ describe('GET /api/cron/mail-queue – Aufräumen des Fehlerprotokolls', () => {
     const res = await GET(makeRequest('falsch'));
     expect(res.status).toBe(401);
     expect(prismaMock.errorLog.deleteMany).not.toHaveBeenCalled();
+  });
+});
+
+// MailQueue.html enthaelt den vollstaendigen Mailtext, bei Registrierungen also das
+// Temp-Passwort im Klartext. Ohne Aufraeumer bleibt das unbegrenzt liegen und wandert in
+// jede Sicherung (/api/admin/backup) mit hinaus.
+describe('GET /api/cron/mail-queue – Aufräumen zugestellter Mails', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prismaMock.errorLog.deleteMany.mockResolvedValue({ count: 0 });
+    prismaMock.mailQueue.deleteMany.mockResolvedValue({ count: 7 });
+    drainMock.mockResolvedValue(restStapel);
+    process.env.CRON_SECRET = SECRET;
+  });
+  afterEach(() => {
+    delete process.env.CRON_SECRET;
+  });
+
+  it('löscht ausschließlich zugestellte Mails, die älter als 30 Tage sind', async () => {
+    const res = await GET(makeRequest(SECRET));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ prunedMails: 7 });
+
+    const where = prismaMock.mailQueue.deleteMany.mock.calls[0][0].where;
+
+    // Der Status im where ist der eigentliche Vertrag, nicht der Statuscode:
+    //  - PENDING ist eine Mail, auf die noch jemand wartet.
+    //  - FAILED ist der Beleg, dass eine Mail nicht ankam, und die Grundlage zum Nachsenden.
+    // Ein deleteMany ohne diesen Filter loescht beides und liefert genauso 200.
+    expect(where.status).toBe('SENT');
+
+    const alterInTagen = (Date.now() - where.createdAt.lt.getTime()) / (24 * 60 * 60 * 1000);
+    expect(alterInTagen).toBeCloseTo(30, 1);
+  });
+
+  it('räumt nicht auf, wenn die Autorisierung fehlschlägt', async () => {
+    const res = await GET(makeRequest('falsch'));
+    expect(res.status).toBe(401);
+    expect(prismaMock.mailQueue.deleteMany).not.toHaveBeenCalled();
   });
 });

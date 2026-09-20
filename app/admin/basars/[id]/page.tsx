@@ -44,7 +44,10 @@ interface Basar {
 interface BasarSellerEntry {
   id: string;
   sellerId: number;
+  /** Bereits aufgelöst: bei Orga true, auch wenn die Zeile selbst isActive=false trägt. */
   isActive: boolean;
+  /** Woher das true kommt. Nicht optional – GET /api/basars/[id] liefert es im Adminzweig immer. */
+  viaOrga: boolean;
   seller: { sellerId: number; firstName: string; lastName: string; email: string };
   _count: { articles: number };
 }
@@ -681,7 +684,7 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
                         <td className="px-4 py-3 font-bold text-gray-700">#{bs.seller.sellerId}</td>
                         <td className="px-4 py-3 text-gray-800">{bs.seller.firstName} {bs.seller.lastName}
                           <span className={`ml-2 text-xs px-1.5 py-0.5 rounded ${bs.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                            {bs.isActive ? 'aktiv' : 'inaktiv'}
+                            {bs.viaOrga ? 'aktiv (Orga)' : bs.isActive ? 'aktiv' : 'inaktiv'}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{bs.seller.email}</td>

@@ -114,7 +114,37 @@ describe('PUT /api/basars/[id]/participation', () => {
     prismaMock.basarSeller.count.mockResolvedValue(100); // equals maxSellers
     const res = await PUT(makeRequest({ isActive: true }), makeContext());
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toMatch(/Verkäufern/i);
+    expect((await res.json()).error).toMatch(/Teilnehmern/i);
+  });
+
+  // maxSellers begrenzt die Plätze auf der Fläche, nicht eine Personengruppe: Mitarbeiter
+  // verkaufen ebenfalls. Ein gemocktes Prisma filtert nicht – belegt wird das deshalb über
+  // die Argumente von count(), die Antwort allein bewiese nichts.
+  it('zählt Mitarbeiter gegen maxSellers mit', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basarSeller.upsert.mockResolvedValue(activeBasarSeller);
+    await PUT(makeRequest({ isActive: true, acceptedTerms: true }), makeContext());
+    expect(prismaMock.basarSeller.count).toHaveBeenCalledWith({
+      where: { basarId: 'basar-1', isActive: true },
+    });
+  });
+
+  it('weist auch einen Mitarbeiter ab, wenn das Limit erreicht ist', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.seller.findUnique.mockResolvedValue({ ...seller, isEmployee: true });
+    prismaMock.basarSeller.count.mockResolvedValue(100); // equals maxSellers
+    const res = await PUT(makeRequest({ isActive: true, acceptedTerms: true }), makeContext());
+    expect(res.status).toBe(400);
+    expect(prismaMock.basarSeller.upsert).not.toHaveBeenCalled();
+  });
+
+  it('lässt einen Mitarbeiter unterhalb des Limits durch', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.seller.findUnique.mockResolvedValue({ ...seller, isEmployee: true });
+    prismaMock.basarSeller.count.mockResolvedValue(99);
+    prismaMock.basarSeller.upsert.mockResolvedValue(activeBasarSeller);
+    const res = await PUT(makeRequest({ isActive: true, acceptedTerms: true }), makeContext());
+    expect(res.status).toBe(200);
   });
 
   it('activates participation and returns isActive: true', async () => {

@@ -161,8 +161,12 @@ export function installErrorLogger(): void {
     originalConsoleError(...args);
 
     // Prisma protokolliert eigene Warnungen über console.error; würden die erfasst, meldete
-    // jeder Datenbankhänger sich selbst.
-    if (writing > 0 || (typeof args[0] === 'string' && args[0].startsWith('prisma:'))) return;
+    // jeder Datenbankhänger sich selbst. Der Dev-Server von Next spiegelt zusätzlich die
+    // Browser-Konsole ins Terminal (`[browser] …`, mit ANSI-Codes davor) – das ist dieselbe
+    // Meldung, die der Browser bereits über POST /api/errors meldet, nur ohne Fundstelle
+    // und nur auf localhost.
+    const first = typeof args[0] === 'string' ? args[0] : '';
+    if (writing > 0 || first.startsWith('prisma:') || first.includes('[browser]')) return;
 
     // Der Schreibvorgang darf die Antwort nicht aufhalten – aber ein freischwebendes Promise
     // genügt dafür nicht: auf Vercel friert die Invocation direkt nach der Antwort ein, und

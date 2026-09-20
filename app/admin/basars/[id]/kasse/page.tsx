@@ -252,7 +252,9 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
           const res = await fetch(`/api/basars/${tx.basarId}/sales`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items: tx.items.map(i => ({ qrCode: i.qrCode, salePrice: i.salePrice })), clientTxId }),
+            // Ebenfalls ohne salePrice – auch eine nachgereichte Offline-Buchung rechnet mit
+            // dem Preis aus der Datenbank, nicht mit dem, der im Gerät lag.
+            body: JSON.stringify({ items: tx.items.map(i => ({ qrCode: i.qrCode })), clientTxId }),
           });
           if (res.ok) {
             const data = await res.json().catch(() => ({ results: [] }));
@@ -442,7 +444,10 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
   async function handleKassieren() {
     if (cart.length === 0) return;
     setKassieren(true);
-    const items = cart.map(i => ({ qrCode: i.qrCode, salePrice: i.salePrice }));
+    // Ohne salePrice nimmt die Route Article.price aus der Datenbank (siehe
+    // app/api/basars/[id]/sales/route.ts). Ein vom Client geschickter Preis wäre ein vom
+    // Client bestimmter Preis – und genau den soll es an der Kasse nicht geben.
+    const items = cart.map(i => ({ qrCode: i.qrCode }));
     const clientTxId = crypto.randomUUID();
     try {
       const res = await fetch(`/api/basars/${basarId}/sales`, {
@@ -465,7 +470,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
         }
       } else if (!navigator.onLine) {
         // Genuinely offline → queue for later sync
-        await saveOffline(items);
+        await saveOffline();
       } else {
         // Online but the server rejected/failed the request (4xx or 5xx). Do NOT queue
         // this offline – a 5xx while online is retryable and queuing it could poison an
@@ -476,13 +481,13 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
       }
     } catch {
       // Network error (fetch threw) → save offline
-      await saveOffline(items);
+      await saveOffline();
     } finally {
       setKassieren(false);
     }
   }
 
-  async function saveOffline(items: { qrCode: string; salePrice: number }[]) {
+  async function saveOffline() {
     try {
       const { set } = await import('idb-keyval');
       const key = `pending-sale-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -656,14 +661,14 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
                     <p className="text-xs text-gray-400">#{item.sellerId}{item.sizeLabel && ` · ${item.sizeLabel}`}</p>
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.10"
-                      value={item.salePrice}
-                      onChange={e => setCart(prev => prev.map(c => c.qrCode === item.qrCode ? { ...c, salePrice: parseFloat(e.target.value) || 0 } : c))}
-                      className="w-16 text-right border border-gray-300 rounded px-1.5 py-1 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-yellow-500"
-                    />
+                    {/* Reine Anzeige, kein Eingabefeld. Als <input> ließ sich der Preis an der
+                        Kasse versehentlich ändern: der Cursor steht beim Antippen am Anfang, aus
+                        12,50 wurde durch eine getippte Ziffer 712,50 – und der Server nahm das an,
+                        weil er nur 0 < p <= 1000 prüft. Der Wert landete unverändert in
+                        Sale.salePrice und damit in der Abrechnung des Verkäufers. Ein geleertes
+                        Feld ergab umgekehrt 0, wurde als "Ungültiger Preis" abgelehnt und ließ den
+                        halben Warenkorb hängen. Preise stehen am Artikel; die Kasse zeigt sie nur. */}
+                    <span className="w-16 text-right text-sm font-semibold text-gray-800">{item.salePrice.toFixed(2)}</span>
                     <span className="text-xs text-gray-500">€</span>
                     <button type="button" onClick={() => handleStorno(item)} className="text-red-400 hover:text-red-600 transition-colors" title="Entfernen">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>

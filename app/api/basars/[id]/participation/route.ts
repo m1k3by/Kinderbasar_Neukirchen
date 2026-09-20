@@ -81,17 +81,22 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           );
         }
 
-        if (!seller.isEmployee) {
-          const activeSellers = await prisma.basarSeller.count({
-            where: { basarId, isActive: true, seller: { isEmployee: false } },
-          });
-          if (activeSellers >= basar.maxSellers) {
-            console.log('[PARTICIPATION] Failed: capacity reached', { basarId, sellerId, activeSellers, maxSellers: basar.maxSellers, ip });
-            return NextResponse.json(
-              { error: `Die maximale Anzahl von ${basar.maxSellers} Verkäufern für diesen Basar ist bereits erreicht.` },
-              { status: 400 }
-            );
-          }
+        // maxSellers begrenzt die Plätze auf der Fläche, nicht eine Personengruppe:
+        // Mitarbeiter verkaufen ebenfalls und belegen deshalb einen Platz. Gezählt wird
+        // jede aktive Teilnahme, und die Grenze gilt für jeden, der sich aktiviert.
+        // Vorher war beides auf Nicht-Mitarbeiter eingeschränkt – die Startseite
+        // (app/page.tsx) zählte dagegen schon immer alle aktiven Zeilen. Dadurch meldete
+        // sie „ausgebucht", während die Prüfung hier noch fast 90 weitere durchgelassen
+        // hätte. Beide rechnen jetzt dasselbe.
+        const activeSellers = await prisma.basarSeller.count({
+          where: { basarId, isActive: true },
+        });
+        if (activeSellers >= basar.maxSellers) {
+          console.log('[PARTICIPATION] Failed: capacity reached', { basarId, sellerId, isEmployee: seller.isEmployee, activeSellers, maxSellers: basar.maxSellers, ip });
+          return NextResponse.json(
+            { error: `Die maximale Anzahl von ${basar.maxSellers} Teilnehmern für diesen Basar ist bereits erreicht.` },
+            { status: 400 }
+          );
         }
       }
     }

@@ -167,3 +167,51 @@ describe('GET /api/basars/[id] – aktive Teilnehmer vs. vollstaendige Liste', (
     expect(include._count.select.basarSellers).toEqual({ where: { isActive: true } });
   });
 });
+
+// Orga gilt in JEDEM Basar als teilnehmend, ohne sich je aktiviert zu haben
+// (app/lib/participation.ts). Die BasarSeller-Zeile traegt trotzdem isActive=false – sie
+// entsteht beim Anlegen des ersten Artikels, nicht durch eine Aktivierung.
+//
+// Am 20.09.2026 lieferte der Adminzweig `isActive` roh aus der Zeile aus und waehlte isOrga
+// gar nicht erst mit aus. Folge: 10 Orga-Personen standen auf /admin/basars/[id] als
+// „inaktiv", waehrend /admin/list dieselben Personen korrekt als „Aktiv (Orga)" zeigte.
+describe('GET /api/basars/[id] – Teilnahme in der Adminliste', () => {
+  const zeile = (sellerId: number, isActive: boolean, isOrga: boolean) => ({
+    id: `bs-${sellerId}`,
+    sellerId,
+    isActive,
+    seller: { sellerId, firstName: 'V', lastName: 'N', email: `${sellerId}@example.com`, isOrga },
+    _count: { articles: 0 },
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+  });
+
+  it('zeigt Orga als teilnehmend, obwohl die Zeile isActive=false traegt', async () => {
+    prismaMock.basar.findUnique.mockResolvedValue({
+      ...fakeBasar,
+      basarSellers: [zeile(1110, false, true), zeile(1234, false, false), zeile(1500, true, false)],
+    });
+
+    const daten = await (await GET(makeGetRequest(), makeContext())).json();
+    const [orga, abgemeldet, aktiv] = daten.basarSellers;
+
+    expect(orga).toMatchObject({ sellerId: 1110, isActive: true, viaOrga: true });
+    expect(abgemeldet).toMatchObject({ sellerId: 1234, isActive: false, viaOrga: false });
+    expect(aktiv).toMatchObject({ sellerId: 1500, isActive: true, viaOrga: false });
+  });
+
+  it('waehlt isOrga in der Projektion mit aus', async () => {
+    prismaMock.basar.findUnique.mockResolvedValue({ ...fakeBasar, basarSellers: [] });
+
+    await GET(makeGetRequest(), makeContext());
+
+    // Ein gemocktes Prisma ignoriert `select` vollstaendig – ohne Pruefung der *Argumente*
+    // wuerde der Test auch dann gruen bleiben, wenn isOrga wieder aus der Abfrage faellt,
+    // und genau daran hing der Fehler.
+    const include = prismaMock.basar.findUnique.mock.calls[0][0].include;
+    expect(include.basarSellers.include.seller.select.isOrga).toBe(true);
+  });
+});
