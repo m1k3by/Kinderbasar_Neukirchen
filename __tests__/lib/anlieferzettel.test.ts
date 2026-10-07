@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import zlib from 'zlib';
+import { jsPDF } from 'jspdf';
 import {
   buildAnlieferzettel,
   roleSuffix,
@@ -18,7 +19,7 @@ const PT_PER_MM = 72 / 25.4;
  */
 function pages(buf: Buffer) {
   const raw = buf.toString('latin1');
-  const result: { pt: number; xMm: number; text: string }[][] = [];
+  const result: { pt: number; xMm: number; yMm: number; text: string }[][] = [];
   const re = /stream\r?\n/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(raw)) !== null) {
@@ -31,13 +32,20 @@ function pages(buf: Buffer) {
     } catch { continue; }
     if (!content.includes('Tj')) continue;
 
-    const texts: { pt: number; xMm: number; text: string }[] = [];
+    const texts: { pt: number; xMm: number; yMm: number; text: string }[] = [];
     let pt = 0;
     const tre = /\/F\d+ ([\d.]+) Tf|([\d.]+) ([\d.]+) Td\s*\((.*?)\) Tj/g;
     let t: RegExpExecArray | null;
     while ((t = tre.exec(content)) !== null) {
       if (t[1] !== undefined) { pt = parseFloat(t[1]); continue; }
-      texts.push({ pt, xMm: parseFloat(t[2]) / PT_PER_MM, text: t[4] });
+      // Im PDF zaehlt y von unten, im Generator von oben – hier auf „von oben" bringen,
+      // damit sich die Zusicherungen gegen dieselben Zahlen lesen wie der Quelltext.
+      texts.push({
+        pt,
+        xMm: parseFloat(t[2]) / PT_PER_MM,
+        yMm: PAGE.height - parseFloat(t[3]) / PT_PER_MM,
+        text: t[4],
+      });
     }
     result.push(texts);
   }
@@ -103,6 +111,30 @@ describe('buildAnlieferzettel', () => {
     expect(nummer.xMm + breiteMm).toBeLessThanOrEqual(PAGE.width - MARGIN + 0.5);
     // Und nicht winzig: die Nummer soll über den Tisch hinweg lesbar sein.
     expect(breiteMm).toBeGreaterThan(0.93 * (PAGE.width - 2 * MARGIN));
+  });
+
+  it('„Angelieferte Kisten:" steht unten rechts, groß, mit Platz zum Eintragen', () => {
+    const [, fuss] = pages(pdf([{ sellerId: 1095, ...VK }]))[0];
+
+    // Breite mit derselben Engine, die das PDF erzeugt hat. Fuer eine Abstandspruefung in
+    // Zentimeterhoehe genuegt das; die ~1 % Abweichung zu den echten Helvetica-Laufweiten
+    // zaehlt nur im randscharfen Fall der Nummer, und der hat seinen eigenen Test oben.
+    const mess = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    mess.setFont('helvetica', 'normal');
+    mess.setFontSize(fuss.pt);
+    const rechteKante = fuss.xMm + mess.getTextWidth(fuss.text);
+
+    // Deutlich groesser als die urspruenglichen 18 pt – lesbar quer ueber den Tisch.
+    expect(fuss.pt).toBeGreaterThanOrEqual(28);
+    // Unteres Blattviertel.
+    expect(fuss.yMm).toBeGreaterThan(PAGE.height - 40);
+    // Rechte Blatthaelfte: frueher stand der Schriftzug links bei x = 20 mm.
+    expect(rechteKante).toBeGreaterThan(PAGE.width * 0.75);
+    // Innerhalb des Randes …
+    expect(rechteKante).toBeLessThanOrEqual(PAGE.width - MARGIN);
+    // … und dahinter bleibt Platz, um die Zahl von Hand einzutragen. Ohne diese Zusicherung
+    // koennte der Schriftzug buendig an den Rand rutschen und das Feld waere unbeschreibbar.
+    expect(PAGE.width - MARGIN - rechteKante).toBeGreaterThanOrEqual(30);
   });
 
   it('jede Nummer hat dieselbe Schriftgröße und steht mittig', () => {

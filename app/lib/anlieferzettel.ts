@@ -2,7 +2,7 @@ import { jsPDF } from 'jspdf';
 
 /**
  * Anlieferzettel: ein A4-Blatt quer pro Person, große Verkäufernummer, dahinter „M" für
- * Mitarbeiter bzw. „ORGA", unten „Angelieferte Kisten:" zum Ausfüllen von Hand an der
+ * Mitarbeiter bzw. „ORGA", unten rechts „Angelieferte Kisten:" zum Ausfüllen von Hand an der
  * Anmeldung. Vorlage war ein von der Orga selbst gebautes Blatt („1095", „1060 M",
  * „1080 ORGA") – keine Namen, weil die Blätter offen an der Anmeldung liegen.
  *
@@ -19,7 +19,16 @@ export const MARGIN = 15;
 export const LONGEST_LABEL = '9999 ORGA';
 
 const NUMBER_BASELINE = 115;
-const FOOTER = { x: 20, y: 185, size: 18 };
+
+/**
+ * Freie Breite rechts neben „Angelieferte Kisten:" zum Eintragen der Zahl von Hand.
+ * Der Schriftzug ist rechtsbündig, endet aber nicht an der Papierkante – sonst bliebe
+ * hinter dem Doppelpunkt kein Platz, und genau dort wird geschrieben.
+ */
+const WRITE_GAP = 40;
+
+/** Rechtsbündig unten rechts. `right` ist der rechte Rand des Schriftzugs, nicht sein Anfang. */
+const FOOTER = { right: PAGE.width - MARGIN - WRITE_GAP, y: 185, size: 32 };
 
 export interface AnlieferzettelRow {
   sellerId: number;
@@ -70,7 +79,7 @@ export function buildAnlieferzettel(rows: AnlieferzettelRow[]): jsPDF {
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(FOOTER.size);
-    doc.text('Angelieferte Kisten:', FOOTER.x, FOOTER.y);
+    doc.text('Angelieferte Kisten:', FOOTER.right, FOOTER.y, { align: 'right' });
   });
 
   return doc;
