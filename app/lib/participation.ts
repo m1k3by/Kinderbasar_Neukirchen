@@ -57,7 +57,7 @@ export function participationPayload<T extends ParticipationRow>(
  * sonst stimmt die Zahl im Filter nicht mehr mit der Kachel überein, und eine Erinnerung
  * „du hast noch keine Artikel" ginge an Leute, die gar nicht verkaufen.
  */
-export type ParticipantFilter = 'all' | 'activated' | 'activatedNoArticles';
+export type ParticipantFilter = 'all' | 'activated' | 'activatedNoArticles' | 'withArticles';
 
 export function matchesParticipantFilter(
   row: { activated: boolean; viaOrga: boolean; _count: { articles: number } },
@@ -69,5 +69,10 @@ export function matchesParticipantFilter(
   if (hideOrga && row.viaOrga) return false;
   if (filter === 'activated') return row.activated;
   if (filter === 'activatedNoArticles') return row.activated && row._count.articles === 0;
+  // Wer teilnimmt (selbst angemeldet oder Orga) und etwas mitbringt – die Menge, die einen
+  // Anlieferzettel braucht. Orga zählt hier *mit*, anders als oben: Orga-Leute verkaufen
+  // ebenfalls (#1080, #1110) und liefern an, auch ohne eigene Anmeldung. Wer Artikel nur
+  // vorbereitet hat, ohne sich anzumelden, zählt nicht – er hat keinen Platz.
+  if (filter === 'withArticles') return (row.activated || row.viaOrga) && row._count.articles > 0;
   return true;
 }

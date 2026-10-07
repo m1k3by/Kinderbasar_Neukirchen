@@ -230,4 +230,16 @@ describe('GET /api/basars/[id] – Teilnahme in der Adminliste', () => {
     const include = prismaMock.basar.findUnique.mock.calls[0][0].include;
     expect(include.basarSellers.include.seller.select.isOrga).toBe(true);
   });
+
+  // Gleiche Begruendung wie oben: die Verkaeuferliste zeigt je Zeile MA/VK. Faellt
+  // isEmployee aus der Projektion, ist das Feld undefined und jede Zeile stuende als „VK"
+  // da – ohne Fehler und ohne Typwarnung, weil ein gemocktes Prisma `select` ignoriert.
+  it('waehlt isEmployee in der Projektion mit aus', async () => {
+    prismaMock.basar.findUnique.mockResolvedValue({ ...fakeBasar, basarSellers: [] });
+
+    await GET(makeGetRequest(), makeContext());
+
+    const include = prismaMock.basar.findUnique.mock.calls[0][0].include;
+    expect(include.basarSellers.include.seller.select.isEmployee).toBe(true);
+  });
 });

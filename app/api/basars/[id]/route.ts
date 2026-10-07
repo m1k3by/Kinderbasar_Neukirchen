@@ -30,7 +30,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
                 include: {
                   // isOrga muss mit heraus: ohne das Kennzeichen laesst sich die Teilnahme
                   // unten nicht aufloesen, und die Liste zeigte Orga-Personen als „inaktiv".
-                  seller: { select: { sellerId: true, firstName: true, lastName: true, email: true, isOrga: true } },
+                  // isEmployee ebenso: die Verkaeuferliste im Reiter weist je Zeile MA/VK
+                  // aus, und aus der uebrigen Antwort laesst sich das nicht ableiten.
+                  seller: { select: { sellerId: true, firstName: true, lastName: true, email: true, isOrga: true, isEmployee: true } },
                   _count: { select: { articles: true } },
                 },
                 orderBy: { sellerId: 'asc' as const },

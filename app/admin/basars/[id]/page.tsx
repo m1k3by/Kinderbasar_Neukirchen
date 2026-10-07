@@ -51,7 +51,13 @@ interface BasarSellerEntry {
   activated: boolean;
   /** Woher das true kommt. Nicht optional – GET /api/basars/[id] liefert es im Adminzweig immer. */
   viaOrga: boolean;
-  seller: { sellerId: number; firstName: string; lastName: string; email: string };
+  /**
+   * `isEmployee` ist Pflichtfeld, nicht optional: GET /api/basars/[id] waehlt es im
+   * Adminzweig immer mit aus, und `basarSellers` als Ganzes ist bereits optional (siehe
+   * oben). Optional deklariert wuerde ein `?? false` aus einer entfernten Projektion
+   * wortlos „Verkaeufer" machen – derselbe stumme Fehler wie „0 / 8 Helfer".
+   */
+  seller: { sellerId: number; firstName: string; lastName: string; email: string; isEmployee: boolean };
   _count: { articles: number };
 }
 
@@ -576,6 +582,14 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
   ];
   const filterCount = (f: ParticipantFilter) => allSellers.filter(bs => matchesParticipantFilter(bs, f, hideOrga)).length;
 
+  // Anlieferzettel: gezählt *ohne* „Orga ausblenden". Die Zahl am Knopf muss der Seitenzahl
+  // im PDF entsprechen, und die Route filtert mit derselben Funktion, kennt das Häkchen aber nicht.
+  const sheetSets: { key: ParticipantFilter; label: string }[] = [
+    { key: 'activated', label: 'Aktiv angemeldet' },
+    { key: 'withArticles', label: 'Mit Artikeln' },
+  ];
+  const sheetCount = (f: ParticipantFilter) => allSellers.filter(bs => matchesParticipantFilter(bs, f)).length;
+
   const filteredSellers = allSellers.filter(bs =>
     matchesParticipantFilter(bs, participantFilter, hideOrga) && (
       search === '' ||
@@ -686,6 +700,35 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
 
         {tab === 'sellers' && navUser.role === 'admin' && (
           <div>
+            <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+              <div className="text-sm font-semibold text-gray-800 mb-2">Anlieferzettel drucken</div>
+              <div className="flex flex-wrap gap-2">
+                {sheetSets.map(s => {
+                  const n = sheetCount(s.key);
+                  // target="_blank": als PWA ohne Zurück-Knopf würde das PDF sonst das App-Fenster
+                  // ersetzen (CLAUDE.md, PDF-Regel 7).
+                  return n > 0 ? (
+                    <a
+                      key={s.key}
+                      href={`/api/basars/${basar.id}/anlieferzettel.pdf?set=${s.key}`}
+                      target="_blank"
+                      rel="noopener"
+                      className="px-3 py-1.5 rounded-lg text-sm font-medium bg-yellow-500 hover:bg-yellow-600 text-gray-900 transition-colors"
+                    >
+                      {s.label} ({n})
+                    </a>
+                  ) : (
+                    <span key={s.key} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-400">
+                      {s.label} (0)
+                    </span>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Ein A4-Blatt quer pro Person, nach Nummer sortiert. „Mit Artikeln“ heißt: angemeldet
+                oder Orga, mit mindestens einem Artikel. Beim Drucken ‚Tatsächliche Größe‘ / 100 % wählen.
+              </p>
+            </div>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Suche nach Name, E-Mail oder Nummer…"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-3 focus:outline-none focus:ring-2 focus:ring-yellow-500" />
             <div className="flex flex-wrap gap-2 mb-2">
@@ -726,6 +769,7 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
                     <tr>
                       <th className="text-left px-4 py-3 font-semibold text-gray-600">Nr.</th>
                       <th className="text-left px-4 py-3 font-semibold text-gray-600">Name</th>
+                      <th className="text-left px-4 py-3 font-semibold text-gray-600">Rolle</th>
                       <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">E-Mail</th>
                       <th className="text-right px-4 py-3 font-semibold text-gray-600">Artikel</th>
                     </tr>
@@ -737,6 +781,14 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
                         <td className="px-4 py-3 text-gray-800">{bs.seller.firstName} {bs.seller.lastName}
                           <span className={`ml-2 text-xs px-1.5 py-0.5 rounded ${bs.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                             {bs.viaOrga ? 'aktiv (Orga)' : bs.isActive ? 'aktiv' : 'inaktiv'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            title={bs.seller.isEmployee ? 'Mitarbeiter' : 'Verkäufer'}
+                            className={`text-xs font-medium px-1.5 py-0.5 rounded ${bs.seller.isEmployee ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}
+                          >
+                            {bs.seller.isEmployee ? 'MA' : 'VK'}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{bs.seller.email}</td>

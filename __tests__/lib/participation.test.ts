@@ -107,3 +107,25 @@ describe('matchesParticipantFilter', () => {
     expect(matchesParticipantFilter(mitarbeiter, 'activatedNoArticles', true)).toBe(true);
   });
 });
+
+describe('matchesParticipantFilter – Anlieferzettel „Mit Artikeln"', () => {
+  const zeile = (activated: boolean, articles: number, viaOrga = false) => ({ activated, viaOrga, _count: { articles } });
+
+  it('nimmt Orga mit Artikeln auf, auch ohne eigene Anmeldung', () => {
+    // #1080 und #1110 auf dem Foto der Orga: Orga, nicht selbst angemeldet, aber mit Artikeln.
+    // Sie liefern an und brauchen einen Zettel.
+    expect(matchesParticipantFilter(zeile(false, 3, true), 'withArticles')).toBe(true);
+  });
+
+  it('nimmt Angemeldete mit Artikeln auf, ohne Artikel nicht', () => {
+    expect(matchesParticipantFilter(zeile(true, 1), 'withArticles')).toBe(true);
+    expect(matchesParticipantFilter(zeile(true, 0), 'withArticles')).toBe(false);
+    expect(matchesParticipantFilter(zeile(false, 0, true), 'withArticles')).toBe(false);
+  });
+
+  it('lässt Vorbereiter ohne Anmeldung draußen, auch wenn sie Artikel haben', () => {
+    // Artikel anlegen ist bewusst von der Teilnahme entkoppelt (articles/route.ts) und
+    // belegt keinen Platz. Wer sich nicht angemeldet hat, liefert nicht an.
+    expect(matchesParticipantFilter(zeile(false, 12), 'withArticles')).toBe(false);
+  });
+});
