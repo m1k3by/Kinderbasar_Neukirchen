@@ -46,3 +46,28 @@ export function participationPayload<T extends ParticipationRow>(
   if (!participation) return viaOrga ? { isActive: true, viaOrga: true } : null;
   return { ...participation, isActive: isParticipating(seller, participation), viaOrga };
 }
+
+/**
+ * Filter der Teilnehmerliste auf /admin/basars/[id].
+ *
+ * „Aktiv angemeldet" heißt hier: die Zeile selbst trägt isActive=true (`activated`), also
+ * genau die Menge, die gegen `maxSellers` zählt und die Kachel „aktiv angemeldet" zeigt.
+ * Bewusst **nicht** das aufgelöste isActive aus isParticipating(): Orga-Personen, die sich
+ * nie aktiviert haben, belegen keinen Platz und sollen in „ohne Artikel" nicht auftauchen –
+ * sonst stimmt die Zahl im Filter nicht mehr mit der Kachel überein, und eine Erinnerung
+ * „du hast noch keine Artikel" ginge an Leute, die gar nicht verkaufen.
+ */
+export type ParticipantFilter = 'all' | 'activated' | 'activatedNoArticles';
+
+export function matchesParticipantFilter(
+  row: { activated: boolean; viaOrga: boolean; _count: { articles: number } },
+  filter: ParticipantFilter,
+  // Blendet nur Orga aus. Mitarbeiter ohne Orga-Kennzeichen bleiben: viaOrga kommt allein
+  // aus Seller.isOrga, nicht aus isEmployee.
+  hideOrga = false
+): boolean {
+  if (hideOrga && row.viaOrga) return false;
+  if (filter === 'activated') return row.activated;
+  if (filter === 'activatedNoArticles') return row.activated && row._count.articles === 0;
+  return true;
+}

@@ -61,6 +61,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
               ...basar,
               basarSellers: adminRows.map((bs) => ({
                 ...bs,
+                // Roh aus der Zeile, *vor* dem Überschreiben darunter: zählt gegen maxSellers
+                // und ist die Grundlage des Filters „aktiv angemeldet" (app/lib/participation.ts).
+                activated: bs.isActive,
                 isActive: isParticipating(bs.seller, bs),
                 viaOrga: !!bs.seller.isOrga,
               })),

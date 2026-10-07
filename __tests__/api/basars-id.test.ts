@@ -203,6 +203,22 @@ describe('GET /api/basars/[id] – Teilnahme in der Adminliste', () => {
     expect(aktiv).toMatchObject({ sellerId: 1500, isActive: true, viaOrga: false });
   });
 
+  it('liefert die rohe Aktivierung zusätzlich als `activated` – bei Orga weicht sie von isActive ab', async () => {
+    prismaMock.basar.findUnique.mockResolvedValue({
+      ...fakeBasar,
+      basarSellers: [zeile(1110, false, true), zeile(1500, true, false)],
+    });
+
+    const daten = await (await GET(makeGetRequest(), makeContext())).json();
+    const [orga, aktiv] = daten.basarSellers;
+
+    // `activated` ist die Menge, die gegen maxSellers zählt und hinter der Kachel
+    // „aktiv angemeldet" steht. Würde sie aus dem aufgelösten Wert gebildet, wäre die
+    // Orga-Person hier true – und der Filter „Aktiv, ohne Artikel" zählte sie mit.
+    expect(orga).toMatchObject({ activated: false, isActive: true });
+    expect(aktiv).toMatchObject({ activated: true, isActive: true });
+  });
+
   it('waehlt isOrga in der Projektion mit aus', async () => {
     prismaMock.basar.findUnique.mockResolvedValue({ ...fakeBasar, basarSellers: [] });
 

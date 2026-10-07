@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Header from '../../../components/Header';
 import { getNavLinks, basarsAdminActiveKey, type NavUser } from '../../../lib/navLinks';
 import BasarFormFields, { EMPTY_BASAR_FORM, basarFormFromApi, type BasarFormState } from '../BasarFormFields';
+import { matchesParticipantFilter, type ParticipantFilter } from '../../../lib/participation';
 
 interface Basar {
   id: string;
@@ -46,6 +47,8 @@ interface BasarSellerEntry {
   sellerId: number;
   /** Bereits aufgelöst: bei Orga true, auch wenn die Zeile selbst isActive=false trägt. */
   isActive: boolean;
+  /** Roh aus der Zeile: hat sich aktiviert und belegt damit einen der maxSellers-Plätze. */
+  activated: boolean;
   /** Woher das true kommt. Nicht optional – GET /api/basars/[id] liefert es im Adminzweig immer. */
   viaOrga: boolean;
   seller: { sellerId: number; firstName: string; lastName: string; email: string };
@@ -354,6 +357,8 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [search, setSearch] = useState('');
+  const [participantFilter, setParticipantFilter] = useState<ParticipantFilter>('all');
+  const [hideOrga, setHideOrga] = useState(false);
   const [tab, setTab] = useState<'overview' | 'sellers' | 'stats'>('overview');
   const [stats, setStats] = useState<Stats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -557,12 +562,28 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
     stats: 'Statistik',
   };
 
-  const filteredSellers = (basar?.basarSellers ?? []).filter(bs =>
-    search === '' ||
-    bs.seller.firstName.toLowerCase().includes(search.toLowerCase()) ||
-    bs.seller.lastName.toLowerCase().includes(search.toLowerCase()) ||
-    bs.seller.email.toLowerCase().includes(search.toLowerCase()) ||
-    String(bs.seller.sellerId).includes(search)
+  const allSellers = basar?.basarSellers ?? [];
+
+  // Die Zahlen an den Filterknöpfen beziehen sich auf die ganze Liste, nicht auf das
+  // Suchergebnis – sonst änderte sich „Aktiv angemeldet (181)" beim Tippen und stimmte
+  // nicht mehr mit der Kachel in der Übersicht überein. „Orga ausblenden" fließt dagegen
+  // mit ein: das ist eine bewusste Einschränkung der Menge, keine Suche. Solange es an ist,
+  // kann „Aktiv angemeldet" deshalb kleiner sein als die Kachel (aktivierte Orga fällt raus).
+  const participantFilters: { key: ParticipantFilter; label: string }[] = [
+    { key: 'all', label: 'Alle' },
+    { key: 'activated', label: 'Aktiv angemeldet' },
+    { key: 'activatedNoArticles', label: 'Aktiv, ohne Artikel' },
+  ];
+  const filterCount = (f: ParticipantFilter) => allSellers.filter(bs => matchesParticipantFilter(bs, f, hideOrga)).length;
+
+  const filteredSellers = allSellers.filter(bs =>
+    matchesParticipantFilter(bs, participantFilter, hideOrga) && (
+      search === '' ||
+      bs.seller.firstName.toLowerCase().includes(search.toLowerCase()) ||
+      bs.seller.lastName.toLowerCase().includes(search.toLowerCase()) ||
+      bs.seller.email.toLowerCase().includes(search.toLowerCase()) ||
+      String(bs.seller.sellerId).includes(search)
+    )
   );
 
   if (loading) return (
@@ -649,7 +670,9 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
           <div className="grid md:grid-cols-3 gap-4">
             {[
               // Hier ist die aktive Zahl richtig: gegen `maxSellers` zaehlen nur aktive Teilnahmen.
-              { label: 'Verkäufer', value: basar._count.basarSellers, sub: `/ ${basar.maxSellers} max.` },
+              // Dieselbe Menge zeigt im Reiter „Verkäufer" der Filter „Aktiv angemeldet" – gleiches
+              // Wort an beiden Stellen, damit erkennbar ist, dass es dieselben Personen sind.
+              { label: 'Verkäufer aktiv angemeldet', value: basar._count.basarSellers, sub: `von max. ${basar.maxSellers}` },
               { label: 'Provision', value: `${basar.commissionPercent}%`, sub: '' },
               { label: 'Gebühr', value: `${Number(basar.entryFee).toFixed(2)} €`, sub: 'Teilnahme' },
             ].map(card => (
@@ -664,7 +687,36 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
         {tab === 'sellers' && navUser.role === 'admin' && (
           <div>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Suche nach Name, E-Mail oder Nummer…"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-yellow-500" />
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-3 focus:outline-none focus:ring-2 focus:ring-yellow-500" />
+            <div className="flex flex-wrap gap-2 mb-2">
+              {participantFilters.map(f => (
+                <button
+                  key={f.key}
+                  type="button"
+                  aria-pressed={participantFilter === f.key}
+                  onClick={() => setParticipantFilter(f.key)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${participantFilter === f.key ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'}`}
+                >
+                  {f.label} ({filterCount(f.key)})
+                </button>
+              ))}
+              <label className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={hideOrga}
+                  onChange={e => setHideOrga(e.target.checked)}
+                  className="h-4 w-4 accent-gray-900"
+                />
+                Orga ausblenden
+              </label>
+            </div>
+            {/* Belegt in app/api/basars/[id]/articles/route.ts: Artikel anlegen ist bewusst von der
+                Teilnahme entkoppelt und legt dabei eine inaktive Zeile an. */}
+            <p className="text-xs text-gray-500 mb-4">
+              „Alle“ umfasst jeden mit einem Eintrag für diesen Basar: aktiv Angemeldete, wieder
+              Abgemeldete und alle, die hier Artikel vorbereitet haben, ohne sich anzumelden.
+              Nur „Aktiv angemeldet“ belegt einen der {basar.maxSellers} Plätze.
+            </p>
             {filteredSellers.length === 0 ? (
               <div className="text-center py-8 text-gray-400">Keine Verkäufer gefunden</div>
             ) : (
