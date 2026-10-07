@@ -132,7 +132,7 @@ export const faqData: FaqItem[] = [
     id: 'seller-abrechnung',
     question: 'Was zeigt die Abrechnung?',
     answer:
-      'Nach Basarende siehst du auf der Basar-Seite unter **"Deine Abrechnung"**:\n\n– **Brutto-Erlös** – Summe aller verkauften Artikel\n– **Provision** – prozentualer Abzug des Veranstalters\n– **Teilnahmegebühr** – falls vom Veranstalter erhoben\n– **Netto-Auszahlung** – was du bekommst (grün)\n\nMit **"↓ PDF"** kannst du die Abrechnung herunterladen.',
+      'Nach Basarende siehst du auf der Basar-Seite unter **"Deine Abrechnung"**:\n\n– **Verkaufserlös** – Summe aller verkauften Artikel\n– **Provision** – prozentualer Abzug des Veranstalters\n– **Teilnahmegebühr** – falls vom Veranstalter erhoben\n– **Auszahlung** – was du bekommst (grün)\n\nMit **"↓ PDF"** kannst du die Abrechnung herunterladen.',
     keywords: ['abrechnung', 'auszahlung', 'geld', 'erlös', 'gewinn', 'settlement', 'verdienst', 'netto', 'brutto', 'pdf'],
     roles: ['seller', 'employee'],
     category: 'Abrechnung & Geld',
@@ -142,7 +142,7 @@ export const faqData: FaqItem[] = [
     id: 'seller-provision',
     question: 'Wie hoch ist die Provision?',
     answer:
-      'Die Provision legt der Veranstalter pro Basar fest. Du siehst sie auf der Basar-Karte in der Übersicht als **"X% Provision"** und nochmals auf der Basar-Detailseite.\n\nSie wird automatisch bei der Abrechnung vom Brutto-Erlös abgezogen.',
+      'Die Provision legt der Veranstalter pro Basar fest. Du siehst sie auf der Basar-Karte in der Übersicht als **"X% Provision"** und nochmals auf der Basar-Detailseite.\n\nSie wird automatisch bei der Abrechnung vom Verkaufserlös abgezogen.',
     keywords: ['provision', 'prozent', 'gebühr', 'abzug', '%', 'anteil', 'kosten', 'wieviel'],
     roles: ['seller', 'employee'],
     category: 'Abrechnung & Geld',

@@ -482,13 +482,21 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
               </a>
             </div>
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-gray-600">Brutto-Erlös</span><span className="font-medium">{fmt(Number(settlement.grossRevenue))} €</span></div>
+              <div className="flex justify-between"><span className="text-gray-600">Verkaufserlös</span><span className="font-medium">{fmt(Number(settlement.grossRevenue))} €</span></div>
               <div className="flex justify-between"><span className="text-gray-600">Provision ({basar.commissionPercent}%)</span><span className="font-medium text-orange-600">– {fmt(Number(settlement.commissionAmount))} €</span></div>
               {Number(settlement.entryFeeAmount) > 0 && (
                 <div className="flex justify-between"><span className="text-gray-600">Teilnahmegebühr</span><span className="font-medium text-orange-600">– {fmt(Number(settlement.entryFeeAmount))} €</span></div>
               )}
+              {/* Wie im PDF: der Auszahlbetrag ist auf 10 Cent gerundet, deshalb das exakte
+                  Ergebnis daneben – sonst scheint die Spalte darüber falsch zu rechnen. */}
+              {Math.abs(
+                Number(settlement.grossRevenue) - Number(settlement.commissionAmount)
+                  - Number(settlement.entryFeeAmount) - Number(settlement.netPayout)
+              ) >= 0.005 && (
+                <div className="flex justify-between"><span className="text-gray-600">Ergebnis</span><span className="font-medium">{fmt(Math.max(0, Number(settlement.grossRevenue) - Number(settlement.commissionAmount) - Number(settlement.entryFeeAmount)))} €</span></div>
+              )}
               <div className="border-t border-gray-200 pt-2 flex justify-between items-center">
-                <span className="font-bold text-gray-800 text-base">Netto-Auszahlung</span>
+                <span className="font-bold text-gray-800 text-base">Auszahlung</span>
                 <span className="text-2xl font-extrabold text-green-600">{fmt(Number(settlement.netPayout))} €</span>
               </div>
             </div>

@@ -173,9 +173,9 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
                   <tr>
                     <th className="text-left px-4 py-3 font-semibold text-gray-600">Nr.</th>
                     <th className="text-left px-4 py-3 font-semibold text-gray-600">Name</th>
-                    <th className="text-right px-4 py-3 font-semibold text-gray-600">Brutto</th>
+                    <th className="text-right px-4 py-3 font-semibold text-gray-600">Erlös</th>
                     <th className="text-right px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Provision</th>
-                    <th className="text-right px-4 py-3 font-semibold text-gray-600">Netto</th>
+                    <th className="text-right px-4 py-3 font-semibold text-gray-600">Auszahlung</th>
                     <th className="text-right px-4 py-3 font-semibold text-gray-600">PDF</th>
                   </tr>
                 </thead>

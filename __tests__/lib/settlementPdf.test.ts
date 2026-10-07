@@ -162,8 +162,34 @@ describe('buildSettlementPdf – Inhalt', () => {
     // jsPDF escaped runde Klammern im PDF-Textstring als \( \)
     expect(content).toContain('VERKAUFTE ARTIKEL \\(2\\)');
     expect(content).toContain('ZUR\xdcCK INS ARCHIV \\(2\\)');
-    expect(content).toContain('Netto-Auszahlung:');
+    expect(content).toContain('Verkaufserl\xf6s:');
+    expect(content).toContain('Auszahlung:');
+    // „Brutto"/„Netto" lesen sich wie Mehrwertsteuer, die es hier nicht gibt. Die beiden
+    // Negativ-Zusicherungen sind der eigentliche Nachweis: 'Auszahlung:' allein wuerde auch
+    // in 'Netto-Auszahlung:' stecken und der Test bliebe gruen, waere die Aenderung weg.
+    expect(content).not.toContain('Brutto');
+    expect(content).not.toContain('Netto');
     expect(content).toContain('3,60 \x80');
+  });
+
+  // Der Auszahlbetrag ist auf 10 Cent gerundet (app/lib/payout.ts). Stuende nur er auf dem
+  // Blatt, ginge die Rechnung darueber sichtbar nicht auf. Die Zeile „Ergebnis" zeigt das
+  // exakte Zwischenergebnis – und erscheint nur dann, sonst waere sie eine Wiederholung.
+  it('zeigt das exakte Ergebnis, wenn der Auszahlbetrag gerundet wurde', async () => {
+    // 7,00 − 1,40 − 2,00 = 3,60 → schon glatt, keine Zwischenzeile.
+    const glatt = allContent(await pdfBuffer(buildSettlementPdf(baseData())));
+    expect(glatt).not.toContain('Ergebnis:');
+
+    // 7,72 − 1,54 = 6,18 → ausgezahlt 6,20, also beide Zeilen.
+    const gerundet = allContent(await pdfBuffer(buildSettlementPdf(baseData({
+      grossRevenue: 7.72,
+      commissionAmount: 1.54,
+      entryFeeAmount: 0,
+      netPayout: 6.2,
+    }))));
+    expect(gerundet).toContain('Ergebnis:');
+    expect(gerundet).toContain('6,18 \x80'); // exaktes Ergebnis
+    expect(gerundet).toContain('6,20 \x80'); // gerundeter Auszahlbetrag
   });
 
   it('leere Artikellisten zeigen die Hinweistexte', async () => {

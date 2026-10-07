@@ -183,6 +183,27 @@ describe('POST /api/basars/[id]/settlements', () => {
     expect(sql).toContain(`'SOLD'`);
   });
 
+  // Barauszahlung am Basartag: der Auszahlbetrag muss auf 10 Cent aufgehen, damit niemand
+  // 1-, 2- und 5-Cent-Muenzen vorhalten muss (app/lib/payout.ts). Die bestehenden Faelle
+  // oben runden zufaellig auf sich selbst (4,00 / 12,40 / 43,00) und blieben auch ohne
+  // Rundung gruen – deshalb hier ein Betrag, bei dem es einen Unterschied macht.
+  it('rundet den Auszahlbetrag auf 10 Cent, laesst die Provision aber exakt', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.basar.findUnique.mockResolvedValue(closedBasar); // 20 %, keine Gebuehr
+    prismaMock.$queryRaw.mockResolvedValue([
+      { basarSellerId: 'bs-1', commissionOverride: null, grossRevenue: dec('7.72') },
+    ]);
+    mockWrites(1);
+
+    await POST(makePostRequest(), makeContext());
+
+    const [[args]] = prismaMock.settlement.createMany.mock.calls;
+    expect(args.data[0].grossRevenue).toBe(7.72);
+    expect(args.data[0].commissionAmount).toBe(1.54); // 20 % exakt, nicht mitgerundet
+    expect(args.data[0].netPayout).toBe(6.2);         // 7,72 − 1,54 = 6,18 → 6,20
+    expect(args.data[0].netPayout).not.toBe(6.18);    // der ungerundete Wert darf nicht rein
+  });
+
   // Regressionstest gegen Decimal-Verkettung. Das Aggregat liefert grossRevenue als Prisma.Decimal,
   // dessen valueOf() eine Zeichenkette ist. Ohne Number() rechnete die Provision auf einem String –
   // mit number-Fixtures wäre das unsichtbar geblieben (CLAUDE.md-Testregel 1).

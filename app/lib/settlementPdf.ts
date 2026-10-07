@@ -227,7 +227,7 @@ export function drawSettlementPage(doc: jsPDF, data: SettlementPdfData): void {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(11);
   const summaryRows: [string, string][] = [
-    ['Brutto-Erlös:', fmtPrice(data.grossRevenue)],
+    ['Verkaufserlös:', fmtPrice(data.grossRevenue)],
     [`Provision (${data.commissionPercent}%):`, `– ${fmt(data.commissionAmount)} €`],
     ['Teilnahmegebühr:', `– ${fmt(data.entryFeeAmount)} €`],
   ];
@@ -239,9 +239,21 @@ export function drawSettlementPage(doc: jsPDF, data: SettlementPdfData): void {
   doc.setDrawColor(180);
   doc.line(mL, y, mR, y);
   y += 7;
+
+  // Der Auszahlbetrag ist auf 10 Cent gerundet (app/lib/payout.ts). Ohne das exakte
+  // Ergebnis daneben ginge die Rechnung auf dem Blatt sichtbar nicht auf: 63,00 − 9,45
+  // wären 53,55, ausgezahlt würden 53,60. Die Zeile erscheint deshalb genau dann, wenn
+  // die Rundung etwas verändert hat – sonst wäre sie eine Wiederholung.
+  const exactPayout = Math.max(0, data.grossRevenue - data.commissionAmount - data.entryFeeAmount);
+  if (Math.abs(exactPayout - data.netPayout) >= 0.005) {
+    doc.text('Ergebnis:', mL, y);
+    doc.text(fmtPrice(exactPayout), mR, y, { align: 'right' });
+    y += 8;
+  }
+
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
-  doc.text('Netto-Auszahlung:', mL, y);
+  doc.text('Auszahlung:', mL, y);
   doc.text(fmtPrice(data.netPayout), mR, y, { align: 'right' });
   y += 14;
 
