@@ -3,6 +3,7 @@ import { isParticipating, participationPayload } from '../../../lib/participatio
 import { prisma } from '../../../lib/prisma';
 import { requireAuth, requireAdmin } from '../../../lib/apiAuth';
 import { buildBasarData, lockedFieldsForActiveBasar } from '../../../lib/basarPayload';
+import { orgaPlaceholders } from '../../../lib/orgaPlaceholders';
 
 // GET /api/basars/:id – Admins bekommen die volle Verkäuferliste (Name, E-Mail);
 // Seller/Mitarbeiter nur die eigene Teilnahme (myParticipation), keine fremden Daten.
@@ -68,29 +69,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         viaOrga: !!bs.seller.isOrga,
       }));
 
-      // Orga ohne Zeile in diesem Basar. Orga gilt in jedem Basar als teilnehmend, auch ohne
-      // BasarSeller-Zeile (app/lib/participation.ts) – die Zeile entsteht erst mit Anmeldung
-      // oder erstem Artikel. Eine Liste, die nur aus Zeilen besteht, liess solche Personen
-      // deshalb ganz weg (#1463, aufgefallen am 07.10.2026). Sie kommen als Platzhalter
-      // dazu, *ohne* eine Zeile anzulegen: die Teilnahme bleibt abgeleitet, wie gewollt.
-      // `none` mit basarId ist der Kern: ohne ihn stünde jede Orga-Person mit Zeile doppelt
-      // drin, mit einer Zeile in *irgendeinem* Basar fehlte sie hier weiterhin.
-      const orgaOhneZeile = await prisma.seller.findMany({
-        where: { isOrga: true, basarSellers: { none: { basarId: id } } },
-        select: { sellerId: true, firstName: true, lastName: true, email: true, isOrga: true, isEmployee: true },
-      });
-      const placeholders = orgaOhneZeile.map((seller) => ({
-        // Kein cuid: die ID existiert nicht in der Datenbank. Die Seite nutzt sie nur als
-        // React-Key, und das Präfix macht sie für jeden anderen Leser als Platzhalter kenntlich.
-        id: `orga-${seller.sellerId}`,
-        basarId: id,
-        sellerId: seller.sellerId,
-        activated: false,
-        isActive: true,
-        viaOrga: true,
-        seller,
-        _count: { articles: 0 },
-      }));
+      // Orga ohne Zeile in diesem Basar kommt als Platzhalter dazu – Begründung und die
+      // heikle Abfrage in app/lib/orgaPlaceholders.ts, die auch die Anlieferzettel nutzen.
+      const placeholders = await orgaPlaceholders(id);
 
       return NextResponse.json({
         ...basar,

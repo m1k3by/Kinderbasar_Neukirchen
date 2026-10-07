@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isParticipating, participationPayload, matchesParticipantFilter } from '@/app/lib/participation';
+import { isParticipating, participationPayload, matchesParticipantFilter, matchesSheetSet } from '@/app/lib/participation';
 
 const normal = { isOrga: false };
 const orga = { isOrga: true };
@@ -127,5 +127,35 @@ describe('matchesParticipantFilter – Anlieferzettel „Mit Artikeln"', () => {
     // Artikel anlegen ist bewusst von der Teilnahme entkoppelt (articles/route.ts) und
     // belegt keinen Platz. Wer sich nicht angemeldet hat, liefert nicht an.
     expect(matchesParticipantFilter(zeile(false, 12), 'withArticles')).toBe(false);
+  });
+});
+
+describe('matchesSheetSet – wer einen Anlieferzettel bekommt', () => {
+  const zeile = (activated: boolean, articles: number, viaOrga = false) => ({ activated, viaOrga, _count: { articles } });
+
+  it('Orga bekommt in beiden Varianten immer einen Zettel – ohne Anmeldung, ohne Artikel', () => {
+    // #1046 Sarah Strobel, #8247 Bettina Link (Zeile, nicht angemeldet, 0 Artikel) und
+    // #1463 Mirjam Eisner (Platzhalter, gleiche Werte). Wunsch der Orga, 07.10.2026.
+    const orgaLeer = zeile(false, 0, true);
+    expect(matchesSheetSet(orgaLeer, 'activated')).toBe(true);
+    expect(matchesSheetSet(orgaLeer, 'withArticles')).toBe(true);
+  });
+
+  it('weicht damit bewusst vom Listenfilter ab – der muss zur Kachel passen', () => {
+    // „Aktiv angemeldet" in der Liste zählt gegen maxSellers, Orga ist dort nicht drin.
+    // Würde jemand matchesSheetSet und matchesParticipantFilter zusammenlegen, stimmte
+    // entweder die Kachel oder der Druck nicht mehr.
+    const orgaLeer = zeile(false, 0, true);
+    expect(matchesParticipantFilter(orgaLeer, 'activated')).toBe(false);
+    expect(matchesSheetSet(orgaLeer, 'activated')).toBe(true);
+  });
+
+  it('für alle anderen gilt der Listenfilter unverändert', () => {
+    expect(matchesSheetSet(zeile(true, 0), 'activated')).toBe(true);
+    expect(matchesSheetSet(zeile(true, 0), 'withArticles')).toBe(false);
+    expect(matchesSheetSet(zeile(true, 5), 'withArticles')).toBe(true);
+    // Vorbereiter ohne Anmeldung: in keiner Variante.
+    expect(matchesSheetSet(zeile(false, 12), 'activated')).toBe(false);
+    expect(matchesSheetSet(zeile(false, 12), 'withArticles')).toBe(false);
   });
 });

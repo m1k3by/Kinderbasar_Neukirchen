@@ -76,3 +76,20 @@ export function matchesParticipantFilter(
   if (filter === 'withArticles') return (row.activated || row.viaOrga) && row._count.articles > 0;
   return true;
 }
+
+/**
+ * Wer einen Anlieferzettel bekommt. Orga **immer**, in beiden Varianten – auch ohne Anmeldung
+ * und ohne Artikel (Wunsch der Orga, 07.10.2026). Deshalb eine eigene Funktion statt der
+ * Listenfilter oben: „Aktiv angemeldet" in der *Liste* muss weiter genau die Menge sein, die
+ * gegen maxSellers zählt und auf der Kachel steht, und dort ist Orga nicht drin.
+ *
+ * Knopfzahl auf /admin/basars/[id] und Seitenzahl im PDF kommen beide aus dieser Funktion.
+ */
+export type SheetSet = 'activated' | 'withArticles';
+
+export function matchesSheetSet(
+  row: { activated: boolean; viaOrga: boolean; _count: { articles: number } },
+  set: SheetSet
+): boolean {
+  return row.viaOrga || matchesParticipantFilter(row, set);
+}

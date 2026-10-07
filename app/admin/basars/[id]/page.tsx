@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Header from '../../../components/Header';
 import { getNavLinks, basarsAdminActiveKey, type NavUser } from '../../../lib/navLinks';
 import BasarFormFields, { EMPTY_BASAR_FORM, basarFormFromApi, type BasarFormState } from '../BasarFormFields';
-import { matchesParticipantFilter, type ParticipantFilter } from '../../../lib/participation';
+import { matchesParticipantFilter, matchesSheetSet, type ParticipantFilter, type SheetSet } from '../../../lib/participation';
 
 interface Basar {
   id: string;
@@ -582,13 +582,14 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
   ];
   const filterCount = (f: ParticipantFilter) => allSellers.filter(bs => matchesParticipantFilter(bs, f, hideOrga)).length;
 
-  // Anlieferzettel: gezählt *ohne* „Orga ausblenden". Die Zahl am Knopf muss der Seitenzahl
-  // im PDF entsprechen, und die Route filtert mit derselben Funktion, kennt das Häkchen aber nicht.
-  const sheetSets: { key: ParticipantFilter; label: string }[] = [
-    { key: 'activated', label: 'Aktiv angemeldet' },
-    { key: 'withArticles', label: 'Mit Artikeln' },
+  // Anlieferzettel: gezählt *ohne* „Orga ausblenden" und mit matchesSheetSet (Orga immer
+  // dabei). Die Zahl am Knopf muss der Seitenzahl im PDF entsprechen; die Route nutzt dieselbe
+  // Funktion und dieselben Orga-Platzhalter, kennt das Häkchen aber nicht.
+  const sheetSets: { key: SheetSet; label: string }[] = [
+    { key: 'activated', label: 'Aktiv angemeldet + Orga' },
+    { key: 'withArticles', label: 'Mit Artikeln + Orga' },
   ];
-  const sheetCount = (f: ParticipantFilter) => allSellers.filter(bs => matchesParticipantFilter(bs, f)).length;
+  const sheetCount = (s: SheetSet) => allSellers.filter(bs => matchesSheetSet(bs, s)).length;
 
   const filteredSellers = allSellers.filter(bs =>
     matchesParticipantFilter(bs, participantFilter, hideOrga) && (
@@ -725,8 +726,9 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
                 })}
               </div>
               <p className="text-xs text-gray-500 mt-2">
-                Ein A4-Blatt quer pro Person, nach Nummer sortiert. „Mit Artikeln“ heißt: angemeldet
-                oder Orga, mit mindestens einem Artikel. Beim Drucken ‚Tatsächliche Größe‘ / 100 % wählen.
+                Ein A4-Blatt quer pro Person, nach Nummer sortiert. Orga bekommt in beiden Varianten
+                immer einen Zettel, auch ohne Anmeldung und ohne Artikel. „Mit Artikeln“ heißt sonst:
+                angemeldet, mit mindestens einem Artikel. Beim Drucken ‚Tatsächliche Größe‘ / 100 % wählen.
               </p>
             </div>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Suche nach Name, E-Mail oder Nummer…"
