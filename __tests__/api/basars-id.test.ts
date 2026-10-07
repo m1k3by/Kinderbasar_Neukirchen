@@ -13,7 +13,9 @@ const prismaMock = vi.hoisted(() => ({
   basar: { findUnique: vi.fn(), update: vi.fn() },
   basarSeller: { findUnique: vi.fn() },
   // isOrga des Aufrufers – entscheidet mit über myParticipation (app/lib/participation.ts).
-  seller: { findUnique: vi.fn() },
+  // findMany: Orga ohne Zeile im Basar (Adminzweig). Vorgabe leer, damit Tests, die davon
+  // nichts wissen, nicht an einem fehlenden Rückgabewert scheitern.
+  seller: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
 }));
 vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
 
@@ -241,5 +243,82 @@ describe('GET /api/basars/[id] – Teilnahme in der Adminliste', () => {
 
     const include = prismaMock.basar.findUnique.mock.calls[0][0].include;
     expect(include.basarSellers.include.seller.select.isEmployee).toBe(true);
+  });
+});
+
+// Orga gilt in jedem Basar als teilnehmend, auch ohne BasarSeller-Zeile – die entsteht erst
+// mit Anmeldung oder erstem Artikel. Eine nur aus Zeilen gebaute Liste liess solche Personen
+// ganz weg: #1463 stand am 07.10.2026 in /admin/list als „Aktiv (Orga)", fehlte aber auf
+// /admin/basars/[id] vollständig.
+describe('GET /api/basars/[id] – Orga ohne Zeile als Platzhalter', () => {
+  const zeile = (sellerId: number, isActive: boolean, isOrga: boolean, articles = 0) => ({
+    id: `bs-${sellerId}`,
+    sellerId,
+    isActive,
+    seller: { sellerId, firstName: 'V', lastName: 'N', email: `${sellerId}@example.com`, isOrga, isEmployee: isOrga },
+    _count: { articles },
+  });
+  const orga = (sellerId: number) => ({
+    sellerId, firstName: 'Mirjam', lastName: 'Eisner', email: `${sellerId}@example.com`, isOrga: true, isEmployee: true,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.seller.findMany.mockResolvedValue([]);
+  });
+
+  it('nimmt Orga ohne Zeile auf – als teilnehmend, nicht angemeldet, ohne Artikel', async () => {
+    prismaMock.basar.findUnique.mockResolvedValue({ ...fakeBasar, basarSellers: [zeile(1040, true, false, 2)] });
+    prismaMock.seller.findMany.mockResolvedValue([orga(1463)]);
+
+    const daten = await (await GET(makeGetRequest(), makeContext())).json();
+    const platzhalter = daten.basarSellers.find((bs: { sellerId: number }) => bs.sellerId === 1463);
+
+    expect(platzhalter).toMatchObject({
+      id: 'orga-1463',
+      isActive: true,
+      viaOrga: true,
+      // Nicht angemeldet: belegt keinen Platz und darf in „Aktiv angemeldet" nicht auftauchen.
+      activated: false,
+      _count: { articles: 0 },
+      seller: { sellerId: 1463, firstName: 'Mirjam', isOrga: true, isEmployee: true },
+    });
+  });
+
+  it('sortiert Platzhalter nach Nummer zwischen die echten Zeilen', async () => {
+    prismaMock.basar.findUnique.mockResolvedValue({
+      ...fakeBasar,
+      basarSellers: [zeile(1040, true, false), zeile(1500, true, false)],
+    });
+    prismaMock.seller.findMany.mockResolvedValue([orga(9550), orga(1463)]);
+
+    const daten = await (await GET(makeGetRequest(), makeContext())).json();
+    expect(daten.basarSellers.map((bs: { sellerId: number }) => bs.sellerId)).toEqual([1040, 1463, 1500, 9550]);
+  });
+
+  it('fragt nur Orga ab, die in *diesem* Basar keine Zeile hat', async () => {
+    prismaMock.basar.findUnique.mockResolvedValue({ ...fakeBasar, basarSellers: [] });
+
+    await GET(makeGetRequest(), makeContext());
+
+    // Ein gemocktes Prisma ignoriert `where` vollständig. Ohne `none` stünde jede Orga-Person
+    // mit Zeile doppelt in der Liste; ohne basarId darin fehlte, wer in *irgendeinem* Basar
+    // eine Zeile hat – also genau der Fall, um den es geht.
+    expect(prismaMock.seller.findMany.mock.calls[0][0].where).toEqual({
+      isOrga: true,
+      basarSellers: { none: { basarId: 'basar-1' } },
+    });
+  });
+
+  it('lädt für Nicht-Admins keine Platzhalter – dort gibt es gar keine Liste', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basar.findUnique.mockResolvedValue(fakeBasar);
+    prismaMock.basarSeller.findUnique.mockResolvedValue(null);
+    prismaMock.seller.findUnique.mockResolvedValue({ isOrga: false });
+
+    await GET(makeGetRequest(), makeContext());
+
+    expect(prismaMock.seller.findMany).not.toHaveBeenCalled();
   });
 });

@@ -55,23 +55,47 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       // Eng gefasste Zusicherung statt einer zweiten Abfrage – die Form garantiert das
       // `include` direkt darueber, und der Test prueft die Projektion.
       const adminRows = basar.basarSellers as unknown as
-        ({ isActive: boolean; seller: { isOrga: boolean } } & Record<string, unknown>)[] | undefined;
+        ({ sellerId: number; isActive: boolean; seller: { isOrga: boolean } } & Record<string, unknown>)[] | undefined;
 
-      return NextResponse.json(
-        adminRows
-          ? {
-              ...basar,
-              basarSellers: adminRows.map((bs) => ({
-                ...bs,
-                // Roh aus der Zeile, *vor* dem Überschreiben darunter: zählt gegen maxSellers
-                // und ist die Grundlage des Filters „aktiv angemeldet" (app/lib/participation.ts).
-                activated: bs.isActive,
-                isActive: isParticipating(bs.seller, bs),
-                viaOrga: !!bs.seller.isOrga,
-              })),
-            }
-          : basar
-      );
+      if (!adminRows) return NextResponse.json(basar);
+
+      const rows = adminRows.map((bs) => ({
+        ...bs,
+        // Roh aus der Zeile, *vor* dem Überschreiben darunter: zählt gegen maxSellers
+        // und ist die Grundlage des Filters „aktiv angemeldet" (app/lib/participation.ts).
+        activated: bs.isActive,
+        isActive: isParticipating(bs.seller, bs),
+        viaOrga: !!bs.seller.isOrga,
+      }));
+
+      // Orga ohne Zeile in diesem Basar. Orga gilt in jedem Basar als teilnehmend, auch ohne
+      // BasarSeller-Zeile (app/lib/participation.ts) – die Zeile entsteht erst mit Anmeldung
+      // oder erstem Artikel. Eine Liste, die nur aus Zeilen besteht, liess solche Personen
+      // deshalb ganz weg (#1463, aufgefallen am 07.10.2026). Sie kommen als Platzhalter
+      // dazu, *ohne* eine Zeile anzulegen: die Teilnahme bleibt abgeleitet, wie gewollt.
+      // `none` mit basarId ist der Kern: ohne ihn stünde jede Orga-Person mit Zeile doppelt
+      // drin, mit einer Zeile in *irgendeinem* Basar fehlte sie hier weiterhin.
+      const orgaOhneZeile = await prisma.seller.findMany({
+        where: { isOrga: true, basarSellers: { none: { basarId: id } } },
+        select: { sellerId: true, firstName: true, lastName: true, email: true, isOrga: true, isEmployee: true },
+      });
+      const placeholders = orgaOhneZeile.map((seller) => ({
+        // Kein cuid: die ID existiert nicht in der Datenbank. Die Seite nutzt sie nur als
+        // React-Key, und das Präfix macht sie für jeden anderen Leser als Platzhalter kenntlich.
+        id: `orga-${seller.sellerId}`,
+        basarId: id,
+        sellerId: seller.sellerId,
+        activated: false,
+        isActive: true,
+        viaOrga: true,
+        seller,
+        _count: { articles: 0 },
+      }));
+
+      return NextResponse.json({
+        ...basar,
+        basarSellers: [...rows, ...placeholders].sort((a, b) => a.sellerId - b.sellerId),
+      });
     }
 
     // isOrga wird aus der Datenbank gelesen, nicht aus dem Token: das Kennzeichen setzt der

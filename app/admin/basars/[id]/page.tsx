@@ -756,9 +756,9 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
             {/* Belegt in app/api/basars/[id]/articles/route.ts: Artikel anlegen ist bewusst von der
                 Teilnahme entkoppelt und legt dabei eine inaktive Zeile an. */}
             <p className="text-xs text-gray-500 mb-4">
-              „Alle“ umfasst jeden mit einem Eintrag für diesen Basar: aktiv Angemeldete, wieder
-              Abgemeldete und alle, die hier Artikel vorbereitet haben, ohne sich anzumelden.
-              Nur „Aktiv angemeldet“ belegt einen der {basar.maxSellers} Plätze.
+              „Alle“ umfasst aktiv Angemeldete, wieder Abgemeldete, alle, die hier Artikel
+              vorbereitet haben, ohne sich anzumelden, und alle Orga-Personen – auch ohne
+              Anmeldung und ohne Artikel. Nur „Aktiv angemeldet“ belegt einen der {basar.maxSellers} Plätze.
             </p>
             {filteredSellers.length === 0 ? (
               <div className="text-center py-8 text-gray-400">Keine Verkäufer gefunden</div>
