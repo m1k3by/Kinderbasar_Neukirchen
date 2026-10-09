@@ -2,22 +2,8 @@ import { NextResponse } from 'next/server';
 import { prisma } from '../../../../lib/prisma';
 import { requireAdmin } from '../../../../lib/apiAuth';
 import { BasarStatus } from '@prisma/client';
-
-// Valid state machine transitions
-const TRANSITIONS: Record<BasarStatus, BasarStatus | null> = {
-  DRAFT: 'OPEN',
-  OPEN: 'ACTIVE',
-  ACTIVE: 'CLOSED',
-  CLOSED: null,
-};
-
-// Allow rolling back exactly one step (the inverse of TRANSITIONS)
-const PREVIOUS: Record<BasarStatus, BasarStatus | null> = {
-  DRAFT: null,
-  OPEN: 'DRAFT',
-  ACTIVE: 'OPEN',
-  CLOSED: 'ACTIVE',
-};
+// Übergänge aus app/lib/basarStatus.ts – dieselbe Quelle wie die Knöpfe auf /admin/basars/[id].
+import { NEXT_STATUS as TRANSITIONS, PREVIOUS_STATUS as PREVIOUS } from '../../../../lib/basarStatus';
 
 const VALID_STATUSES: BasarStatus[] = ['DRAFT', 'OPEN', 'ACTIVE', 'CLOSED'];
 

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Header from '../../components/Header';
 import { getNavLinks, basarsAdminActiveKey, type NavUser } from '../../lib/navLinks';
 import BasarFormFields, { EMPTY_BASAR_FORM, type BasarFormState } from './BasarFormFields';
+import { NEXT_STATUS, PREVIOUS_STATUS, STATUS_LABELS, transitionConfirmText, type BasarStatusValue } from '../../lib/basarStatus';
 
 interface Basar {
   id: string;
@@ -23,9 +24,6 @@ interface Basar {
   _count: { basarSellers: number };
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: 'Entwurf', OPEN: 'Offen', ACTIVE: 'Aktiv', CLOSED: 'Geschlossen',
-};
 const STATUS_COLORS: Record<string, string> = {
   DRAFT: 'bg-gray-100 text-gray-700',
   OPEN: 'bg-blue-100 text-blue-700',
@@ -100,12 +98,15 @@ export default function AdminBasarsPage() {
     }
   }
 
-  async function handleAdvanceStatus(basar: Basar) {
-    if (!confirm(`Status von "${basar.title}" ändern: ${STATUS_LABELS[basar.status]} → ${STATUS_LABELS[({ DRAFT: 'OPEN', OPEN: 'ACTIVE', ACTIVE: 'CLOSED', CLOSED: 'CLOSED' } as Record<string, string>)[basar.status]]}?`)) return;
+  // Wie auf /admin/basars/[id]: Übergänge und Rückfrage aus app/lib/basarStatus.ts, Zielstatus
+  // explizit, damit der Server genau den beschriebenen Schritt ausführt.
+  async function changeStatus(basar: Basar, target: BasarStatusValue | null) {
+    if (!target) return;
+    if (!confirm(transitionConfirmText(basar.status, target, basar.title))) return;
     const res = await fetch(`/api/basars/${basar.id}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ status: target }),
     });
     if (res.ok) loadBasars();
     else {
@@ -217,8 +218,14 @@ export default function AdminBasarsPage() {
                         Abrechnung
                       </Link>
                     )}
+                    {navUser.role === 'admin' && PREVIOUS_STATUS[basar.status] && (
+                      <button onClick={() => changeStatus(basar, PREVIOUS_STATUS[basar.status])}
+                        className="flex-1 sm:flex-none text-center whitespace-nowrap px-3 py-3 sm:py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm rounded-lg transition-colors">
+                        ← zurück zu {STATUS_LABELS[PREVIOUS_STATUS[basar.status]!]}
+                      </button>
+                    )}
                     {navUser.role === 'admin' && NEXT_STATUS_LABEL[basar.status] && (
-                      <button onClick={() => handleAdvanceStatus(basar)}
+                      <button onClick={() => changeStatus(basar, NEXT_STATUS[basar.status])}
                         className="flex-1 sm:flex-none text-center whitespace-nowrap px-3 py-3 sm:py-1.5 bg-yellow-500 hover:bg-yellow-600 text-gray-900 text-sm font-medium rounded-lg transition-colors">
                         {NEXT_STATUS_LABEL[basar.status]}
                       </button>

@@ -6,6 +6,7 @@ import Header from '../../../components/Header';
 import { getNavLinks, basarsAdminActiveKey, type NavUser } from '../../../lib/navLinks';
 import BasarFormFields, { EMPTY_BASAR_FORM, basarFormFromApi, type BasarFormState } from '../BasarFormFields';
 import { matchesParticipantFilter, matchesSheetSet, type ParticipantFilter, type SheetSet } from '../../../lib/participation';
+import { NEXT_STATUS, PREVIOUS_STATUS, STATUS_LABELS, transitionConfirmText, type BasarStatusValue } from '../../../lib/basarStatus';
 
 interface Basar {
   id: string;
@@ -61,9 +62,6 @@ interface BasarSellerEntry {
   _count: { articles: number };
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: 'Entwurf', OPEN: 'Offen', ACTIVE: 'Aktiv', CLOSED: 'Geschlossen',
-};
 const STATUS_COLORS: Record<string, string> = {
   DRAFT: 'bg-gray-100 text-gray-700', OPEN: 'bg-blue-100 text-blue-700',
   ACTIVE: 'bg-green-100 text-green-700', CLOSED: 'bg-red-100 text-red-700',
@@ -544,16 +542,16 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
     }
   }
 
-  async function handleAdvanceStatus() {
-    if (!basar) return;
-    const nextMap: Record<string, string> = { DRAFT: 'OPEN', OPEN: 'ACTIVE', ACTIVE: 'CLOSED' };
-    const next = nextMap[basar.status];
-    if (!next) return;
-    if (!confirm(`Status zu "${STATUS_LABELS[next]}" ändern?`)) return;
+  // Vorwärts und zurück über denselben Weg: Zielstatus explizit mitschicken, damit der Server
+  // genau den Schritt ausführt, den die Rückfrage beschrieben hat – auch wenn ein zweiter
+  // Admin den Status inzwischen geändert hat (dann lehnt der Server den Sprung mit 400 ab).
+  async function changeStatus(target: BasarStatusValue | null) {
+    if (!basar || !target) return;
+    if (!confirm(transitionConfirmText(basar.status, target))) return;
     const res = await fetch(`/api/basars/${id}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ status: target }),
     });
     if (res.ok) loadBasar();
     else { const data = await res.json(); setMessage(data.error || 'Fehler'); setTimeout(() => setMessage(''), 4000); }
@@ -626,7 +624,9 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
         )}
 
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 mb-6">
+        {/* flex-wrap an beiden Ebenen: mit „← zurück zu …" sind es bis zu drei Knöpfe, gemessen
+            412 px breit – mehr als ein Handy (375 px). Ohne Umbruch liefen sie seitlich hinaus. */}
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
           <div>
             <div className="flex items-center gap-3 mb-1">
               <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[basar.status]}`}>
@@ -639,15 +639,21 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
               {basar.location && ` · ${basar.location}`}
             </p>
           </div>
-          <div className="flex gap-2 flex-shrink-0">
+          <div className="flex flex-wrap gap-2">
             {navUser.role === 'admin' && !editMode && basar.status !== 'CLOSED' && (
               <button onClick={() => setEditMode(true)}
                 className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm rounded-lg transition-colors">
                 Bearbeiten
               </button>
             )}
+            {navUser.role === 'admin' && PREVIOUS_STATUS[basar.status] && (
+              <button onClick={() => changeStatus(PREVIOUS_STATUS[basar.status])}
+                className="px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm rounded-lg transition-colors">
+                ← zurück zu {STATUS_LABELS[PREVIOUS_STATUS[basar.status]!]}
+              </button>
+            )}
             {navUser.role === 'admin' && NEXT_STATUS_LABEL[basar.status] && (
-              <button onClick={handleAdvanceStatus}
+              <button onClick={() => changeStatus(NEXT_STATUS[basar.status])}
                 className="px-3 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-gray-900 text-sm font-medium rounded-lg transition-colors">
                 {NEXT_STATUS_LABEL[basar.status]}
               </button>
