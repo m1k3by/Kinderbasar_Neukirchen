@@ -5,6 +5,14 @@ import Header from '../../components/Header';
 import { pickDefaultBasarId } from '../../lib/basarWindows';
 import { getNavLinks } from '../../lib/navLinks';
 import { consentSummary } from '../../lib/legalDocs';
+import {
+  SELLER_EXPORT_COLUMNS,
+  activityStatus,
+  buildSellerExportRows,
+  excelSheetName,
+  sellerExportFileName,
+  type SellerExportRow,
+} from '../../lib/sellerExport';
 
 interface Seller {
   sellerId: number;
@@ -73,6 +81,7 @@ export default function AdminListPage() {
   const [sortField, setSortField] = useState<keyof Seller | 'active' | 'sellerStatusActive' | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [message, setMessage] = useState('');
   const [showResetConfirm1, setShowResetConfirm1] = useState(false);
   const [showResetConfirm2, setShowResetConfirm2] = useState(false);
@@ -156,6 +165,41 @@ export default function AdminListPage() {
     alert('E-Mails kopiert!');
   }
 
+  /**
+   * Exportiert, was gerade in der Tabelle steht – inklusive Filter und Sortierung. Alles
+   * andere wäre überraschend: wer auf „Mitarbeiter" filtert und exportiert, erwartet
+   * Mitarbeiter in der Datei, nicht 357 Zeilen.
+   */
+  async function exportXlsx() {
+    const basar = basars.find(b => b.id === selectedBasarId);
+    if (!basar) return;
+    setExporting(true);
+    try {
+      // Erst beim Klick geladen: die Bibliothek wiegt gut ein Megabyte und wird nur hier
+      // gebraucht. Im Hauptbündel würde sie jeden anderen Seitenaufruf mitbelasten.
+      const { default: writeXlsxFile } = await import('write-excel-file/browser');
+      const rows = buildSellerExportRows(sortedSellers, `${basar.title} (${STATUS_LABELS[basar.status]})`);
+      await writeXlsxFile(rows, {
+        sheet: excelSheetName(basar.title),
+        columns: SELLER_EXPORT_COLUMNS.map(c => ({
+          header: { value: c.header, fontWeight: 'bold' as const },
+          width: c.width,
+          cell: (row: SellerExportRow) => ({
+            value: row[c.key],
+            type: c.type,
+            ...(c.format ? { format: c.format } : {}),
+          }),
+        })),
+        stickyRowsCount: 1,
+      }).toFile(sellerExportFileName(basar.title));
+    } catch (error) {
+      console.error('/admin/list export error:', error);
+      alert('Export fehlgeschlagen.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const filteredSellers = sellers.filter(s => {
     // Filter by role
     if (filter === 'seller' && s.isEmployee) return false;
@@ -229,17 +273,9 @@ export default function AdminListPage() {
     return sortDirection === 'asc' ? ' ↑' : ' ↓';
   }
 
+  // Eine Quelle für Tabelle und Export – siehe app/lib/sellerExport.ts.
   function getActiveStatus(seller: Seller) {
-    // Mitarbeiter sind nur aktiv wenn sie Tasks oder Kuchen haben
-    const hasActivity = (seller._count?.taskSignups || 0) > 0 || (seller._count?.cakes || 0) > 0;
-    
-    if (seller.isEmployee) {
-      // Mitarbeiter: zeige "Aktiv" oder "Inaktiv"
-      return hasActivity ? 'Aktiv' : 'Inaktiv';
-    } else {
-      // Verkäufer: immer "–" (weder aktiv noch inaktiv)
-      return '–';
-    }
+    return activityStatus(seller);
   }
 
   function getActiveClass(seller: Seller) {
@@ -939,12 +975,22 @@ export default function AdminListPage() {
             </select>
           </div>
 
-          <div className="w-full sm:w-auto sm:ml-auto">
+          <div className="w-full sm:w-auto sm:ml-auto flex flex-col sm:flex-row gap-2">
             <button
               onClick={copyEmails}
               className="w-full sm:w-auto bg-yellow-500 hover:bg-yellow-600 text-gray-800 px-4 py-2 rounded font-medium shadow"
             >
               E-Mails kopieren
+            </button>
+            {/* Ohne gewählten Basar fehlt die Zuordnung der Spalten „Teilnahme" und
+                „AGB/DS" – eine Datei, die das offenlässt, ist nicht auswertbar. */}
+            <button
+              onClick={exportXlsx}
+              disabled={!selectedBasarId || exporting || sortedSellers.length === 0}
+              title={selectedBasarId ? 'Gefilterte Liste als Excel-Datei herunterladen' : 'Erst einen Basar wählen'}
+              className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-medium shadow disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exporting ? 'Erstelle…' : `Excel-Export (${sortedSellers.length})`}
             </button>
           </div>
         </div>
