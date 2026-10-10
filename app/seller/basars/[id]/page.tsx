@@ -91,7 +91,11 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   // bleibt aber stehen – wer zehn Spielsachen erfasst, will nicht zehnmal umschalten.
   const [isClothing, setIsClothing] = useState(true);
   // Etiketten-Dialog: 'choice' = Abfrage ganzer Bogen oder Einzelauswahl, 'pick' = Auswahlliste.
-  const [labelDialog, setLabelDialog] = useState<null | 'choice' | 'pick'>(null);
+  // 'downloading': nach dem Antippen des Druck-Links. Vorher schloss sich der Dialog sofort, und
+  // bis das PDF da war, zeigte die Seite nichts – auf dem Handy wirkte das wie „passiert nichts"
+  // (10.10.2026). Der Server braucht gemessen 0,2–0,9 s (60–400 Etiketten), dazu Netz und Kaltstart.
+  const [labelDialog, setLabelDialog] = useState<null | 'choice' | 'pick' | 'downloading'>(null);
+  const [labelDownloadSettled, setLabelDownloadSettled] = useState(false);
   const [selectedLabelIds, setSelectedLabelIds] = useState<Set<string>>(new Set());
   const titleInputRef = useRef<HTMLInputElement>(null);
 
@@ -164,6 +168,32 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
         .then(data => { if (data) setSettlement(data.basarSeller?.settlement ?? null); });
     }
   }, [basar?.status, sellerId, basarId]);
+
+  // Rückmeldung nach dem Antippen des Etiketten-Links. Der Download bleibt ein <a> (PDF-Regel 7,
+  // siehe Dialog), deshalb erfährt die Seite nicht, wann die Datei angekommen ist. Sie kann nur
+  // zeigen, was gerade passiert:
+  //  - Wechselt das Handy für das PDF in einen neuen Tab (iPhone, Desktop) und kommt man danach
+  //    zurück, wird die Seite erst unsichtbar, dann wieder sichtbar → Dialog schließt sich.
+  //  - Lädt es still in die Downloads (Android), bleibt die Seite sichtbar. Dann wechselt der
+  //    Text nach einigen Sekunden auf „sollte jetzt da sein", geschlossen wird über „Fertig".
+  useEffect(() => {
+    if (labelDialog !== 'downloading') return;
+    const timer = setTimeout(() => setLabelDownloadSettled(true), 5000);
+    let wasHidden = document.visibilityState === 'hidden';
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') wasHidden = true;
+      else if (wasHidden) setLabelDialog(null);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+      // Beim Verlassen zurücksetzen, nicht beim nächsten Eintritt: sonst zeichnet der nächste
+      // Download für einen Bildaufbau noch den alten Haken, bevor der Effekt ihn löscht
+      // (gemessen am 10.10.2026: erst „✓ … sollte jetzt da sein", dann „PDF wird erstellt").
+      setLabelDownloadSettled(false);
+    };
+  }, [labelDialog]);
 
   async function handleImportFromArchive() {
     const ids = [...selectedArchiveIds];
@@ -949,20 +979,40 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
               <div className="px-5 py-4 border-b border-gray-100">
                 <h3 className="text-lg font-bold text-gray-800">Etiketten drucken</h3>
                 <p className="text-sm text-gray-500 mt-0.5">
-                  {labelDialog === 'choice'
+                  {labelDialog === 'downloading'
+                    ? 'Dein PDF'
+                    : labelDialog === 'choice'
                     ? 'Den ganzen Bogen drucken oder nur einzelne Artikel?'
                     : `${selectedLabelIds.size} von ${articles.length} ausgewählt`}
                 </p>
               </div>
 
-              {labelDialog === 'choice' ? (
+              {labelDialog === 'downloading' ? (
+                <div className="p-5" role="status" aria-live="polite">
+                  <div className="flex items-center gap-3">
+                    {labelDownloadSettled ? (
+                      <span className="text-2xl text-green-600" aria-hidden="true">✓</span>
+                    ) : (
+                      <span className="h-6 w-6 rounded-full border-[3px] border-blue-200 border-t-blue-500 animate-spin flex-shrink-0" aria-hidden="true" />
+                    )}
+                    <p className="font-semibold text-gray-800">
+                      {labelDownloadSettled ? 'Das PDF sollte jetzt da sein.' : 'PDF wird erstellt …'}
+                    </p>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-3">
+                    Je nach Handy öffnet es sich in einem <strong>neuen Tab</strong> oder landet in deinen
+                    {' '}<strong>Downloads</strong> – dann siehst du oben eine Benachrichtigung oder unten eine
+                    Download-Leiste.{!labelDownloadSettled && ' Das dauert meist ein, zwei Sekunden.'}
+                  </p>
+                </div>
+              ) : labelDialog === 'choice' ? (
                 <div className="p-5 space-y-3">
                   <a
                     href={labelHref}
                     download
                     target="_blank"
                     rel="noopener"
-                    onClick={() => setLabelDialog(null)}
+                    onClick={() => setLabelDialog('downloading')}
                     className="block w-full text-center px-4 py-3 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-lg transition-colors"
                   >
                     Alle Artikel ({articles.length})
@@ -1028,7 +1078,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
                   onClick={() => (labelDialog === 'pick' ? setLabelDialog('choice') : setLabelDialog(null))}
                   className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium text-sm"
                 >
-                  {labelDialog === 'pick' ? '← Zurück' : 'Abbrechen'}
+                  {labelDialog === 'pick' ? '← Zurück' : labelDialog === 'downloading' ? 'Fertig' : 'Abbrechen'}
                 </button>
                 {labelDialog === 'pick' && (
                   // Ein <a> kennt kein disabled – ohne Auswahl wird es deshalb über
@@ -1041,7 +1091,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
                     aria-disabled={selectedLabelIds.size === 0}
                     onClick={e => {
                       if (selectedLabelIds.size === 0) e.preventDefault();
-                      else setLabelDialog(null);
+                      else setLabelDialog('downloading');
                     }}
                     className={`px-4 py-2 bg-blue-500 text-white font-semibold text-sm rounded-lg transition-colors ${
                       selectedLabelIds.size === 0
