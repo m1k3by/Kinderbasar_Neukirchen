@@ -5,6 +5,8 @@ import Header from '../../../../components/Header';
 import { getNavLinks, type NavUser } from '../../../../lib/navLinks';
 import { articleCacheKey, articleCacheEtagKey, staleArticleCacheKeys } from '../../../../lib/scanCache';
 import { buildScannerConfig, hasNativeBarcodeDetector, scannerRecoveryAction, scannerTuning, SCANNER_VIEWPORT_HEIGHT, type ScannerTuning } from '../../../../lib/scannerConfig';
+import type { LookupArticle } from '../../../../lib/manualLookup';
+import ManualLookup from '../../../../components/ManualLookup';
 
 interface ScannedArticle {
   id: string;
@@ -52,6 +54,11 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
   const [pendingManualQr, setPendingManualQr] = useState<string | null>(null);
   const [manualTitle, setManualTitle] = useState('');
   const [manualPrice, setManualPrice] = useState('');
+  // Manuelle Suche nach Verkäufernummer, wenn ein QR-Code nicht lesbar ist (ManualLookup).
+  const [lookupOpen, setLookupOpen] = useState(false);
+  // articleCacheRef ist ein Ref – ändert sich sein Inhalt, rendert React nicht neu. Nach dem
+  // Auffrischen beim Öffnen der Suche wird deshalb dieser Zähler erhöht.
+  const [, setCacheVersion] = useState(0);
   // Visual scan feedback overlay
   const [scanFlash, setScanFlash] = useState<'success' | 'error' | null>(null);
   const [scanLastTitle, setScanLastTitle] = useState('');
@@ -361,7 +368,9 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
     // Reserve immediately to block concurrent scans of the same code
     scannedCodesRef.current.add(qrCode);
     try {
-      const res = await fetch(`/api/articles/scan/${encodeURIComponent(qrCode)}`);
+      // basarId: nur in diesem Basar suchen – sonst konnte bei zwei aktiven Basaren (Testbasar
+      // neben dem echten) der Artikel mit demselben QR-Code aus dem anderen kommen.
+      const res = await fetch(`/api/articles/scan/${encodeURIComponent(qrCode)}?basarId=${encodeURIComponent(basarId)}`);
       const data = await res.json();
       if (!res.ok) {
         scannedCodesRef.current.delete(qrCode);
@@ -410,6 +419,31 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
         showMessage('Netzwerkfehler beim Scannen', 'error');
         return 1000;
       }
+    }
+  }
+
+  async function openLookup() {
+    setLookupOpen(true);
+    // Verkäufe an anderen Kassen seit dem letzten Abgleich nachziehen. Kostet bei
+    // unverändertem Bestand nur ein 304 (ETag), siehe cacheBasarArticles.
+    if (navigator.onLine) {
+      await cacheBasarArticles();
+      setCacheVersion(v => v + 1);
+    }
+  }
+
+  /**
+   * Übernimmt einen manuell gefundenen Artikel exakt wie einen Scan – über handleQrScan,
+   * damit Doppelprüfung, Serverabgleich (online) und Cache-Pfad (offline) dieselben bleiben.
+   * Ob es geklappt hat, zeigt scannedCodesRef: handleQrScan reserviert den Code und gibt ihn
+   * bei jedem Fehler wieder frei. Eine Rückmeldung braucht es eigens, weil der grüne Haken
+   * von handleQrScan im Kamerafenster erscheint – und das ist bei manueller Eingabe oft zu.
+   */
+  async function handleLookupSelect(article: LookupArticle) {
+    await handleQrScan(article.qrCode);
+    if (scannedCodesRef.current.has(article.qrCode)) {
+      showMessage(`✓ ${article.title} hinzugefügt`, 'success');
+      setLookupOpen(false);
     }
   }
 
@@ -554,15 +588,32 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
                 <span className="text-sm font-bold text-green-600">{totalAmount.toFixed(2)} €</span>
               )}
             </div>
-            <button
-              onClick={scanning ? stopScanner : startScanner}
-              className={`px-3 py-1 rounded-lg font-medium text-xs transition-colors ${scanning ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-yellow-500 hover:bg-yellow-600 text-gray-900'}`}
-            >
-              {scanning ? '■ Stop' : '▶ Scannen'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={lookupOpen ? () => setLookupOpen(false) : openLookup}
+                className={`px-3 py-1 rounded-lg font-medium text-xs transition-colors ${lookupOpen ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-800 hover:bg-blue-200'}`}
+              >
+                ⌨ Manuell
+              </button>
+              <button
+                onClick={scanning ? stopScanner : startScanner}
+                className={`px-3 py-1 rounded-lg font-medium text-xs transition-colors ${scanning ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-yellow-500 hover:bg-yellow-600 text-gray-900'}`}
+              >
+                {scanning ? '■ Stop' : '▶ Scannen'}
+              </button>
+            </div>
           </div>
 
           {scannerError && <p className="text-red-600 text-sm mb-2">{scannerError}</p>}
+
+          {lookupOpen && (
+            <ManualLookup
+              articles={[...articleCacheRef.current.values()]}
+              inCart={new Set(cart.map(c => c.qrCode))}
+              onSelect={handleLookupSelect}
+              onClose={() => setLookupOpen(false)}
+            />
+          )}
 
           {/* Offline manual entry – shown when scanned QR is not in local cache */}
           {pendingManualQr && (
