@@ -344,3 +344,33 @@ describe('GET /api/basars/[id]/sales', () => {
     expect(res.status).toBe(500);
   });
 });
+
+// Per ID nur Artikel *dieses* Basars. Vorher fand die Route jeden Artikel mit der ID – zusammen
+// mit dem Online-Scan, der in jedem aktiven Basar suchte, verkaufte die Kasse so einen Artikel
+// aus einem anderen gleichzeitig aktiven Basar (Testbasar neben dem echten).
+describe('POST /api/basars/[id]/sales – nur Artikel dieses Basars', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cookiesGetMock.mockReturnValue({ value: cashierToken(2000) });
+    prismaMock.basar.findUnique.mockResolvedValue(activeBasar);
+  });
+
+  it('sucht Artikel per ID nur in diesem Basar', async () => {
+    mockArticles([]);
+    await POST(makePostRequest({ items: [{ articleId: 'art-aus-anderem-basar' }] }), makeContext());
+
+    // Ein gemocktes Prisma ignoriert where – geprüft wird deshalb das Argument.
+    const calls = prismaMock.article.findMany.mock.calls as [{ where: { id?: unknown } }][];
+    const perId = calls.find(c => c[0].where.id);
+    expect(perId?.[0].where).toEqual({ id: { in: ['art-aus-anderem-basar'] }, basarSeller: { basarId: 'basar-1' } });
+  });
+
+  it('verkauft einen Artikel, den es in diesem Basar nicht gibt, nicht', async () => {
+    mockArticles([]); // so antwortet die Datenbank mit dem Basar-Filter auf eine fremde ID
+    const res = await POST(makePostRequest({ items: [{ articleId: 'art-aus-anderem-basar' }] }), makeContext());
+    const data = await res.json();
+
+    expect(data.results[0].error).toBe('Artikel nicht gefunden');
+    expect(prismaMock.article.updateManyAndReturn).not.toHaveBeenCalled();
+  });
+});

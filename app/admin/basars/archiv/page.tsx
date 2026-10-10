@@ -12,6 +12,8 @@ interface Basar {
   location?: string;
   status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
   isArchived: boolean;
+  /** Testbasar (app/lib/basarAccess.ts). Die Route liefert es immer. */
+  isTest: boolean;
   /** Nur **aktive** Teilnahmen (where in app/api/basars/route.ts). Nicht optional: die Route liefert es immer. */
   _count: { basarSellers: number };
 }
@@ -110,7 +112,7 @@ export default function BasarArchivPage() {
                       <span className="flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">
                         {STATUS_LABELS[basar.status]}
                       </span>
-                      <h2 className="w-full sm:w-auto text-base font-bold text-gray-600 break-words sm:truncate">{basar.title}</h2>
+                      <h2 className="w-full sm:w-auto text-base font-bold text-gray-600 break-words sm:truncate">{basar.title}{basar.isTest && <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-800">TEST</span>}</h2>
                     </div>
                     <p className="text-sm text-gray-400">
                       {new Date(basar.eventDate).toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}

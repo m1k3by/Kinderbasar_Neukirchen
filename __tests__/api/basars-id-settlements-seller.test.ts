@@ -7,6 +7,11 @@ vi.mock('next/headers', () => ({
 }));
 
 const prismaMock = vi.hoisted(() => ({
+  // Testbasar-Prüfung (app/lib/basarAccess.ts). undefined heißt hier „kein Testbasar": so
+  // behandelt die Prüfung jeden echten Basar, und die Route läuft wie bisher. Die Fälle mit
+  // Testbasar stehen in __tests__/lib/basarAccess.test.ts.
+  basar: { findUnique: vi.fn() },
+  basarInvite: { findUnique: vi.fn() },
   basarSeller: { findUnique: vi.fn() },
 }));
 vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));

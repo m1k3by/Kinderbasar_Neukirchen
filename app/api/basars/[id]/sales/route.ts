@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../../../lib/prisma';
 import { requireCashier } from '../../../../lib/apiAuth';
+import { requireBasarAccess } from '../../../../lib/basarAccess';
 
 // Validates and normalizes a requested sale price. Returns null if invalid.
 function normalizeSalePrice(value: unknown): number | null {
@@ -18,6 +19,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const cashierId: number | null = auth.sellerId ?? null;
     const { id: basarId } = await params;
+    // Testbasar: nur Admin und Eingeladene, sonst 404 (app/lib/basarAccess.ts).
+    const denied = await requireBasarAccess(authResult.auth, basarId);
+    if (denied) return denied;
 
     const basar = await prisma.basar.findUnique({ where: { id: basarId } });
     if (!basar) return NextResponse.json({ error: 'Basar nicht gefunden' }, { status: 404 });
@@ -48,7 +52,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       qrCodes.length
         ? prisma.article.findMany({ where: { qrCode: { in: qrCodes }, basarSeller: { basarId } } })
         : Promise.resolve([]),
-      ids.length ? prisma.article.findMany({ where: { id: { in: ids } } }) : Promise.resolve([]),
+      // Auch per ID nur Artikel *dieses* Basars. Ohne den Filter verkaufte die Kasse einen
+      // Artikel aus einem anderen gleichzeitig aktiven Basar – der Online-Scan suchte den
+      // QR-Code in jedem aktiven Basar, und Archiv-Übernahmen tragen in jedem Basar denselben
+      // Code. Mit Testbasaren neben dem echten ist „zwei Basare aktiv" der Normalfall.
+      ids.length ? prisma.article.findMany({ where: { id: { in: ids }, basarSeller: { basarId } } }) : Promise.resolve([]),
     ]);
     const byQr = new Map(byQrList.map((a) => [a.qrCode, a]));
     const byId = new Map(byIdList.map((a) => [a.id, a]));
@@ -136,6 +144,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (authResult.response) return authResult.response;
 
     const { id: basarId } = await params;
+    // Testbasar: nur Admin und Eingeladene, sonst 404 (app/lib/basarAccess.ts).
+    const denied = await requireBasarAccess(authResult.auth, basarId);
+    if (denied) return denied;
 
     const url = new URL(request.url);
     const cursor = url.searchParams.get('cursor');

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { prisma } from './lib/prisma';
+import { visibleBasarWhere } from './lib/basarAccess';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -17,9 +18,10 @@ function formatDay(value: Date | null) {
 
 export default async function Home() {
   // Entwürfe sind noch nicht öffentlich, geschlossene und archivierte Basare
-  // nehmen keine Anmeldungen mehr an.
+  // nehmen keine Anmeldungen mehr an. Testbasare sind nie öffentlich – auch nicht für
+  // Eingeladene, die Startseite kennt keinen Login (app/lib/basarAccess.ts).
   const basars = await prisma.basar.findMany({
-    where: { isArchived: false, status: { in: ['OPEN', 'ACTIVE'] } },
+    where: { isArchived: false, status: { in: ['OPEN', 'ACTIVE'] }, ...visibleBasarWhere(null) },
     orderBy: { eventDate: 'asc' },
     include: {
       _count: { select: { basarSellers: { where: { isActive: true } } } },

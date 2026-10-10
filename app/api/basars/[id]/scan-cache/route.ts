@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../../../lib/prisma';
 import { requireCashier } from '../../../../lib/apiAuth';
+import { requireBasarAccess } from '../../../../lib/basarAccess';
 import crypto from 'crypto';
 
 // GET /api/basars/:id/scan-cache – minimal projection of all AVAILABLE+SOLD articles for a
@@ -21,6 +22,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const authResult = await requireCashier();
     if (authResult.response) return authResult.response;
     const { id: basarId } = await params;
+    // Testbasar: nur Admin und Eingeladene, sonst 404 (app/lib/basarAccess.ts).
+    const denied = await requireBasarAccess(authResult.auth, basarId);
+    if (denied) return denied;
 
     const where: Prisma.ArticleWhereInput = {
       basarSeller: { basarId },

@@ -16,6 +16,8 @@ const prismaMock = vi.hoisted(() => ({
   // findMany: Orga ohne Zeile im Basar (Adminzweig). Vorgabe leer, damit Tests, die davon
   // nichts wissen, nicht an einem fehlenden Rückgabewert scheitern.
   seller: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+  // Testbasar-Prüfung (app/lib/basarAccess.ts): nur bei isTest gefragt.
+  basarInvite: { findUnique: vi.fn() },
 }));
 vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
 
@@ -320,5 +322,48 @@ describe('GET /api/basars/[id] – Orga ohne Zeile als Platzhalter', () => {
     await GET(makeGetRequest(), makeContext());
 
     expect(prismaMock.seller.findMany).not.toHaveBeenCalled();
+  });
+});
+
+// „Orga ist in jedem Basar dabei" gilt im Testbasar nur für Eingeladene. Sonst stünden alle
+// Orga-Leute ungefragt in einem Basar, den sie nicht einmal sehen dürfen – in der Liste und auf
+// den Anlieferzetteln.
+describe('GET /api/basars/[id] – Orga im Testbasar', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.seller.findMany.mockResolvedValue([]);
+  });
+
+  it('Testbasar: Orga-Platzhalter nur für eingeladene Orga', async () => {
+    prismaMock.basar.findUnique.mockResolvedValue({ ...fakeBasar, isTest: true, basarSellers: [] });
+    await GET(makeGetRequest(), makeContext());
+    expect(prismaMock.seller.findMany.mock.calls[0][0].where).toEqual({
+      isOrga: true,
+      basarSellers: { none: { basarId: 'basar-1' } },
+      basarInvites: { some: { basarId: 'basar-1' } },
+    });
+  });
+
+  it('echter Basar: unverändert alle Orga', async () => {
+    prismaMock.basar.findUnique.mockResolvedValue({ ...fakeBasar, isTest: false, basarSellers: [] });
+    await GET(makeGetRequest(), makeContext());
+    expect(prismaMock.seller.findMany.mock.calls[0][0].where).toEqual({
+      isOrga: true,
+      basarSellers: { none: { basarId: 'basar-1' } },
+    });
+  });
+});
+
+describe('GET /api/basars/[id] – Testbasar für Nicht-Eingeladene', () => {
+  it('liefert 404 und keine Daten', async () => {
+    vi.clearAllMocks();
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basar.findUnique.mockResolvedValue({ ...fakeBasar, isTest: true });
+    prismaMock.basarInvite.findUnique.mockResolvedValue(null);
+
+    const res = await GET(makeGetRequest(), makeContext());
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'Basar nicht gefunden' });
   });
 });

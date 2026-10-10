@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '../../lib/prisma';
 import { requireAuth } from '../../lib/apiAuth';
+import { requireBasarAccess } from '../../lib/basarAccess';
 import { shiftsOverlap } from '../../lib/time';
 
 function parseSellerId(value: unknown): number | null {
@@ -15,6 +16,13 @@ export async function POST(req: NextRequest) {
     const { auth } = authResult;
 
     const { taskId, sellerId: bodySellerId, basarId } = await req.json();
+
+    // Testbasar: nur Admin und Eingeladene (app/lib/basarAccess.ts). Fehlt basarId, meldet
+    // das die Prüfung weiter unten wie bisher.
+    if (typeof basarId === 'string' && basarId) {
+      const denied = await requireBasarAccess(auth, basarId);
+      if (denied) return denied;
+    }
 
     // Non-admins may only sign up themselves. Admins may sign up any seller.
     let sellerIdInt: number | null;
@@ -137,6 +145,11 @@ export async function DELETE(req: NextRequest) {
     const taskId = searchParams.get('taskId');
     const bodySellerId = searchParams.get('sellerId');
     const basarId = searchParams.get('basarId');
+
+    if (basarId) {
+      const denied = await requireBasarAccess(auth, basarId);
+      if (denied) return denied;
+    }
 
     // Non-admins may only remove themselves. Admins may remove any seller.
     let sellerIdInt: number | null;

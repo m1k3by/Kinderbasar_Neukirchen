@@ -11,6 +11,9 @@ vi.mock('next/headers', () => ({
 // ─── Prisma mock ──────────────────────────────────────────────────────────────
 const prismaMock = vi.hoisted(() => ({
   article: { findFirst: vi.fn() },
+  // Testbasar-Prüfung (app/lib/basarAccess.ts), nur mit ?basarId= aufgerufen.
+  basar: { findUnique: vi.fn() },
+  basarInvite: { findUnique: vi.fn() },
 }));
 vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
 
@@ -84,5 +87,45 @@ describe('GET /api/articles/scan/[qrCode]', () => {
     prismaMock.article.findFirst.mockRejectedValue(new Error('DB error'));
     const res = await GET(makeRequest(), makeContext());
     expect(res.status).toBe(500);
+  });
+});
+
+// Derselbe QR-Code existiert in mehreren Basaren (Archiv-Übernahmen). Vorher suchte die Route in
+// *jedem* aktiven Basar: liefen zwei gleichzeitig (Testbasar neben dem echten), konnte der Scan
+// den Artikel aus dem falschen liefern – und die Kasse ihn dort verkaufen.
+describe('GET /api/articles/scan/[qrCode] – nur im Basar der Kasse', () => {
+  const mitBasar = (id = 'basar-1') => new Request(`http://localhost/api/articles/scan/QR_1234_Muster?basarId=${id}`);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cookiesGetMock.mockReturnValue({ value: cashierToken(2000) });
+    prismaMock.article.findFirst.mockResolvedValue(fakeArticle);
+  });
+
+  it('mit basarId: sucht ausschließlich in diesem Basar, und nur wenn er aktiv ist', async () => {
+    prismaMock.basar.findUnique.mockResolvedValue({ isTest: false });
+    const res = await GET(mitBasar(), makeContext());
+    expect(res.status).toBe(200);
+    // Ein gemocktes Prisma ignoriert where – ohne diese Prüfung bliebe der Test grün, auch
+    // wenn die Route wieder in jedem aktiven Basar sucht.
+    expect(prismaMock.article.findFirst.mock.calls[0][0].where).toEqual({
+      qrCode: 'QR_1234_Muster',
+      basarSeller: { basarId: 'basar-1', basar: { status: 'ACTIVE' } },
+    });
+  });
+
+  it('ohne basarId (ältere App-Version im Cache): nur Basare, die der Kassierer sehen darf', async () => {
+    await GET(makeRequest(), makeContext());
+    expect(prismaMock.article.findFirst.mock.calls[0][0].where.basarSeller).toEqual({
+      basar: { status: 'ACTIVE', OR: [{ isTest: false }, { invites: { some: { sellerId: 2000 } } }] },
+    });
+  });
+
+  it('Testbasar ohne Einladung: 404, ohne nach dem Artikel zu suchen', async () => {
+    prismaMock.basar.findUnique.mockResolvedValue({ isTest: true });
+    prismaMock.basarInvite.findUnique.mockResolvedValue(null);
+    const res = await GET(mitBasar('test-basar'), makeContext());
+    expect(res.status).toBe(404);
+    expect(prismaMock.article.findFirst).not.toHaveBeenCalled();
   });
 });

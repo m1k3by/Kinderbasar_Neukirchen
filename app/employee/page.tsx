@@ -39,6 +39,8 @@ interface Basar {
   location?: string;
   status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
   isArchived: boolean;
+  /** Testbasar: nur für Eingeladene sichtbar (app/lib/basarAccess.ts). Die Route liefert es immer. */
+  isTest: boolean;
   dateFriday?: string | null;
   dateSaturday?: string | null;
   dateSunday?: string | null;
@@ -412,7 +414,7 @@ export default function EmployeePage() {
                     href={`/admin/basars/${b.id}/kasse`}
                     className="px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white font-bold rounded-xl transition-colors shadow-sm text-center"
                   >
-                    Kasse: {b.title} →
+                    Kasse: {b.title}{b.isTest ? ' (TEST)' : ''} →
                   </a>
                 ))
               )}
@@ -437,7 +439,7 @@ export default function EmployeePage() {
                 className="w-full sm:w-auto sm:max-w-xs min-w-0 truncate border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
               >
                 {basars.map(b => (
-                  <option key={b.id} value={b.id}>{b.title} ({STATUS_LABELS[b.status]})</option>
+                  <option key={b.id} value={b.id}>{b.title}{b.isTest ? ' – TEST' : ''} ({STATUS_LABELS[b.status]})</option>
                 ))}
               </select>
             </label>

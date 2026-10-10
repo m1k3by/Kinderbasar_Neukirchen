@@ -175,6 +175,8 @@ export interface SelectableBasar {
   id: string;
   status: string;
   isArchived?: boolean;
+  /** Testbasare werden nur gewählt, wenn es keinen echten gibt (siehe pickDefaultBasarId). */
+  isTest?: boolean;
 }
 
 /**
@@ -190,8 +192,12 @@ export interface SelectableBasar {
  */
 export function pickDefaultBasarId(basars: SelectableBasar[]): string {
   const relevant = basars.filter(b => !b.isArchived && b.status !== 'DRAFT');
-  return relevant.find(b => b.status === 'ACTIVE')?.id
-    || relevant.find(b => b.status === 'OPEN')?.id
-    || relevant[0]?.id
-    || '';
+  const pick = (list: SelectableBasar[]) =>
+    list.find(b => b.status === 'ACTIVE')?.id
+    || list.find(b => b.status === 'OPEN')?.id
+    || list[0]?.id;
+  // Echte Basare zuerst: ein laufender Testbasar darf dem Admin oder einem eingeladenen
+  // Mitarbeiter nicht den echten Basar in der Helferliste wegnehmen. Einen Testbasar gibt es
+  // als Vorgabe nur, wenn sonst keiner in Frage kommt.
+  return pick(relevant.filter(b => !b.isTest)) || pick(relevant) || '';
 }

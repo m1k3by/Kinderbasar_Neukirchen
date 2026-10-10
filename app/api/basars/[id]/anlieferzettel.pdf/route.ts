@@ -33,7 +33,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }
 
     const { id: basarId } = await params;
-    const basar = await prisma.basar.findUnique({ where: { id: basarId }, select: { title: true } });
+    const basar = await prisma.basar.findUnique({ where: { id: basarId }, select: { title: true, isTest: true } });
     if (!basar) return NextResponse.json({ error: 'Basar nicht gefunden' }, { status: 404 });
 
     // Alle Zeilen des Basars laden und erst hier filtern, statt die Regel als Prisma-`where`
@@ -51,7 +51,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     // zählte der Knopf sie mit und das PDF hätte eine Seite zu wenig.
     const candidates = [
       ...rows.map(r => ({ activated: r.isActive, viaOrga: r.seller.isOrga, _count: r._count, seller: r.seller })),
-      ...(await orgaPlaceholders(basarId)),
+      ...(await orgaPlaceholders(basarId, basar.isTest)),
     ];
 
     // Sortiert wird hier, nicht in der Abfrage: die Platzhalter kommen aus einer zweiten

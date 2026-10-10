@@ -3,6 +3,7 @@ import { prisma } from '../../lib/prisma';
 import { requireAuth, requireAdmin } from '../../lib/apiAuth';
 import { participationPayload } from '../../lib/participation';
 import { buildBasarData } from '../../lib/basarPayload';
+import { visibleBasarWhere } from '../../lib/basarAccess';
 
 // GET /api/basars – list all basars (any logged-in user)
 export async function GET(request: Request) {
@@ -17,7 +18,9 @@ export async function GET(request: Request) {
     const skip = (page - 1) * limit;
 
     const archived = searchParams.get('archived') === 'true';
-    const where = { isArchived: archived };
+    // Testbasare nur für Admin und Eingeladene (app/lib/basarAccess.ts). Für alle anderen
+    // Basare ist das ein Nichts-Filter: { isTest: false } trifft sie alle wie bisher.
+    const where = { isArchived: archived, ...visibleBasarWhere(auth) };
     const isAdmin = auth.role === 'admin';
 
     const [rows, total, me] = await Promise.all([

@@ -1,6 +1,7 @@
 ﻿import { NextResponse } from 'next/server';
 import { prisma } from '../../../../../lib/prisma';
 import { requireAuth } from '../../../../../lib/apiAuth';
+import { requireBasarAccess } from '../../../../../lib/basarAccess';
 
 // DELETE /api/basars/:id/articles/:artId
 export async function DELETE(
@@ -12,6 +13,9 @@ export async function DELETE(
     if (authResult.response) return authResult.response;
     const { auth } = authResult;
     const { id: basarId, artId } = await params;
+    // Testbasar: nur Admin und Eingeladene, sonst 404 (app/lib/basarAccess.ts).
+    const denied = await requireBasarAccess(authResult.auth, basarId);
+    if (denied) return denied;
 
     const basar = await prisma.basar.findUnique({ where: { id: basarId } });
     if (!basar) return NextResponse.json({ error: 'Basar nicht gefunden' }, { status: 404 });

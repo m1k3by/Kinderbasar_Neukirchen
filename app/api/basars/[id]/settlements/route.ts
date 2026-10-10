@@ -2,6 +2,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../../../lib/prisma';
 import { requireAuth, requireAdmin } from '../../../../lib/apiAuth';
+import { requireBasarAccess } from '../../../../lib/basarAccess';
 import { roundPayout } from '../../../../lib/payout';
 
 // GET /api/basars/:id/settlements – list all settlements for this basar
@@ -11,6 +12,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (authResult.response) return authResult.response;
     const { auth } = authResult;
     const { id: basarId } = await params;
+    // Testbasar: nur Admin und Eingeladene, sonst 404 (app/lib/basarAccess.ts).
+    const denied = await requireBasarAccess(authResult.auth, basarId);
+    if (denied) return denied;
 
     // Sellers can only see their own settlement
     if (auth.role !== 'admin') {

@@ -5,6 +5,7 @@ import {
   deriveEventDate,
   dateForWeekday,
   activationNotice,
+  pickDefaultBasarId,
 } from '@/app/lib/basarWindows';
 
 describe('isWindowOpen', () => {
@@ -214,5 +215,26 @@ describe('activationNotice', () => {
       vorher
     );
     expect(n).toEqual({ canActivate: true, message: null });
+  });
+});
+
+describe('pickDefaultBasarId', () => {
+  const b = (id: string, status: string, extra: { isArchived?: boolean; isTest?: boolean } = {}) => ({ id, status, ...extra });
+
+  it('wählt den laufenden Basar vor dem offenen, Entwürfe und Archiviertes nie', () => {
+    expect(pickDefaultBasarId([b('o', 'OPEN'), b('a', 'ACTIVE'), b('d', 'DRAFT')])).toBe('a');
+    expect(pickDefaultBasarId([b('d', 'DRAFT'), b('o', 'OPEN')])).toBe('o');
+    expect(pickDefaultBasarId([b('x', 'ACTIVE', { isArchived: true }), b('c', 'CLOSED')])).toBe('c');
+    expect(pickDefaultBasarId([b('d', 'DRAFT')])).toBe('');
+  });
+
+  it('nimmt einen echten Basar vor einem Testbasar – auch wenn der Test schon läuft', () => {
+    // Sonst bekäme der Admin (oder ein eingeladener Mitarbeiter) in der Helferliste den
+    // Testbasar vorgewählt, während der echte offen ist.
+    expect(pickDefaultBasarId([b('test', 'ACTIVE', { isTest: true }), b('echt', 'OPEN')])).toBe('echt');
+  });
+
+  it('nimmt einen Testbasar nur, wenn es keinen echten gibt', () => {
+    expect(pickDefaultBasarId([b('test', 'OPEN', { isTest: true }), b('d', 'DRAFT')])).toBe('test');
   });
 });

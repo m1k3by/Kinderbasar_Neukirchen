@@ -16,11 +16,19 @@ import { prisma } from './prisma';
  * Eigene Datei statt participation.ts: die wird auch von der Seite im Browser importiert,
  * und Prisma darf nicht ins Client-Bundle.
  */
-export async function orgaPlaceholders(basarId: string) {
+export async function orgaPlaceholders(basarId: string, isTest = false) {
   // `none` mit basarId ist der Kern: ohne ihn stünde jede Orga-Person mit Zeile doppelt in der
   // Liste, mit einer Zeile in *irgendeinem* Basar fehlte sie hier weiterhin.
+  //
+  // Im Testbasar gilt „Orga ist überall dabei" nur für Eingeladene: sonst stünden alle
+  // Orga-Leute ungefragt in einem Basar, den sie nicht einmal sehen dürfen
+  // (app/lib/basarAccess.ts) – auf der Liste und auf den Anlieferzetteln.
   const sellers = await prisma.seller.findMany({
-    where: { isOrga: true, basarSellers: { none: { basarId } } },
+    where: {
+      isOrga: true,
+      basarSellers: { none: { basarId } },
+      ...(isTest ? { basarInvites: { some: { basarId } } } : {}),
+    },
     select: { sellerId: true, firstName: true, lastName: true, email: true, isOrga: true, isEmployee: true },
   });
 

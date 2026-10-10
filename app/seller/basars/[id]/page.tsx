@@ -37,6 +37,8 @@ interface BasarDetail {
   commissionPercent: number;
   entryFee: number;
   status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
+  /** Testbasar: nur für Eingeladene sichtbar (app/lib/basarAccess.ts). Die Route liefert es immer. */
+  isTest: boolean;
   allowedSizes?: string;
   myParticipation?: { isActive: boolean; activatedAt: string | null; viaOrga?: boolean } | null;
 }
@@ -399,7 +401,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
 
         {/* Basar info */}
         <div className="bg-white rounded-xl shadow-sm p-5 mb-5">
-          <h1 className="text-2xl font-bold text-gray-800">{basar.title}</h1>
+          <h1 className="text-2xl font-bold text-gray-800">{basar.title}{basar.isTest && <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-800">TEST</span>}</h1>
           <p className="text-gray-500 mt-1">
             {new Date(basar.eventDate).toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}
             {basar.location && ` · ${basar.location}`}

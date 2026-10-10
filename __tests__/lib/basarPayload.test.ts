@@ -170,3 +170,33 @@ describe('lockedFieldsForActiveBasar', () => {
     expect(locked.sort()).toEqual(['commissionPercent', 'entryFee', 'maxArticlesPerSeller', 'maxSellers']);
   });
 });
+
+describe('buildBasarData – Testbasar', () => {
+  const basis = { title: 'Test', dateFriday: '2026-10-16' };
+
+  it('setzt isTest beim Anlegen', () => {
+    const r = buildBasarData({ ...basis, isTest: true }, 'create');
+    expect(r.ok && r.data.isTest).toBe(true);
+  });
+
+  it('ignoriert isTest beim Ändern – ein echter Basar darf nie nachträglich verschwinden', () => {
+    // Nachträglich auf „Test" gestellt, wäre der echte Basar mit einem Klick für alle Verkäufer
+    // und Kassierer unsichtbar. Ignoriert statt abgelehnt, damit das Bearbeiten-Formular nicht
+    // scheitert, falls es das Feld einmal mitschickt.
+    const r = buildBasarData({ title: 'Test', isTest: true }, 'update');
+    expect(r.ok).toBe(true);
+    expect(r.ok && 'isTest' in r.data).toBe(false);
+  });
+
+  it('nur ein echtes true zählt – kein "true"-String, keine 1', () => {
+    const s = buildBasarData({ ...basis, isTest: 'true' }, 'create');
+    const n = buildBasarData({ ...basis, isTest: 1 }, 'create');
+    expect(s.ok && s.data.isTest).toBe(false);
+    expect(n.ok && n.data.isTest).toBe(false);
+  });
+
+  it('ohne Angabe: kein Feld – die Datenbank setzt false', () => {
+    const r = buildBasarData(basis, 'create');
+    expect(r.ok && 'isTest' in r.data).toBe(false);
+  });
+});

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../../../lib/prisma';
 import { requireAuth } from '../../../../lib/apiAuth';
+import { requireBasarAccess } from '../../../../lib/basarAccess';
 import { buildLabelSheet, buildCalibrationSheet, LABELS_PER_SHEET, type LabelData } from '../../../../lib/labels';
 
 // Etiketten-PDF wird serverseitig erzeugt, damit das Ergebnis auf jedem Gerät
@@ -46,6 +47,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       const doc = buildCalibrationSheet();
       return pdfResponse(doc.output('arraybuffer'), 'etiketten-testseite.pdf');
     }
+
+    // Erst nach der Kalibrierseite: die verrät nichts über einen Basar und greift bewusst nie
+    // auf die Datenbank zu.
+    // Testbasar: nur Admin und Eingeladene, sonst 404 (app/lib/basarAccess.ts).
+    const denied = await requireBasarAccess(authResult.auth, basarId);
+    if (denied) return denied;
 
     // Unbrauchbare Werte fallen auf 0 zurück, nicht auf den letzten Platz: ein Tippfehler
     // soll den Bogen vorne beginnen lassen, nicht 23 Etiketten verschenken.

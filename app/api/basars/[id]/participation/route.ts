@@ -1,6 +1,7 @@
 import { NextResponse, after } from 'next/server';
 import { prisma } from '../../../../lib/prisma';
 import { requireAuth } from '../../../../lib/apiAuth';
+import { requireBasarAccess } from '../../../../lib/basarAccess';
 import { isActivationOpen } from '../../../../lib/basarWindows';
 import { TERMS_VERSION, PRIVACY_VERSION } from '../../../../lib/legalDocs';
 import { deliverMail } from '../../../../lib/mailQueue';
@@ -18,6 +19,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const { auth } = authResult;
 
     const { id: basarId } = await params;
+    // Testbasar: nur Admin und Eingeladene, sonst 404 (app/lib/basarAccess.ts).
+    const denied = await requireBasarAccess(authResult.auth, basarId);
+    if (denied) return denied;
     const body = await request.json();
     const { sellerId: sellerIdInput, isActive, acceptedTerms } = body;
 

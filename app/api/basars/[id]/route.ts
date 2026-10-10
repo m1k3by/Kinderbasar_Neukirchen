@@ -4,6 +4,7 @@ import { prisma } from '../../../lib/prisma';
 import { requireAuth, requireAdmin } from '../../../lib/apiAuth';
 import { buildBasarData, lockedFieldsForActiveBasar } from '../../../lib/basarPayload';
 import { orgaPlaceholders } from '../../../lib/orgaPlaceholders';
+import { requireBasarAccess } from '../../../lib/basarAccess';
 
 // GET /api/basars/:id – Admins bekommen die volle Verkäuferliste (Name, E-Mail);
 // Seller/Mitarbeiter nur die eigene Teilnahme (myParticipation), keine fremden Daten.
@@ -45,6 +46,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     if (!basar) return NextResponse.json({ error: 'Basar nicht gefunden' }, { status: 404 });
 
+    // Testbasar: nur Admin und Eingeladene, sonst 404 (app/lib/basarAccess.ts). Auf dem eben
+    // geladenen Basar statt einer zweiten Abfrage – aber vor jeder Ausgabe.
+    const denied = await requireBasarAccess(auth, basar);
+    if (denied) return denied;
+
     if (isAdmin || !auth.sellerId) {
       // Adminsicht: Teilnahme aufgeloest ausliefern – dieselbe Regel wie bei myParticipation
       // weiter unten. Vorher ging `isActive` roh aus der Zeile hinaus, und die Oberfläche
@@ -71,7 +77,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
       // Orga ohne Zeile in diesem Basar kommt als Platzhalter dazu – Begründung und die
       // heikle Abfrage in app/lib/orgaPlaceholders.ts, die auch die Anlieferzettel nutzen.
-      const placeholders = await orgaPlaceholders(id);
+      const placeholders = await orgaPlaceholders(id, basar.isTest);
 
       return NextResponse.json({
         ...basar,

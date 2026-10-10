@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../../../../../lib/prisma';
 import { requireAuth } from '../../../../../../lib/apiAuth';
+import { requireBasarAccess } from '../../../../../../lib/basarAccess';
 import { buildSettlementPdf, pdfResponse, slug, type SettlementPdfArticle } from '../../../../../../lib/settlementPdf';
 
 // Abrechnungs-PDF wird serverseitig erzeugt, damit das Ergebnis auf jedem Gerät identisch
@@ -28,6 +29,11 @@ export async function GET(
     if (auth.role !== 'admin' && auth.sellerId !== sellerId) {
       return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 403 });
     }
+
+    // Erst nach der Besitzprüfung: eine fremde Abrechnung ist in jedem Basar 403, ohne Abfrage.
+    // Testbasar: nur Admin und Eingeladene, sonst 404 (app/lib/basarAccess.ts).
+    const denied = await requireBasarAccess(authResult.auth, basarId);
+    if (denied) return denied;
 
     const basar = await prisma.basar.findUnique({
       where: { id: basarId },

@@ -17,9 +17,14 @@ function fakeDb(rowsByTable: Record<string, Record<string, unknown>[]>) {
         cursor?: Record<string, unknown>;
         skip?: number;
       }) => {
-        const start = cursor
-          ? all.findIndex((row) => row[table.orderBy] === cursor[table.orderBy]) + (skip ?? 0)
-          : 0;
+        // Wie Prisma: einfacher Schlüssel als { id: … }, zusammengesetzter unter dem Namen der
+        // Felder mit Unterstrich – { basarId_sellerId: { basarId, sellerId } } (so steht es in
+        // BasarInviteWhereUniqueInput des erzeugten Clients).
+        const keys: readonly string[] = Array.isArray(table.orderBy) ? table.orderBy : [table.orderBy as string];
+        const matches = (row: Record<string, unknown>) => keys.length === 1
+          ? row[keys[0]] === cursor![keys[0]]
+          : keys.every(k => row[k] === (cursor![keys.join('_')] as Record<string, unknown> | undefined)?.[k]);
+        const start = cursor ? all.findIndex(matches) + (skip ?? 0) : 0;
         return all.slice(start, start + take);
       }),
     };
@@ -55,6 +60,7 @@ describe('backupChunks', () => {
       ['Article', 'BasarSeller'], ['Article', 'SellerArticle'],
       ['Sale', 'Basar'], ['Sale', 'Article'], ['Sale', 'Seller'],
       ['Settlement', 'BasarSeller'],
+      ['BasarInvite', 'Basar'], ['BasarInvite', 'Seller'],
     ];
 
     for (const [child, parent] of fremdschluessel) {
@@ -100,5 +106,23 @@ describe('backupChunks', () => {
     // 3 volle Seiten + eine angebrochene: die letzte beendet die Schleife.
     const findMany = (db as unknown as Record<string, { findMany: { mock: { calls: unknown[] } } }>).article.findMany;
     expect(findMany.mock.calls).toHaveLength(3);
+  });
+
+  it('blättert auch über Tabellen mit zusammengesetztem Schlüssel (BasarInvite)', async () => {
+    // BasarInvite hat kein id-Feld. Ein Cursor auf ein nicht eindeutiges Feld (createdAt war der
+    // erste Entwurf) bräche ab der zweiten Seite ab – also ab 500 Einladungen, genau dann,
+    // wenn die Sicherung gebraucht wird. Mehr als eine Seite, damit der Cursor wirklich greift.
+    const invites = Array.from({ length: 1201 }, (_, i) => ({ basarId: `b${Math.floor(i / 400)}`, sellerId: 1000 + (i % 400) }));
+    const db = fakeDb({ BasarInvite: invites });
+
+    const json = JSON.parse(await collect(db));
+
+    expect(json.tables.BasarInvite).toHaveLength(1201);
+    const paare = new Set(json.tables.BasarInvite.map((r: { basarId: string; sellerId: number }) => `${r.basarId}/${r.sellerId}`));
+    expect(paare.size).toBe(1201);
+
+    const calls = (db as unknown as Record<string, { findMany: { mock: { calls: { orderBy: unknown; cursor?: unknown }[][] } } }>).basarInvite.findMany.mock.calls;
+    expect(calls[0][0].orderBy).toEqual([{ basarId: 'asc' }, { sellerId: 'asc' }]);
+    expect(calls[1][0].cursor).toEqual({ basarId_sellerId: { basarId: 'b1', sellerId: 1099 } });
   });
 });

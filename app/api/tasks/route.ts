@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../lib/prisma';
 import { requireAuth, requireAdmin } from '../../lib/apiAuth';
+import { requireBasarAccess } from '../../lib/basarAccess';
 
 export async function GET(request: Request) {
   try {
@@ -16,6 +17,9 @@ export async function GET(request: Request) {
     if (!basarId) {
       return NextResponse.json({ error: 'basarId ist erforderlich' }, { status: 400 });
     }
+    // Testbasar: Anmeldungen darin nur für Admin und Eingeladene (app/lib/basarAccess.ts).
+    const denied = await requireBasarAccess(auth, basarId);
+    if (denied) return denied;
 
     // Task selbst ist basarübergreifend (dieselben Schichten jeden Basar), nur die
     // Anmeldungen werden auf den Basar eingegrenzt. Die Seiten zählen signups.length –

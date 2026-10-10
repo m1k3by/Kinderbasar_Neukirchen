@@ -20,6 +20,8 @@ interface Basar {
   entryFee: number;
   status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
   isArchived: boolean;
+  /** Testbasar (app/lib/basarAccess.ts). Nicht optional: die Route liefert jedes Basar-Feld. */
+  isTest: boolean;
   /** Nur **aktive** Teilnahmen (where in app/api/basars/route.ts). Nicht optional: die Route liefert es immer. */
   _count: { basarSellers: number };
 }
@@ -41,6 +43,9 @@ export default function AdminBasarsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [form, setForm] = useState<BasarFormState>(EMPTY_BASAR_FORM);
+  // Nur im Anlegen-Dialog, nicht im gemeinsamen BasarFormFields: ein Testbasar wird nur beim
+  // Anlegen festgelegt, nachträglich ist das Feld gesperrt (app/lib/basarPayload.ts).
+  const [createAsTest, setCreateAsTest] = useState(false);
   // Default to admin nav until /api/me resolves – this page is admin-focused, but
   // /admin/basars/** is also reachable by cashiers (see middleware.ts), so a cashier's
   // nav must be corrected as soon as we know who's asking.
@@ -81,12 +86,13 @@ export default function AdminBasarsPage() {
       const res = await fetch('/api/basars', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, isTest: createAsTest }),
       });
       if (res.ok) {
         setMessage('Basar erfolgreich angelegt');
         setShowForm(false);
         setForm(EMPTY_BASAR_FORM);
+        setCreateAsTest(false);
         loadBasars();
       } else {
         const data = await res.json();
@@ -160,6 +166,14 @@ export default function AdminBasarsPage() {
             <h2 className="text-xl font-bold mb-4">Neuer Basar</h2>
             <form onSubmit={handleCreate} className="grid md:grid-cols-2 gap-4">
               <BasarFormFields form={form} setForm={setForm} />
+              <label className="md:col-span-2 flex items-start gap-3 p-3 rounded-lg border border-purple-200 bg-purple-50 cursor-pointer">
+                <input type="checkbox" checked={createAsTest} onChange={e => setCreateAsTest(e.target.checked)} className="mt-1 h-4 w-4 accent-purple-700" />
+                <span className="text-sm text-gray-700">
+                  <span className="font-semibold text-purple-800">Testbasar</span> – für niemanden sichtbar außer dir und den
+                  Personen, die du danach einlädst. Nicht auf der Startseite, nicht in den Listen.
+                  Lässt sich später nicht mehr ändern.
+                </span>
+              </label>
               <div className="md:col-span-2 flex justify-end gap-3">
                 <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">Abbrechen</button>
                 <button type="submit" disabled={saving} className="px-6 py-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold rounded-lg transition-colors disabled:opacity-50">
@@ -189,6 +203,9 @@ export default function AdminBasarsPage() {
                       <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[basar.status]}`}>
                         {STATUS_LABELS[basar.status]}
                       </span>
+                      {basar.isTest && (
+                        <span className="flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800">TEST</span>
+                      )}
                       <h2 className="w-full sm:w-auto text-lg font-bold text-gray-800 break-words sm:truncate">{basar.title}</h2>
                     </div>
                     <p className="text-sm text-gray-500">

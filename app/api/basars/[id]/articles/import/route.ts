@@ -1,6 +1,7 @@
 ﻿import { NextResponse } from 'next/server';
 import { prisma } from '../../../../../lib/prisma';
 import { requireAuth } from '../../../../../lib/apiAuth';
+import { requireBasarAccess } from '../../../../../lib/basarAccess';
 import { maxArticlesFor } from '../../../../../lib/articleLimits';
 
 // POST /api/basars/:id/articles/import
@@ -20,6 +21,9 @@ export async function POST(
 
     const sellerId: number = auth.sellerId!;
     const { id: basarId } = await params;
+    // Testbasar: nur Admin und Eingeladene, sonst 404 (app/lib/basarAccess.ts).
+    const denied = await requireBasarAccess(authResult.auth, basarId);
+    if (denied) return denied;
 
     // Parse and validate the request body BEFORE any DB round trips, so a malformed request
     // is rejected cheaply instead of paying for seller/basar/basarSeller lookups first.

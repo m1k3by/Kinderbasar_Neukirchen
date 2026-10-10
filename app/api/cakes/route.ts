@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../lib/prisma';
 import { requireAuth } from '../../lib/apiAuth';
+import { requireBasarAccess } from '../../lib/basarAccess';
 
 function parseSellerId(value: unknown): number | null {
   const num = typeof value === 'string' ? parseInt(value, 10) : (value as number);
@@ -20,6 +21,9 @@ export async function GET(request: Request) {
     if (!basarId) {
       return NextResponse.json({ error: 'basarId ist erforderlich' }, { status: 400 });
     }
+    // Testbasar: nur Admin und Eingeladene (app/lib/basarAccess.ts).
+    const denied = await requireBasarAccess(auth, basarId);
+    if (denied) return denied;
 
     const cakes = await prisma.cake.findMany({
       where: { basarId },
@@ -65,6 +69,9 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+    // Testbasar: nur Admin und Eingeladene (app/lib/basarAccess.ts).
+    const denied = await requireBasarAccess(auth, String(body.basarId));
+    if (denied) return denied;
 
     const sellerIdInt = parseSellerId(body.sellerId);
 

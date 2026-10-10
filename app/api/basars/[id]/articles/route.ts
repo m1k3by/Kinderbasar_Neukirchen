@@ -1,6 +1,7 @@
 ﻿import { NextResponse } from 'next/server';
 import { prisma } from '../../../../lib/prisma';
 import { requireAuth } from '../../../../lib/apiAuth';
+import { requireBasarAccess } from '../../../../lib/basarAccess';
 import { maxArticlesFor } from '../../../../lib/articleLimits';
 
 // GET /api/basars/:id/articles – get articles for calling seller in this basar
@@ -10,6 +11,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (authResult.response) return authResult.response;
     const { auth } = authResult;
     const { id: basarId } = await params;
+    // Testbasar: nur Admin und Eingeladene, sonst 404 (app/lib/basarAccess.ts).
+    const denied = await requireBasarAccess(authResult.auth, basarId);
+    if (denied) return denied;
 
     // Admin sees all articles; seller/employee sees only their own
     if (auth.role === 'admin') {
@@ -75,6 +79,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const sellerId: number = auth.sellerId!;
     const { id: basarId } = await params;
+    // Testbasar: nur Admin und Eingeladene, sonst 404 (app/lib/basarAccess.ts).
+    const denied = await requireBasarAccess(authResult.auth, basarId);
+    if (denied) return denied;
 
     // Parse and validate the request body BEFORE any DB round trips, so a malformed request
     // is rejected cheaply instead of paying for seller/basar lookups first.

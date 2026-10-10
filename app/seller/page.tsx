@@ -19,6 +19,8 @@ interface Basar {
   entryFee: number;
   status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
   isArchived: boolean;
+  /** Testbasar: nur für Eingeladene sichtbar (app/lib/basarAccess.ts). Die Route liefert es immer. */
+  isTest: boolean;
   // Zwei getrennte Anmeldezeitraeume, je nach Rolle. GET /api/basars liefert sie schon
   // immer mit (include, kein select) – deklariert waren sie hier bisher nicht, deshalb
   // konnte die Karte den Knopf nicht vorab sperren.
@@ -321,7 +323,7 @@ export default function SellerPage() {
                       <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[basar.status]}`}>
                         {STATUS_LABELS[basar.status]}
                       </span>
-                      <span className="font-bold text-gray-900">{basar.title}</span>
+                      <span className="font-bold text-gray-900">{basar.title}{basar.isTest && <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-800">TEST</span>}</span>
                     </div>
                     <p className="text-sm text-gray-500 mt-1">
                       {new Date(basar.eventDate).toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}
@@ -387,7 +389,7 @@ export default function SellerPage() {
                         <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">
                           {STATUS_LABELS.CLOSED}
                         </span>
-                        <h3 className="text-sm font-bold text-gray-600 truncate">{basar.title}</h3>
+                        <h3 className="text-sm font-bold text-gray-600 truncate">{basar.title}{basar.isTest && <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-800">TEST</span>}</h3>
                       </div>
                       <p className="text-xs text-gray-400">
                         {new Date(basar.eventDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}

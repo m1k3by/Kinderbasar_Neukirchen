@@ -76,6 +76,12 @@ export function buildBasarData(
     data.title = title;
   }
 
+  // Testbasar (app/lib/basarAccess.ts) nur beim Anlegen. Im Update-Modus wird das Feld bewusst
+  // ignoriert statt abgelehnt: nachträglich auf „Test" gestellt, wäre ein echter Basar mit einem
+  // Klick für alle Verkäufer und Kassierer unsichtbar – und zurück in einen Testbasar würde ein
+  // echter nie wieder. Nur ein echtes `true` zählt, kein "true"-String oder 1.
+  if (mode === 'create' && body.isTest !== undefined) data.isTest = body.isTest === true;
+
   if (body.description !== undefined) data.description = emptyToNull(body.description);
   if (body.location !== undefined) data.location = emptyToNull(body.location);
 

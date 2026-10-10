@@ -20,6 +20,9 @@ export const BACKUP_TABLES = [
   { name: 'SellerIdCounter', model: 'sellerIdCounter', orderBy: 'id' },
   { name: 'SellerArticle', model: 'sellerArticle', orderBy: 'id' },
   { name: 'BasarSeller', model: 'basarSeller', orderBy: 'id' },
+  // Kein eigenes id-Feld: eindeutig ist nur das Paar. Ein Cursor braucht ein eindeutiges Feld –
+  // mit createdAt bräche die Sicherung ab der zweiten Seite (500 Zeilen) ab.
+  { name: 'BasarInvite', model: 'basarInvite', orderBy: ['basarId', 'sellerId'] },
   { name: 'TaskSignup', model: 'taskSignup', orderBy: 'id' },
   { name: 'Cake', model: 'cake', orderBy: 'id' },
   { name: 'Article', model: 'article', orderBy: 'id' },
@@ -29,6 +32,19 @@ export const BACKUP_TABLES = [
   { name: 'ChatLog', model: 'chatLog', orderBy: 'id' },
   { name: 'ErrorLog', model: 'errorLog', orderBy: 'id' },
 ] as const;
+
+type BackupTable = (typeof BACKUP_TABLES)[number];
+const keysOf = (t: BackupTable): readonly string[] => (Array.isArray(t.orderBy) ? t.orderBy : [t.orderBy as string]);
+
+/**
+ * Cursor auf die letzte Zeile einer Seite. Bei zusammengesetztem Schlüssel erwartet Prisma ihn
+ * unter dem Namen der Felder mit Unterstrich (`basarId_sellerId: { basarId, sellerId }`).
+ */
+export function cursorFor(t: BackupTable, last: Record<string, unknown>): Record<string, unknown> {
+  const keys = keysOf(t);
+  if (keys.length === 1) return { [keys[0]]: last[keys[0]] };
+  return { [keys.join('_')]: Object.fromEntries(keys.map(k => [k, last[k]])) };
+}
 
 /** Zeilen pro Abfrage. Hält den Speicherbedarf konstant, unabhängig von der Tabellengröße. */
 const BATCH = 500;
@@ -62,7 +78,7 @@ export async function* backupChunks(db: typeof prisma = prisma): AsyncGenerator<
         findMany: (args: unknown) => Promise<Record<string, unknown>[]>;
       }>)[table.model].findMany({
         take: BATCH,
-        orderBy: { [table.orderBy]: 'asc' },
+        orderBy: keysOf(table).map(k => ({ [k]: 'asc' })),
         ...(cursor ? { cursor, skip: 1 } : {}),
       });
 
@@ -70,7 +86,7 @@ export async function* backupChunks(db: typeof prisma = prisma): AsyncGenerator<
       for (const row of rows) yield `${written++ ? ',' : ''}${JSON.stringify(row)}`;
       if (rows.length < BATCH) break;
 
-      cursor = { [table.orderBy]: rows[rows.length - 1][table.orderBy] };
+      cursor = cursorFor(table, rows[rows.length - 1]);
     }
 
     yield ']';

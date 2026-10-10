@@ -34,6 +34,7 @@ model Seller {
   cashierSales       Sale[]         @relation("CashierSales")
   cancelledSales     Sale[]         @relation("CancelledSales")
   sellerArticles     SellerArticle[]
+  basarInvites       BasarInvite[]
 }
 
 model Task {
@@ -114,6 +115,11 @@ model Basar {
   entryFee             Decimal     @db.Decimal(6, 2) @default(0)
   status               BasarStatus @default(DRAFT)
   isArchived           Boolean     @default(false)
+  // Testbasar: nur für den Admin und ausdrücklich Eingeladene (BasarInvite) sichtbar – nicht
+  // auf der Startseite, nicht in den Listen, nicht über die API. Wird nur beim Anlegen gesetzt
+  // (app/lib/basarPayload.ts): nachträglich umgeschaltet würde ein Klick den echten Basar für
+  // alle verstecken. Zentrale Regel in app/lib/basarAccess.ts.
+  isTest               Boolean     @default(false)
 
   // Basartage. Task.day ("Freitag") wird über dateForWeekday hierauf abgebildet.
   dateFriday                DateTime?
@@ -147,6 +153,23 @@ model Basar {
   sales                Sale[]
   taskSignups          TaskSignup[]
   cakes                Cake[]
+  invites              BasarInvite[]
+}
+
+// Einladung in einen Testbasar (Basar.isTest). Getrennt von BasarSeller, weil Einladen etwas
+// anderes ist als Teilnehmen: Eingeladene *sehen* den Basar, angemeldet sind sie damit noch
+// nicht. Und eine Einladung lässt sich zurücknehmen, ohne Artikel und Verkäufe anzufassen –
+// an einer BasarSeller-Zeile hängen Artikel mit onDelete: Cascade.
+model BasarInvite {
+  basarId   String
+  sellerId  Int
+  createdAt DateTime @default(now())
+  basar     Basar    @relation(fields: [basarId], references: [id], onDelete: Cascade)
+  seller    Seller   @relation(fields: [sellerId], references: [sellerId], onDelete: Cascade)
+
+  @@id([basarId, sellerId])
+  // Die Basar-Liste fragt je Aufruf „bin ich eingeladen?" über sellerId ab.
+  @@index([sellerId])
 }
 
 model BasarSeller {

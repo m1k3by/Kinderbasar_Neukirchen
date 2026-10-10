@@ -124,3 +124,29 @@ describe('POST /api/basars', () => {
     expect(res.status).toBe(500);
   });
 });
+
+// Testbasare nur für Admin und Eingeladene (app/lib/basarAccess.ts). Ein gemocktes Prisma
+// ignoriert where – geprüft wird deshalb das Argument, nicht die Antwort.
+describe('GET /api/basars – Testbasare', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prismaMock.basar.findMany.mockResolvedValue([]);
+    prismaMock.basar.count.mockResolvedValue(0);
+    prismaMock.seller.findUnique.mockResolvedValue({ isOrga: false });
+  });
+
+  it('Verkäufer: echte Basare plus Testbasare mit eigener Einladung', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1046) });
+    await GET(makeRequest('GET'));
+    const where = prismaMock.basar.findMany.mock.calls[0][0].where;
+    expect(where).toEqual({ isArchived: false, OR: [{ isTest: false }, { invites: { some: { sellerId: 1046 } } }] });
+    // Die Gesamtzahl muss dieselbe Menge zählen, sonst verrät sie, dass es mehr Basare gibt.
+    expect(prismaMock.basar.count.mock.calls[0][0].where).toEqual(where);
+  });
+
+  it('Admin: alle Basare, wie bisher', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    await GET(makeRequest('GET'));
+    expect(prismaMock.basar.findMany.mock.calls[0][0].where).toEqual({ isArchived: false });
+  });
+});

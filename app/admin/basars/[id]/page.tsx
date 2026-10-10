@@ -6,6 +6,7 @@ import Header from '../../../components/Header';
 import { getNavLinks, basarsAdminActiveKey, type NavUser } from '../../../lib/navLinks';
 import BasarFormFields, { EMPTY_BASAR_FORM, basarFormFromApi, type BasarFormState } from '../BasarFormFields';
 import { matchesParticipantFilter, matchesSheetSet, type ParticipantFilter, type SheetSet } from '../../../lib/participation';
+import InvitesPanel from './InvitesPanel';
 import { NEXT_STATUS, PREVIOUS_STATUS, STATUS_LABELS, transitionConfirmText, type BasarStatusValue } from '../../../lib/basarStatus';
 
 interface Basar {
@@ -19,6 +20,8 @@ interface Basar {
   commissionPercent: number;
   entryFee: number;
   status: 'DRAFT' | 'OPEN' | 'ACTIVE' | 'CLOSED';
+  /** Testbasar (app/lib/basarAccess.ts). Nicht optional: die Route liefert jedes Basar-Feld. */
+  isTest: boolean;
   /**
    * **Optional, und das mit Absicht**: app/api/basars/[id]/route.ts haengt die Liste nur in
    * den Admin-Zweig (`...(isAdmin ? { basarSellers: … } : {})`). Diese Seite ist laut
@@ -632,6 +635,9 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
               <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[basar.status]}`}>
                 {STATUS_LABELS[basar.status]}
               </span>
+              {basar.isTest && (
+                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800">TEST</span>
+              )}
               <h1 className="text-2xl font-bold text-gray-800">{basar.title}</h1>
             </div>
             <p className="text-gray-500">
@@ -703,6 +709,9 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
               </div>
             ))}
           </div>
+        )}
+        {tab === 'overview' && basar.isTest && navUser.role === 'admin' && (
+          <InvitesPanel basarId={basar.id} />
         )}
 
         {tab === 'sellers' && navUser.role === 'admin' && (

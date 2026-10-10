@@ -1,10 +1,11 @@
 ﻿import { NextResponse } from 'next/server';
 import { prisma } from '../../../../lib/prisma';
 import { requireCashier } from '../../../../lib/apiAuth';
+import { requireBasarAccess, visibleBasarWhere } from '../../../../lib/basarAccess';
 
-// GET /api/articles/scan/:qrCode – returns article info for the kasse scanner
+// GET /api/articles/scan/:qrCode?basarId=… – returns article info for the kasse scanner
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ qrCode: string }> }
 ) {
   try {
@@ -12,13 +13,27 @@ export async function GET(
     if (authResult.response) return authResult.response;
 
     const { qrCode } = await params;
+    const basarId = new URL(request.url).searchParams.get('basarId');
 
-    // Use findFirst so the same QR code can exist in multiple basars (stable codes).
-    // Among all articles with this code, find the one in an ACTIVE basar.
+    if (basarId) {
+      const denied = await requireBasarAccess(authResult.auth, basarId);
+      if (denied) return denied;
+    }
+
+    // Derselbe QR-Code existiert in mehreren Basaren (stabile Codes über Archiv-Übernahmen).
+    // Mit basarId – so ruft die Kasse – wird nur in *ihrem* Basar gesucht. Vorher suchte die
+    // Route in jedem aktiven Basar: liefen zwei gleichzeitig (Testbasar neben dem echten),
+    // konnte der Artikel aus dem falschen kommen.
+    // Ohne basarId bleibt der Aufruf gültig, weil nach einem Deploy Kassengeräte noch die alte
+    // App-Version im Cache haben können (PWA). Dann aber nur über Basare, die der Kassierer
+    // überhaupt sehen darf; vor einer Buchung im falschen Basar schützt zusätzlich
+    // POST /api/basars/[id]/sales, das nur Artikel des eigenen Basars annimmt.
     const article = await prisma.article.findFirst({
       where: {
         qrCode,
-        basarSeller: { basar: { status: 'ACTIVE' } },
+        basarSeller: basarId
+          ? { basarId, basar: { status: 'ACTIVE' } }
+          : { basar: { status: 'ACTIVE', ...visibleBasarWhere(authResult.auth) } },
       },
       include: {
         basarSeller: {
