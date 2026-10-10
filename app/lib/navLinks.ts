@@ -37,7 +37,7 @@ export interface NavLink {
   action?: 'logout';
 }
 
-export type AdminNavKey = 'basarliste' | 'basare' | 'archiv' | 'helferliste' | 'aufgaben' | 'hilfe' | 'logs';
+export type AdminNavKey = 'basarliste' | 'basare' | 'archiv' | 'helferliste' | 'aufgaben' | 'etikettencheck' | 'hilfe' | 'logs';
 export type SellerNavKey = 'verkaeufer' | 'mitarbeiter' | 'kasse';
 export type NavKey = AdminNavKey | SellerNavKey;
 
@@ -54,6 +54,8 @@ const ADMIN_LINKS: NavLinkDef[] = [
   { key: 'archiv', href: '/admin/basars/archiv', label: 'Archiv' },
   { key: 'helferliste', href: '/admin/list', label: 'Helferliste' },
   { key: 'aufgaben', href: '/admin/tasks', label: 'Aufgaben' },
+  // Nur Admin: /admin/** ist laut middleware.ts admin-only (Ausnahme /admin/basars für Kassierer).
+  { key: 'etikettencheck', href: '/admin/etiketten-check', label: 'Etiketten-Check' },
   { key: 'hilfe', href: '/admin/hilfe', label: 'Hilfe-Statistik' },
   { key: 'logs', href: '/admin/logs', label: 'Logs', badge: 'errors' },
 ];

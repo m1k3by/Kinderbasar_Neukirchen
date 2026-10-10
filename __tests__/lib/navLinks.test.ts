@@ -63,6 +63,7 @@ describe('getNavLinks – Admin', () => {
       '/admin/basars/archiv',
       '/admin/list',
       '/admin/tasks',
+      '/admin/etiketten-check',
       '/admin/hilfe',
       '/admin/logs',
       '/',
