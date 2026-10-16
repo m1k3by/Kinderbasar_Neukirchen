@@ -40,7 +40,11 @@ export default async function globalSetup() {
     // dann testet der Lauf auch, dass die Kette selbst funktioniert.
     execSync('npx prisma db push --skip-generate --accept-data-loss', { stdio: 'inherit' });
 
-    const foreign = await prisma.seller.count({ where: { email: { not: HELFER.email } } });
+    // Alles, was die E2E-Läufe anlegen, trägt eine @example.test-Adresse (reservierte Domain,
+    // RFC 2606 – an die lässt sich nichts zustellen, eine echte Registrierung kann sie nicht
+    // haben). So erkennt der Seed auch Reste eines abgebrochenen Laufs als eigene, und die
+    // Sperre gegen eine versehentlich geladene Produktivdatenbank bleibt scharf.
+    const foreign = await prisma.seller.count({ where: { NOT: { email: { endsWith: '@example.test' } } } });
     if (foreign > 0) {
       throw new Error(
         `Abbruch: ${foreign} fremde Verkaeufer in der Zieldatenbank. Das sieht nicht nach ` +
@@ -48,7 +52,16 @@ export default async function globalSetup() {
       );
     }
 
-    // Reihenfolge nach Fremdschluesseln: erst die Blaetter.
+    // Reihenfolge nach Fremdschluesseln: erst die Blaetter. Die ersten Zeilen räumen Reste des
+    // Basar-Durchlaufs (e2e/basar-durchlauf.spec.ts) ab – bleibt nach einem abgebrochenen Lauf
+    // ein Verkauf stehen, scheiterte seller.deleteMany sonst an dessen Fremdschlüssel.
+    await prisma.settlement.deleteMany({});
+    await prisma.sale.deleteMany({});
+    await prisma.article.deleteMany({});
+    await prisma.sellerArticle.deleteMany({});
+    await prisma.basarInvite.deleteMany({});
+    await prisma.mailQueue.deleteMany({});
+    await prisma.errorLog.deleteMany({});
     await prisma.taskSignup.deleteMany({});
     await prisma.cake.deleteMany({});
     await prisma.task.deleteMany({});

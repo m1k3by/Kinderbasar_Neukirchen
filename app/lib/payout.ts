@@ -28,3 +28,30 @@ export function roundPayout(amount: number): number {
   const roundedCents = Math.floor((Math.abs(cents) + 5) / 10) * 10;
   return (sign * roundedCents) / 100;
 }
+
+/**
+ * Provision und Auszahlung eines Verkäufers – die eine Formel, nach der abgerechnet wird.
+ *
+ * Genutzt von POST /api/basars/[id]/settlements (die verbindliche Abrechnung) und von der
+ * Verkäuferseite für die laufende Vorschau während des Basars. Zwei Stellen mit eigener
+ * Rechnung liefen früher oder später auseinander – und die Vorschau verspräche dann einen
+ * Betrag, den die Abrechnung nicht zahlt.
+ *
+ * Die Ausdrücke sind wörtlich aus der Abrechnungsroute übernommen, auch in der Reihenfolge
+ * (`satz / 100`, dann `* 100`): eine umgestellte Gleitkommarechnung kann an x,xx5-Grenzen
+ * um einen Cent anders runden.
+ *
+ * @param grossRevenue Summe der Verkaufspreise in Euro.
+ * @param commissionPercent Provisionssatz in Prozent (persönlicher Satz, sonst der des Basars).
+ * @param entryFee Teilnahmegebühr in Euro.
+ */
+export function settlementAmounts(
+  grossRevenue: number,
+  commissionPercent: number,
+  entryFee: number
+): { commissionAmount: number; netPayout: number } {
+  const commissionRate = commissionPercent / 100;
+  const commissionAmount = Math.round(grossRevenue * commissionRate * 100) / 100;
+  const netPayout = roundPayout(Math.max(0, grossRevenue - commissionAmount - entryFee));
+  return { commissionAmount, netPayout };
+}

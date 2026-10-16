@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../../../lib/prisma';
 import { requireAuth, requireAdmin } from '../../../../lib/apiAuth';
 import { requireBasarAccess } from '../../../../lib/basarAccess';
-import { roundPayout } from '../../../../lib/payout';
+import { settlementAmounts } from '../../../../lib/payout';
 
 // GET /api/basars/:id/settlements – list all settlements for this basar
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -87,14 +87,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const entryFeeAmt = Number(basar.entryFee);
 
     const settlements = rows.map((row) => {
-      const commissionRate = Number(row.commissionOverride ?? basar.commissionPercent) / 100;
       const grossRevenue = Number(row.grossRevenue);
-      const commissionAmount = Math.round(grossRevenue * commissionRate * 100) / 100;
-      // Auf 10 Cent gerundet, weil bar ausgezahlt wird (app/lib/payout.ts). Hier und nur
-      // hier: der Wert geht so in Settlement.netPayout und damit in jede Ansicht, die ihn
-      // liest – Abrechnungs-PDF, Sammelabrechnung, Verkäuferseite, Admin-Liste. Die
-      // Provision bleibt exakt; die Differenz von höchstens 5 Cent trägt der Basar.
-      const netPayout = roundPayout(Math.max(0, grossRevenue - commissionAmount - entryFeeAmt));
+      // Formel in app/lib/payout.ts – dieselbe rechnet die Vorschau auf der Verkäuferseite.
+      // Die Auszahlung ist dort auf 10 Cent gerundet, weil bar ausgezahlt wird. Sie geht so
+      // in Settlement.netPayout und damit in jede Ansicht, die ihn liest – Abrechnungs-PDF,
+      // Sammelabrechnung, Verkäuferseite, Admin-Liste. Die Provision bleibt exakt; die
+      // Differenz von höchstens 5 Cent trägt der Basar.
+      const { commissionAmount, netPayout } = settlementAmounts(
+        grossRevenue,
+        Number(row.commissionOverride ?? basar.commissionPercent),
+        entryFeeAmt
+      );
       return {
         basarId,
         basarSellerId: row.basarSellerId,

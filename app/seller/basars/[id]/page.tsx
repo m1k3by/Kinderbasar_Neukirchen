@@ -7,6 +7,7 @@ import Header from '../../../components/Header';
 import { parseSizes, sizeGroups } from '../../../lib/sizes';
 import { getNavLinks } from '../../../lib/navLinks';
 import { formatArticleLimit, maxArticlesFor } from '../../../lib/articleLimits';
+import { settlementAmounts } from '../../../lib/payout';
 
 interface Article {
   id: string;
@@ -25,6 +26,9 @@ interface BasarSeller {
   sellerId: number;
   seller?: { sellerId: number };
   maxArticlesOverride?: number;
+  // Persönlicher Provisionssatz in Prozent. Prisma.Decimal kommt als JSON-String an
+  // (GET /api/basars/[id]/articles liefert die ganze Zeile); null = Satz des Basars.
+  commissionOverride?: string | number | null;
 }
 
 interface BasarDetail {
@@ -380,7 +384,15 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
 
   const maxArticles = maxArticlesFor(basar, { isEmployee, isOrga }, basarSeller?.maxArticlesOverride);
   const soldCount = articles.filter(a => a.status === 'SOLD').length;
-  const soldRevenue = articles.filter(a => a.status === 'SOLD').reduce((s, a) => s + Number(a.price), 0);
+  // In ganzen Cent summiert, wie das SUM der Datenbank in der Abrechnung. Als Gleitkommasumme
+  // hinge die Genauigkeit am Preisraster: 0,50er-Schritte sind binär exakt, 0,10er nicht.
+  const soldRevenue =
+    articles.filter(a => a.status === 'SOLD').reduce((cents, a) => cents + Math.round(Number(a.price) * 100), 0) / 100;
+  // Vorschau mit derselben Formel wie die Abrechnung (app/lib/payout.ts) – inklusive
+  // persönlichem Satz, Teilnahmegebühr und 10-Cent-Rundung. Eine eigene, vereinfachte
+  // Rechnung hier würde einen Betrag versprechen, den die Abrechnung nicht zahlt.
+  const commissionPercent = Number(basarSeller?.commissionOverride ?? basar.commissionPercent);
+  const payoutPreview = settlementAmounts(soldRevenue, commissionPercent, Number(basar.entryFee));
   // Nur der Basar-Status entscheidet, nicht die Teilnahme: Artikel dürfen vorbereitet
   // werden, bevor man sich anmeldet (die API sieht das genauso, siehe
   // app/api/basars/[id]/articles/route.ts).
@@ -481,20 +493,31 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
                 <button onClick={loadAll} className="text-sm text-yellow-600 hover:underline">↻ Aktualisieren</button>
               )}
             </div>
-            <div className="grid grid-cols-3 gap-3 mt-3">
+            {/* Zwei Spalten am Handy, vier ab sm: vier Beträge nebeneinander passen auf
+                375 px nicht, ohne dass die Ziffern umbrechen. */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
               <div className="text-center bg-gray-50 rounded-lg p-3">
-                <div className="text-2xl font-bold text-gray-800">{articles.length}</div>
+                <div className="text-xl sm:text-2xl font-bold text-gray-800">{articles.length}</div>
                 <div className="text-xs text-gray-500">Artikel gesamt</div>
               </div>
               <div className="text-center bg-green-50 rounded-lg p-3">
-                <div className="text-2xl font-bold text-green-600">{soldCount}</div>
+                <div className="text-xl sm:text-2xl font-bold text-green-600">{soldCount}</div>
                 <div className="text-xs text-gray-500">Verkauft</div>
               </div>
               <div className="text-center bg-blue-50 rounded-lg p-3">
-                <div className="text-2xl font-bold text-blue-600">{fmt(soldRevenue)} €</div>
+                <div className="text-xl sm:text-2xl font-bold text-blue-600 whitespace-nowrap">{fmt(soldRevenue)} €</div>
                 <div className="text-xs text-gray-500">Erlös bisher</div>
               </div>
+              <div className="text-center bg-emerald-50 rounded-lg p-3 ring-1 ring-emerald-200">
+                <div className="text-xl sm:text-2xl font-bold text-emerald-700 whitespace-nowrap">{fmt(payoutPreview.netPayout)} €</div>
+                <div className="text-xs text-gray-500">Auszahlung</div>
+              </div>
             </div>
+            <p className="text-xs text-gray-500 mt-3">
+              Auszahlung = Erlös abzüglich {fmt(commissionPercent).replace(/,00$/, '')} % Provision
+              {Number(basar.entryFee) > 0 && ` und ${fmt(Number(basar.entryFee))} € Teilnahmegebühr`},
+              auf 10 Cent gerundet. Stand jetzt – verbindlich ist die Abrechnung nach dem Basar.
+            </p>
           </div>
         )}
 

@@ -9,6 +9,8 @@ vi.mock('next/headers', () => ({
 
 const prismaMock = vi.hoisted(() => ({
   sale: { findMany: vi.fn() },
+  basar: { findUnique: vi.fn() },
+  basarInvite: { findUnique: vi.fn() },
 }));
 vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
 
@@ -33,13 +35,121 @@ describe('GET /api/basars/[id]/transactions', () => {
     expect(res.status).toBe(401);
   });
 
-  // Zentrale Zusage der Aufgabe: nur Admins dürfen die Kassenvorgänge einsehen. Ein
-  // Kassierer ist zwar berechtigt zu kassieren (requireCashier würde ihn durchlassen),
-  // hier aber ausdrücklich nicht.
-  it('returns 403 für Kassierer ohne Admin-Rolle', async () => {
-    cookiesGetMock.mockReturnValue({ value: cashierToken(5555) });
+  // Ein Kassierer darf die Route aufrufen, sieht aber nur die eigenen Bons: cashierId wird
+  // serverseitig erzwungen. Geprüft wird das Argument von findMany, nicht der Statuscode.
+  it('Kassierer: where.cashierId ist die eigene Nummer', async () => {
+    cookiesGetMock.mockReturnValue({ value: cashierToken(91004) });
+    prismaMock.sale.findMany.mockResolvedValue([]);
+    const res = await GET(makeRequest(), makeContext());
+    expect(res.status).toBe(200);
+    expect(prismaMock.sale.findMany.mock.calls[0][0].where.cashierId).toBe(91004);
+  });
+
+  it('Kassierer: ein übergebener cashierId-Parameter wird überschrieben, nicht beachtet', async () => {
+    cookiesGetMock.mockReturnValue({ value: cashierToken(91004) });
+    prismaMock.sale.findMany.mockResolvedValue([]);
+    for (const qs of ['?cashierId=1', '?cashierId=null']) {
+      prismaMock.sale.findMany.mockClear();
+      const res = await GET(makeRequest(qs), makeContext());
+      expect(res.status).toBe(200);
+      expect(prismaMock.sale.findMany.mock.calls[0][0].where.cashierId, qs).toBe(91004);
+    }
+  });
+
+  it('Kassierer ohne sellerId im Token: 403, keine Abfrage', async () => {
+    const jwt = (await import('jsonwebtoken')).default;
+    cookiesGetMock.mockReturnValue({ value: jwt.sign({ role: 'employee', isCashier: true }, process.env.JWT_SECRET!) });
     const res = await GET(makeRequest(), makeContext());
     expect(res.status).toBe(403);
+    expect(prismaMock.sale.findMany).not.toHaveBeenCalled();
+  });
+
+  it('Kassierer in einem Testbasar ohne Einladung: 404, keine Abfrage', async () => {
+    cookiesGetMock.mockReturnValue({ value: cashierToken(91004) });
+    prismaMock.basar.findUnique.mockResolvedValue({ isTest: true });
+    prismaMock.basarInvite.findUnique.mockResolvedValue(null);
+    const res = await GET(makeRequest(), makeContext());
+    expect(res.status).toBe(404);
+    expect(prismaMock.sale.findMany).not.toHaveBeenCalled();
+    prismaMock.basar.findUnique.mockReset();
+  });
+
+  it('Admin ohne Parameter: kein cashierId im where (sieht alle Bons)', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.sale.findMany.mockResolvedValue([]);
+    await GET(makeRequest(), makeContext());
+    expect(prismaMock.sale.findMany.mock.calls[0][0].where).not.toHaveProperty('cashierId');
+  });
+
+  it('Admin: cashierId-Filter wirkt weiterhin', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.sale.findMany.mockResolvedValue([]);
+    await GET(makeRequest('?cashierId=7'), makeContext());
+    expect(prismaMock.sale.findMany.mock.calls[0][0].where.cashierId).toBe(7);
+  });
+
+  it('txId setzt where.clientTxId', async () => {
+    cookiesGetMock.mockReturnValue({ value: cashierToken(91004) });
+    prismaMock.sale.findMany.mockResolvedValue([]);
+    await GET(makeRequest('?txId=abc'), makeContext());
+    const where = prismaMock.sale.findMany.mock.calls[0][0].where;
+    expect(where.clientTxId).toBe('abc');
+    expect(where.cashierId).toBe(91004);
+  });
+
+  it('ohne txId kein clientTxId im where', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.sale.findMany.mockResolvedValue([]);
+    await GET(makeRequest(), makeContext());
+    expect(prismaMock.sale.findMany.mock.calls[0][0].where).not.toHaveProperty('clientTxId');
+  });
+
+  // summary rechnet über alle Vorgänge, nicht nur über die Seite, und lässt Stornos weg.
+  // salePrice als dec(): Number() muss greifen, sonst entstünde "02.53"-Verkettung.
+  it('summary: Bons, Artikel und Summe ohne stornierte Positionen, über alle Vorgänge', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.sale.findMany.mockResolvedValue([
+      {
+        id: 's3', clientTxId: 'tx-2', cashierId: 42, salePrice: dec(2.5),
+        soldAt: new Date('2026-08-16T11:00:00Z'), isCancelled: false, cashier,
+        article: { title: 'C', sizeLabel: null, qrCode: 'QR3', basarSeller: seller },
+      },
+      {
+        id: 's2', clientTxId: 'tx-1', cashierId: 42, salePrice: dec(3.0),
+        soldAt: new Date('2026-08-16T10:01:00Z'), isCancelled: true, cashier,
+        article: { title: 'B', sizeLabel: null, qrCode: 'QR2', basarSeller: seller },
+      },
+      {
+        id: 's1', clientTxId: 'tx-1', cashierId: 42, salePrice: dec(0.1),
+        soldAt: new Date('2026-08-16T10:00:00Z'), isCancelled: false, cashier,
+        article: { title: 'A', sizeLabel: null, qrCode: 'QR1', basarSeller: seller },
+      },
+    ]);
+
+    // limit=1: die Seite enthält nur einen Vorgang, summary muss trotzdem beide zählen.
+    const data = await (await GET(makeRequest('?limit=1'), makeContext())).json();
+    expect(data.transactions).toHaveLength(1);
+    expect(data.nextCursor).not.toBeNull();
+    expect(data.summary).toEqual({ bons: 2, articles: 2, total: 2.6 });
+  });
+
+  it('total je Vorgang ist auf 2 Nachkommastellen gerundet (0,1 + 0,2)', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.sale.findMany.mockResolvedValue([
+      {
+        id: 's2', clientTxId: 'tx-1', cashierId: 42, salePrice: dec(0.2),
+        soldAt: new Date('2026-08-16T10:01:00Z'), isCancelled: false, cashier,
+        article: { title: 'B', sizeLabel: null, qrCode: 'QR2', basarSeller: seller },
+      },
+      {
+        id: 's1', clientTxId: 'tx-1', cashierId: 42, salePrice: dec(0.1),
+        soldAt: new Date('2026-08-16T10:00:00Z'), isCancelled: false, cashier,
+        article: { title: 'A', sizeLabel: null, qrCode: 'QR1', basarSeller: seller },
+      },
+    ]);
+    const data = await (await GET(makeRequest(), makeContext())).json();
+    expect(data.transactions[0].total).toBe(0.3);
+    expect(data.summary.total).toBe(0.3);
   });
 
   it('returns 403 für regulären Verkäufer', async () => {

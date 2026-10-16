@@ -7,6 +7,7 @@ import { articleCacheKey, articleCacheEtagKey, staleArticleCacheKeys } from '../
 import { buildScannerConfig, hasNativeBarcodeDetector, scannerRecoveryAction, scannerTuning, SCANNER_VIEWPORT_HEIGHT, type ScannerTuning } from '../../../../lib/scannerConfig';
 import type { LookupArticle } from '../../../../lib/manualLookup';
 import ManualLookup from '../../../../components/ManualLookup';
+import BonHistory, { type BonView, type LastBon } from './BonHistory';
 
 interface ScannedArticle {
   id: string;
@@ -67,6 +68,10 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
   // and cashiers (see middleware.ts), so the nav must be corrected as soon as we know
   // who's asking, to avoid showing a cashier links the middleware would immediately block.
   const [navUser, setNavUser] = useState<NavUser>({ role: 'admin' });
+  // Snapshot des zuletzt erfolgreich kassierten Bons fürs Banner (nur online gebuchte
+  // Vorgänge; offline gespeicherte erzeugen bewusst keinen).
+  const [lastBon, setLastBon] = useState<LastBon | null>(null);
+  const [bonView, setBonView] = useState<BonView>(null);
 
   useEffect(() => {
     fetch('/api/me').then(res => res.ok ? res.json() : null).then(me => {
@@ -492,6 +497,16 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
       if (res.ok) {
         const data = await res.json();
         const failedCount = data.results.filter((r: any) => r.error).length;
+        // results[i] gehört zu cart[i]; ins Banner kommen nur die gebuchten Positionen.
+        const booked = cart.filter((_, idx) => !data.results[idx]?.error);
+        if (booked.length > 0) {
+          setLastBon({
+            txId: clientTxId,
+            at: new Date().toISOString(),
+            count: booked.length,
+            total: booked.reduce((sum, i) => sum + i.salePrice, 0),
+          });
+        }
         if (failedCount > 0) {
           showMessage(`${cart.length - failedCount} kassiert, ${failedCount} Fehler`, 'error');
         } else {
@@ -579,6 +594,8 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
           </div>
         )}
 
+        <BonHistory basarId={basarId} lastBon={lastBon} isAdmin={navUser.role === 'admin'} view={bonView} setView={setBonView} onOpen={stopScanner} />
+
         {/* QR Scanner */}
         <div className="bg-white rounded-xl shadow-md p-3 mb-2">
           <div className="flex items-center justify-between mb-2">
@@ -589,6 +606,12 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
               )}
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => { stopScanner(); setBonView('list'); }}
+                className="px-3 py-1 rounded-lg font-medium text-xs transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200"
+              >
+                🧾 Verkäufe
+              </button>
               <button
                 onClick={lookupOpen ? () => setLookupOpen(false) : openLookup}
                 className={`px-3 py-1 rounded-lg font-medium text-xs transition-colors ${lookupOpen ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-800 hover:bg-blue-200'}`}

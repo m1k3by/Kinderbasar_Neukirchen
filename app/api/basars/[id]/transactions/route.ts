@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../../../lib/prisma';
-import { requireAdmin } from '../../../../lib/apiAuth';
+import { requireCashier } from '../../../../lib/apiAuth';
+import { requireBasarAccess } from '../../../../lib/basarAccess';
 
 // Sicherheitsdeckel für die Rohabfrage – siehe Kommentar bei RAW_FETCH_CAP unten.
 // ponytail: In-Memory-Gruppierung statt SQL-groupBy über clientTxId, weil Zeilen mit
@@ -46,12 +47,21 @@ function cashierClauses(token: string): Prisma.SaleWhereInput[] {
 }
 
 // GET /api/basars/:id/transactions – Kassenvorgänge (gruppiert nach clientTxId) für die
-// aufklappbare Kassierertabelle in der Admin-Statistik. Admin only.
+// aufklappbare Kassierertabelle in der Admin-Statistik und die Verkaufsliste an der Kasse.
+// Admin sieht alle Vorgänge (mit allen Filtern); ein Kassierer nur die eigenen – dafür wird
+// cashierId serverseitig auf die eigene Nummer erzwungen, ein übergebener Wert zählt nicht.
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const authResult = await requireAdmin();
+    const authResult = await requireCashier();
     if (authResult.response) return authResult.response;
+    const { auth } = authResult;
     const { id: basarId } = await params;
+    const denied = await requireBasarAccess(auth, basarId);
+    if (denied) return denied;
+    const isAdmin = auth.role === 'admin';
+    if (!isAdmin && !auth.sellerId) {
+      return NextResponse.json({ error: 'Keine Kassierernummer im Login' }, { status: 403 });
+    }
 
     const url = new URL(request.url);
     const cashierIdParam = url.searchParams.get('cashierId');
@@ -62,13 +72,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     // einzeln optional und werden miteinander UND-verknüpft.
     const qArticle = url.searchParams.get('article')?.trim() || undefined;
     const qCashier = url.searchParams.get('cashier')?.trim() || undefined;
+    const txId = url.searchParams.get('txId');
     const cursor = url.searchParams.get('cursor');
     const limitParam = parseInt(url.searchParams.get('limit') || '50', 10);
     const limit = Math.min(Math.max(Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 50, 1), 200);
 
     const where: Prisma.SaleWhereInput = { basarId };
 
-    if (cashierIdParam !== null) {
+    if (txId) where.clientTxId = txId;
+
+    if (!isAdmin) {
+      where.cashierId = auth.sellerId;
+    } else if (cashierIdParam !== null) {
       if (cashierIdParam === 'null') {
         where.cashierId = null;
       } else {
@@ -169,16 +184,24 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const page = sortedGroups.slice(startIndex, startIndex + limit);
     const nextCursor = startIndex + limit < sortedGroups.length ? page[page.length - 1]?.key ?? null : null;
 
+    const round2 = (x: number) => Math.round(x * 100) / 100;
+    const activeItems = sortedGroups.flatMap((g) => g.items.filter((i) => !i.isCancelled));
+    const summary = {
+      bons: sortedGroups.length,
+      articles: activeItems.length,
+      total: round2(activeItems.reduce((sum, i) => sum + i.salePrice, 0)),
+    };
+
     const transactions = page.map((g) => ({
       txId: g.txId,
       cashierId: g.cashierId,
       cashierName: g.cashierName,
       soldAt: new Date(g.soldAtMin).toISOString(),
-      total: g.items.filter((i) => !i.isCancelled).reduce((sum, i) => sum + i.salePrice, 0),
+      total: round2(g.items.filter((i) => !i.isCancelled).reduce((sum, i) => sum + i.salePrice, 0)),
       items: g.items,
     }));
 
-    return NextResponse.json({ transactions, nextCursor });
+    return NextResponse.json({ transactions, nextCursor, summary });
   } catch (error) {
     console.error('GET /api/basars/[id]/transactions error:', error);
     return NextResponse.json({ error: 'Interner Serverfehler' }, { status: 500 });
