@@ -598,29 +598,35 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
 
         {/* QR Scanner */}
         <div className="bg-white rounded-xl shadow-md p-3 mb-2">
-          <div className="flex items-center justify-between mb-2">
+          {/* Seit drei Knöpfe in der Zeile stehen (Verkäufe, Manuell, Scannen), passt sie am Handy
+              nicht mehr auf eine Zeile: globals.css setzt dort für jeden Button 16 px Schrift und
+              44 px Mindesthöhe (Fingerziel, kein iOS-Zoom) und überstimmt damit text-xs. Die drei
+              Knöpfe brauchen so gemessen 351 px, die Karte bietet bei 320 px Bildschirm 280 px –
+              „▶ Scannen", der wichtigste Knopf der Kasse, ragte 51–71 px über den Rand.
+              Deshalb am Handy: Knöpfe in eigener, voller Zeile, die selbst umbrechen darf. */}
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold text-gray-600">QR-Scanner</span>
               {cart.length > 0 && (
                 <span className="text-sm font-bold text-green-600">{totalAmount.toFixed(2)} €</span>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
               <button
                 onClick={() => { stopScanner(); setBonView('list'); }}
-                className="px-3 py-1 rounded-lg font-medium text-xs transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200"
+                className="flex-1 sm:flex-none px-3 py-1 whitespace-nowrap rounded-lg font-medium text-xs transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200"
               >
                 🧾 Verkäufe
               </button>
               <button
                 onClick={lookupOpen ? () => setLookupOpen(false) : openLookup}
-                className={`px-3 py-1 rounded-lg font-medium text-xs transition-colors ${lookupOpen ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-800 hover:bg-blue-200'}`}
+                className={`flex-1 sm:flex-none px-3 py-1 whitespace-nowrap rounded-lg font-medium text-xs transition-colors ${lookupOpen ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-800 hover:bg-blue-200'}`}
               >
                 ⌨ Manuell
               </button>
               <button
                 onClick={scanning ? stopScanner : startScanner}
-                className={`px-3 py-1 rounded-lg font-medium text-xs transition-colors ${scanning ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-yellow-500 hover:bg-yellow-600 text-gray-900'}`}
+                className={`flex-1 sm:flex-none px-3 py-1 whitespace-nowrap rounded-lg font-medium text-xs transition-colors ${scanning ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-yellow-500 hover:bg-yellow-600 text-gray-900'}`}
               >
                 {scanning ? '■ Stop' : '▶ Scannen'}
               </button>
@@ -757,6 +763,13 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
         {/* Checkout */}
         {cart.length > 0 && (
           <div className="bg-white rounded-xl shadow-md p-3 mb-2">
+            {/* Dieselbe Angabe wie im Kopf des Warenkorbs, absichtlich doppelt: bei vollem
+                Warenkorb ist der Kopf längst aus dem Bild gescrollt, und beim Kassieren braucht
+                man Anzahl und Summe genau hier – neben dem Feld für das erhaltene Geld. */}
+            <div className="flex items-baseline justify-between gap-3 mb-3 pb-3 border-b border-gray-100">
+              <span className="text-sm font-semibold text-gray-700">Warenkorb ({cart.length})</span>
+              <span className="text-2xl font-extrabold text-green-600 whitespace-nowrap">{totalAmount.toFixed(2)} €</span>
+            </div>
             {/* Change calculator */}
             <div className="mb-3">
               <label className="block text-sm font-medium text-gray-700 mb-1">Betrag erhalten:</label>
