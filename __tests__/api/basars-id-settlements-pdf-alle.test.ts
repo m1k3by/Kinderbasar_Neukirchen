@@ -19,8 +19,8 @@ import { GET } from '@/app/api/basars/[id]/settlements/abrechnungen.pdf/route';
 function makeContext(id = 'basar-1') {
   return { params: Promise.resolve({ id }) };
 }
-function makeRequest() {
-  return new Request('http://localhost/api/basars/basar-1/settlements/abrechnungen.pdf');
+function makeRequest(query = '') {
+  return new Request(`http://localhost/api/basars/basar-1/settlements/abrechnungen.pdf${query}`);
 }
 
 const fakeBasar = { title: 'Frühjahrsbasar 2026', commissionPercent: dec(20) };
@@ -220,5 +220,40 @@ describe('GET /api/basars/[id]/settlements/abrechnungen.pdf – Inhalt', () => {
     expect(content).toContain('1,40 \x80'); // Provision (20 %)
     expect(content).toContain('3,60 \x80'); // Netto-Auszahlung
     expect(content).toContain('Provision \\(20%\\):');
+  });
+});
+
+describe('GET /api/basars/[id]/settlements/abrechnungen.pdf – Parameter set', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+  });
+
+  const keyWhere = () =>
+    prismaMock.basarSeller.findMany.mock.calls
+      .map((c: { select?: unknown; where: Record<string, unknown> }[]) => c[0])
+      .find(a => a.select)!.where;
+
+  it('active: Schlüsselabfrage enthält isActive-oder-Orga und Dateiname ist gekennzeichnet', async () => {
+    mockSellers([fakeSeller(9001)]);
+    const res = await GET(makeRequest('?set=active'), makeContext());
+    expect(res.status).toBe(200);
+    expect(keyWhere().OR).toEqual([{ isActive: true }, { seller: { isOrga: true } }]);
+    expect(res.headers.get('Content-Disposition')).toContain('abrechnungen-fruehjahrsbasar-2026-1-aktive-verkaeufer.pdf');
+  });
+
+  it.each(['', '?set=all'])('ohne set / all: kein OR (%s)', async q => {
+    mockSellers([fakeSeller(9001)]);
+    const res = await GET(makeRequest(q), makeContext());
+    expect(res.status).toBe(200);
+    expect(keyWhere()).not.toHaveProperty('OR');
+    expect(res.headers.get('Content-Disposition')).toContain('-1-verkaeufer.pdf');
+  });
+
+  it('unbekannter Wert: 400 ohne Datenbankzugriff', async () => {
+    const res = await GET(makeRequest('?set=quatsch'), makeContext());
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('Ungültiger Parameter set');
+    expect(prismaMock.basarSeller.findMany).not.toHaveBeenCalled();
   });
 });

@@ -30,12 +30,20 @@ export const maxDuration = 300;
 const CHUNK = 50;
 
 // GET /api/basars/:id/settlements/abrechnungen.pdf – alle Abrechnungen in einer Datei (Admin)
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const authResult = await requireAdmin();
     if (authResult.response) return authResult.response;
 
     const { id: basarId } = await params;
+
+    // Optional: nur aktive Verkäufer (isParticipating: BasarSeller.isActive oder Orga).
+    // Unbekannte Werte werden abgelehnt statt still als "alle" zu gelten.
+    const set = new URL(request.url).searchParams.get('set');
+    if (set !== null && set !== 'all' && set !== 'active') {
+      return NextResponse.json({ error: 'Ungültiger Parameter set' }, { status: 400 });
+    }
+    const onlyActive = set === 'active';
 
     const basar = await prisma.basar.findUnique({
       where: { id: basarId },
@@ -47,7 +55,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     // Reihenfolge im Stapel dieselbe wie in der Tabelle auf der Abrechnungsseite, und die
     // Sortierung bleibt unabhängig von der Blockgrenze deterministisch.
     const keys = await prisma.basarSeller.findMany({
-      where: { basarId, settlement: { isNot: null } },
+      where: {
+        basarId,
+        settlement: { isNot: null },
+        ...(onlyActive ? { OR: [{ isActive: true }, { seller: { isOrga: true } }] } : {}),
+      },
       select: { id: true, sellerId: true },
       orderBy: { sellerId: 'asc' },
     });
@@ -115,7 +127,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
     return pdfResponse(
       doc.output('arraybuffer'),
-      `abrechnungen-${slug(basar.title)}-${drawn}-verkaeufer.pdf`
+      `abrechnungen-${slug(basar.title)}-${drawn}-${onlyActive ? 'aktive-' : ''}verkaeufer.pdf`
     );
   } catch (error) {
     console.error('GET /api/basars/[id]/settlements/abrechnungen.pdf error:', error);

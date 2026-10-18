@@ -93,3 +93,15 @@ export function matchesSheetSet(
 ): boolean {
   return row.viaOrga || matchesParticipantFilter(row, set);
 }
+
+/** Filter der Abrechnungstabelle auf /admin/basars/[id]/abrechnung. „Aktiv“ = isParticipating(). */
+export type SettlementFilter = 'all' | 'active' | 'inactive';
+
+export function matchesSettlementFilter(
+  row: { basarSeller: { isActive: boolean; seller: ParticipationSeller } },
+  filter: SettlementFilter
+): boolean {
+  if (filter === 'all') return true;
+  const active = isParticipating(row.basarSeller.seller, row.basarSeller);
+  return filter === 'active' ? active : !active;
+}

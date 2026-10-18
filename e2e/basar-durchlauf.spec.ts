@@ -509,6 +509,32 @@ test('Schließen, Abrechnung erzeugen: Beträge stimmen auf den Cent', async () 
   expect((await s2.get(`/api/basars/${st.basarId}/settlements/${S1.sellerId}`)).status(), 'fremde Abrechnung').toBe(403);
   const alle = await admin.get(`/api/basars/${st.basarId}/settlements/abrechnungen.pdf`);
   expect(alle.status(), await show(alle)).toBe(200);
+  const aktive = await admin.get(`/api/basars/${st.basarId}/settlements/abrechnungen.pdf?set=active`);
+  expect(aktive.status(), await show(aktive)).toBe(200);
+  expect((await admin.get(`/api/basars/${st.basarId}/settlements/abrechnungen.pdf?set=quatsch`)).status()).toBe(400);
+});
+
+test('Abrechnungsseite: Filter aktive Verkäufer schaltet Tabelle und Sammel-PDF um', async ({ browser }) => {
+  const page = await (await browser.newContext({ baseURL: BASE, storageState: await admin.storageState() })).newPage();
+  try {
+    await page.goto(`/admin/basars/${st.basarId}/abrechnung`);
+    const alle = page.getByRole('button', { name: /^Alle \(\d+\)$/ });
+    const aktiv = page.getByRole('button', { name: /^Aktive Verkäufer \(\d+\)$/ });
+    await expect(alle).toBeVisible();
+    const nAlle = Number((await alle.textContent())!.match(/\d+/)![0]);
+    const nAktiv = Number((await aktiv.textContent())!.match(/\d+/)![0]);
+    await expect(page.locator('tbody tr')).toHaveCount(nAlle);
+    await expect(page.getByText(/^\d+ \/ \d+ Artikel verkauft$/).first()).toBeVisible();
+
+    await aktiv.click();
+    await expect(page.locator('tbody tr')).toHaveCount(nAktiv);
+    await expect(page.getByText('Summe (angezeigt)')).toBeVisible();
+    const link = page.getByRole('link', { name: /Aktive als ein PDF/ });
+    await expect(link).toHaveAttribute('href', /abrechnungen\.pdf\?set=active$/);
+    await expect(link).toHaveAttribute('target', '_blank');
+  } finally {
+    await page.context().close();
+  }
 });
 
 test('Storno nach der Abrechnung ist gesperrt', async () => {

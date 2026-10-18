@@ -11,6 +11,7 @@ const prismaMock = vi.hoisted(() => ({
   basarSeller: { findUnique: vi.fn(), findMany: vi.fn() },
   settlement: { findMany: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn() },
   basar: { findUnique: vi.fn() },
+  article: { groupBy: vi.fn() },
   $transaction: vi.fn(),
   $queryRaw: vi.fn(),
 }));
@@ -49,7 +50,10 @@ const closedBasar = { id: 'basar-1', status: 'CLOSED', commissionPercent: dec(20
 const openBasar = { id: 'basar-1', status: 'OPEN' };
 
 describe('GET /api/basars/[id]/settlements', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prismaMock.article.groupBy.mockResolvedValue([]);
+  });
 
   it('returns 401 when no token', async () => {
     cookiesGetMock.mockReturnValue(undefined);
@@ -90,6 +94,37 @@ describe('GET /api/basars/[id]/settlements', () => {
     const res = await GET(makeGetRequest(), makeContext());
     expect(res.status).toBe(200);
     expect((await res.json()).settlements).toHaveLength(2);
+  });
+
+  // Die Seite filtert „aktive Verkäufer“ per isParticipating(): dafür braucht sie isOrga am
+  // Seller. isActive kommt als Skalar des include von selbst mit.
+  it('admin: lädt isOrga des Verkäufers mit', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.settlement.findMany.mockResolvedValue([]);
+    await GET(makeGetRequest(), makeContext());
+    const args = prismaMock.settlement.findMany.mock.calls[0][0];
+    expect(args.include.basarSeller.include.seller.select.isOrga).toBe(true);
+  });
+
+  // „verkauft / eingestellt" in der Tabelle: aus einer gruppierten Zählung je Verkäufer und
+  // Status. Wer gar keine Artikel hat, bekommt 0 / 0 statt eines fehlenden Feldes.
+  it('admin: hängt verkauft / eingestellt je Verkäufer an', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.settlement.findMany.mockResolvedValue([
+      { id: 'set-1', basarSellerId: 'bs-1' },
+      { id: 'set-2', basarSellerId: 'bs-2' },
+    ]);
+    prismaMock.article.groupBy.mockResolvedValue([
+      { basarSellerId: 'bs-1', status: 'SOLD', _count: { _all: 3 } },
+      { basarSellerId: 'bs-1', status: 'AVAILABLE', _count: { _all: 7 } },
+      { basarSellerId: 'bs-1', status: 'RETURNED', _count: { _all: 2 } },
+    ]);
+    const data = await (await GET(makeGetRequest(), makeContext())).json();
+    expect(data.settlements[0].articleCounts).toEqual({ sold: 3, total: 12 });
+    expect(data.settlements[1].articleCounts).toEqual({ sold: 0, total: 0 });
+    const args = prismaMock.article.groupBy.mock.calls[0][0];
+    expect(args.where).toEqual({ basarSeller: { basarId: 'basar-1' } });
+    expect(args.by).toEqual(['basarSellerId', 'status']);
   });
 
   it('returns 500 on DB error', async () => {

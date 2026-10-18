@@ -32,14 +32,34 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       include: {
         basarSeller: {
           include: {
-            seller: { select: { firstName: true, lastName: true, sellerId: true } },
+            seller: { select: { firstName: true, lastName: true, sellerId: true, isOrga: true } },
           },
         },
       },
       orderBy: { basarSeller: { sellerId: 'asc' } },
     });
 
-    return NextResponse.json({ settlements });
+    // „verkauft / eingestellt" je Verkäufer für die Tabelle: eine gruppierte Abfrage über alle
+    // Artikel des Basars statt einer Zählung pro Zeile.
+    const counts = await prisma.article.groupBy({
+      by: ['basarSellerId', 'status'],
+      where: { basarSeller: { basarId } },
+      _count: { _all: true },
+    });
+    const articleCounts = new Map<string, { sold: number; total: number }>();
+    for (const c of counts) {
+      const entry = articleCounts.get(c.basarSellerId) ?? { sold: 0, total: 0 };
+      entry.total += c._count._all;
+      if (c.status === 'SOLD') entry.sold += c._count._all;
+      articleCounts.set(c.basarSellerId, entry);
+    }
+
+    return NextResponse.json({
+      settlements: settlements.map((s) => ({
+        ...s,
+        articleCounts: articleCounts.get(s.basarSellerId) ?? { sold: 0, total: 0 },
+      })),
+    });
   } catch (error) {
     console.error('GET /api/basars/[id]/settlements error:', error);
     return NextResponse.json({ error: 'Interner Serverfehler' }, { status: 500 });

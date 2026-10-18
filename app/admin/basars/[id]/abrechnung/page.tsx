@@ -3,6 +3,7 @@
 import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import Header from '../../../../components/Header';
+import { matchesSettlementFilter, type SettlementFilter } from '../../../../lib/participation';
 import { getNavLinks, basarsAdminActiveKey, type NavUser } from '../../../../lib/navLinks';
 
 interface Settlement {
@@ -14,8 +15,11 @@ interface Settlement {
   entryFeeAmount: number;
   netPayout: number;
   generatedAt: string;
+  /** Artikel dieses Verkäufers im Basar – liefert GET /api/basars/[id]/settlements (Admin). */
+  articleCounts: { sold: number; total: number };
   basarSeller: {
-    seller: { firstName: string; lastName: string; sellerId: number };
+    isActive: boolean;
+    seller: { firstName: string; lastName: string; sellerId: number; isOrga: boolean };
     _count?: { articles: number };
   };
 }
@@ -35,6 +39,7 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [message, setMessage] = useState('');
+  const [filter, setFilter] = useState<SettlementFilter>('all');
   // Default to admin nav until /api/me resolves – see app/admin/basars/page.tsx for why
   // this matters (cashiers can also reach /admin/basars/**).
   const [navUser, setNavUser] = useState<NavUser>({ role: 'admin' });
@@ -94,6 +99,14 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
   const totalCommission = settlements.reduce((s, x) => s + Number(x.commissionAmount), 0);
   const totalPayout = settlements.reduce((s, x) => s + Number(x.netPayout), 0);
 
+  const shown = settlements.filter(s => matchesSettlementFilter(s, filter));
+  const nActive = settlements.filter(s => matchesSettlementFilter(s, 'active')).length;
+  const nInactive = settlements.length - nActive;
+  const shownGross = shown.reduce((s, x) => s + Number(x.grossRevenue), 0);
+  const shownCommission = shown.reduce((s, x) => s + Number(x.commissionAmount), 0);
+  const shownPayout = shown.reduce((s, x) => s + Number(x.netPayout), 0);
+  const filtered = filter !== 'all';
+
   if (loading) return (
     <div className="min-h-screen bg-gray-50">
       <Header links={getNavLinks(navUser, basarsAdminActiveKey(navUser))} />
@@ -114,13 +127,13 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
             <div className="flex items-center gap-2">
               {settlements.length > 0 && (
                 <a
-                  href={`/api/basars/${basarId}/settlements/abrechnungen.pdf`}
+                  href={`/api/basars/${basarId}/settlements/abrechnungen.pdf${filter === 'active' ? '?set=active' : ''}`}
                   download
                   target="_blank"
                   rel="noopener"
                   className="px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold rounded-lg transition-colors"
                 >
-                  ↓ Alle als ein PDF ({settlements.length})
+                  {filter === 'active' ? `↓ Aktive als ein PDF (${nActive})` : `↓ Alle als ein PDF (${settlements.length})`}
                 </a>
               )}
               <button onClick={handleGenerate} disabled={generating}
@@ -166,6 +179,23 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
               Nummer sortiert) – bei vielen Verkäufern dauert die Erzeugung einen Moment.
             </p>
 
+            {/* Filter */}
+            <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden mb-3 text-sm">
+              {([
+                ['all', `Alle (${settlements.length})`],
+                ['active', `Aktive Verkäufer (${nActive})`],
+                ['inactive', `Nicht aktiv (${nInactive})`],
+              ] as [SettlementFilter, string][]).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setFilter(key)}
+                  className={`px-3 py-1.5 font-medium transition-colors ${filter === key ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
             {/* Table */}
             <div className="bg-white rounded-xl shadow-sm overflow-hidden">
               <table className="w-full text-sm">
@@ -180,10 +210,15 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {settlements.map(s => (
+                  {shown.map(s => (
                     <tr key={s.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 font-bold text-gray-700">#{s.basarSeller.seller.sellerId}</td>
-                      <td className="px-4 py-3 text-gray-800">{s.basarSeller.seller.firstName} {s.basarSeller.seller.lastName}</td>
+                      <td className="px-4 py-3 text-gray-800">{s.basarSeller.seller.firstName} {s.basarSeller.seller.lastName}
+                        {!matchesSettlementFilter(s, 'active') && <span className="ml-2 text-xs text-gray-400">nicht aktiv</span>}
+                        <span className="block text-xs text-gray-400" title="verkauft / eingestellt">
+                          {s.articleCounts.sold} / {s.articleCounts.total} Artikel verkauft
+                        </span>
+                      </td>
                       <td className="px-4 py-3 text-right text-gray-700">{Number(s.grossRevenue).toFixed(2)} €</td>
                       <td className="px-4 py-3 text-right text-orange-600 hidden md:table-cell">- {Number(s.commissionAmount).toFixed(2)} €</td>
                       <td className="px-4 py-3 text-right font-bold text-green-600">{Number(s.netPayout).toFixed(2)} €</td>
@@ -203,10 +238,10 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
                 </tbody>
                 <tfoot className="border-t-2 border-gray-300 bg-gray-50">
                   <tr>
-                    <td colSpan={2} className="px-4 py-3 font-bold text-gray-700">Gesamt</td>
-                    <td className="px-4 py-3 text-right font-bold text-gray-700">{totalGross.toFixed(2)} €</td>
-                    <td className="px-4 py-3 text-right font-bold text-orange-600 hidden md:table-cell">- {totalCommission.toFixed(2)} €</td>
-                    <td className="px-4 py-3 text-right font-bold text-green-600">{totalPayout.toFixed(2)} €</td>
+                    <td colSpan={2} className="px-4 py-3 font-bold text-gray-700">{filtered ? 'Summe (angezeigt)' : 'Gesamt'}</td>
+                    <td className="px-4 py-3 text-right font-bold text-gray-700">{shownGross.toFixed(2)} €</td>
+                    <td className="px-4 py-3 text-right font-bold text-orange-600 hidden md:table-cell">- {shownCommission.toFixed(2)} €</td>
+                    <td className="px-4 py-3 text-right font-bold text-green-600">{shownPayout.toFixed(2)} €</td>
                     <td></td>
                   </tr>
                 </tfoot>

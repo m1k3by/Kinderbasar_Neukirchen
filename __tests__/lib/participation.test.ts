@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isParticipating, participationPayload, matchesParticipantFilter, matchesSheetSet } from '@/app/lib/participation';
+import { isParticipating, participationPayload, matchesParticipantFilter, matchesSheetSet, matchesSettlementFilter } from '@/app/lib/participation';
 
 const normal = { isOrga: false };
 const orga = { isOrga: true };
@@ -157,5 +157,18 @@ describe('matchesSheetSet – wer einen Anlieferzettel bekommt', () => {
     // Vorbereiter ohne Anmeldung: in keiner Variante.
     expect(matchesSheetSet(zeile(false, 12), 'activated')).toBe(false);
     expect(matchesSheetSet(zeile(false, 12), 'withArticles')).toBe(false);
+  });
+});
+
+describe('matchesSettlementFilter', () => {
+  const row = (isActive: boolean, isOrga: boolean) => ({ basarSeller: { isActive, seller: { isOrga } } });
+  it.each([
+    ['aktiv', row(true, false), true],
+    ['Orga ohne Anmeldung', row(false, true), true],
+    ['nicht aktiv', row(false, false), false],
+  ])('%s', (_n, r, active) => {
+    expect(matchesSettlementFilter(r, 'all')).toBe(true);
+    expect(matchesSettlementFilter(r, 'active')).toBe(active);
+    expect(matchesSettlementFilter(r, 'inactive')).toBe(!active);
   });
 });
