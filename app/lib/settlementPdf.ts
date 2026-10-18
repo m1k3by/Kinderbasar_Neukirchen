@@ -206,17 +206,20 @@ export function drawSettlementPage(doc: jsPDF, data: SettlementPdfData): void {
   doc.setFontSize(12);
   doc.text(data.basarTitle, mL, 32);
   doc.text(`Verkäufer: ${data.sellerName}`, mL, 40);
+  // Zusätzlich zur großen Nummer oben rechts auch hier, direkt beim Namen und in derselben
+  // Größe: auf dem ausgedruckten Blatt liest man Name und Nummer so in einem Blick.
+  doc.text(`Verkäufernummer: ${data.sellerNr}`, mL, 46);
 
   doc.setFontSize(9);
   doc.setTextColor(140);
-  doc.text(`Erstellt: ${new Date(data.generatedAt).toLocaleDateString('de-DE')}`, mL, 48);
+  doc.text(`Erstellt: ${new Date(data.generatedAt).toLocaleDateString('de-DE')}`, mL, 53);
   doc.setTextColor(0);
 
   doc.setDrawColor(210);
-  doc.line(mL, 53, mR, 53);
+  doc.line(mL, 58, mR, 58);
 
   // ── Zusammenfassung ─────────────────────────────────────
-  let y = 63;
+  let y = 68;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(130);
@@ -305,7 +308,7 @@ export function drawSettlementPage(doc: jsPDF, data: SettlementPdfData): void {
     { label: 'Uhrzeit', x: mL + 138 },
     { label: 'Preis', x: mR - 2, align: 'right' },
   ];
-  y = drawArticleTable(
+  drawArticleTable(
     doc,
     y,
     `VERKAUFTE ARTIKEL (${sold.summary.count})`,
@@ -325,28 +328,11 @@ export function drawSettlementPage(doc: jsPDF, data: SettlementPdfData): void {
     sold.summary.sum
   );
 
-  // ── Tabelle: zurück ins Archiv ────────────────────────────
-  const archiveColumns: TableColumn[] = [
-    { label: '#', x: mL + 2 },
-    { label: 'Beschreibung', x: mL + 12 },
-    { label: 'Größe', x: mL + 108 },
-    { label: 'Preis', x: mR - 2, align: 'right' },
-  ];
-  drawArticleTable(
-    doc,
-    y,
-    `ZURÜCK INS ARCHIV (${archive.summary.count})`,
-    'Keine Artikel gehen zurück ins Archiv.',
-    archiveColumns,
-    archive.articles,
-    (a, i, ry) => {
-      doc.text(String(i + 1), mL + 2, ry);
-      doc.text(shortTitle(a.title), mL + 12, ry);
-      doc.text(a.sizeLabel?.trim() || '–', mL + 108, ry);
-      doc.text(fmtPrice(a.price), mR - 2, ry, { align: 'right' });
-    },
-    archive.summary.sum
-  );
+  // Keine Einzelliste der unverkauften Artikel mehr (Wunsch vom 18.10.2026: „das ist zu viel").
+  // Mit ihr brauchte im Herbstbasar 2026 die typische Abrechnung drei Seiten – 713 Seiten für
+  // 214 Abrechnungen. Anzahl und Summe stehen weiter in der Übersicht oben, damit
+  // „angeboten = verkauft + Archiv" auf dem Blatt aufgeht. Welche Artikel es sind, zeigt die
+  // Basarseite des Verkäufers (Liste „Meine Artikel" mit Status, auch nach Basar-Ende).
 }
 
 export function buildSettlementPdf(data: SettlementPdfData): jsPDF {

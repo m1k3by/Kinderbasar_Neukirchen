@@ -148,20 +148,23 @@ describe('buildSettlementPdf – Inhalt', () => {
     expect(content).toContain('3,50 \x80'); // Summe der Archiv-Artikel
   });
 
-  it('zeigt Kopf, Zusammenfassung und beide Tabellenüberschriften', async () => {
+  it('zeigt Kopf, Zusammenfassung und die Tabelle der verkauften Artikel', async () => {
     const data = baseData();
     const buf = await pdfBuffer(buildSettlementPdf(data));
     const content = allContent(buf);
     expect(content).toContain('Abrechnung Kinderbasar');
     expect(content).toContain(data.basarTitle);
     expect(content).toContain(`Verk\xe4ufer: ${data.sellerName}`);
+    // Nummer zusätzlich links unter dem Namen, nicht nur groß oben rechts.
+    expect(content).toContain(`Verk\xe4ufernummer: ${data.sellerNr}`);
     expect(content).toContain('VERK\xc4UFERNUMMER');
     expect(content).toContain(`#${data.sellerNr}`);
     expect(content).toContain('ZUSAMMENFASSUNG');
     expect(content).toContain('\xdcBERSICHT');
     // jsPDF escaped runde Klammern im PDF-Textstring als \( \)
     expect(content).toContain('VERKAUFTE ARTIKEL \\(2\\)');
-    expect(content).toContain('ZUR\xdcCK INS ARCHIV \\(2\\)');
+    // Die Einzelliste der unverkauften Artikel ist entfallen (zu lang, 18.10.2026).
+    expect(content).not.toContain('ZUR\xdcCK INS ARCHIV');
     expect(content).toContain('Verkaufserl\xf6s:');
     expect(content).toContain('Auszahlung:');
     // „Brutto"/„Netto" lesen sich wie Mehrwertsteuer, die es hier nicht gibt. Die beiden
@@ -192,12 +195,23 @@ describe('buildSettlementPdf – Inhalt', () => {
     expect(gerundet).toContain('6,20 \x80'); // gerundeter Auszahlbetrag
   });
 
+  // Der eigentliche Nachweis, dass die Archivliste weg ist: Überschriften lassen sich
+  // umbenennen, Titel nicht. Unverkaufte Artikel tauchen nur noch als Zahl auf.
+  it('listet unverkaufte Artikel nicht mehr einzeln auf, verkaufte schon', async () => {
+    const content = allContent(await pdfBuffer(buildSettlementPdf(baseData())));
+    expect(content).toContain('Jeans blau');   // verkauft
+    expect(content).toContain('Pullover rot'); // verkauft
+    expect(content).not.toContain('Schuhe');   // AVAILABLE
+    expect(content).not.toContain('M\xfctze');  // RETURNED
+    expect(content).toContain('Zur\xfcck ins Archiv: 2 Artikel'); // als Zahl bleibt es
+  });
+
   it('leere Artikellisten zeigen die Hinweistexte', async () => {
     const data = baseData({ articles: [] });
     const buf = await pdfBuffer(buildSettlementPdf(data));
     const content = allContent(buf);
     expect(content).toContain('Keine Artikel verkauft.');
-    expect(content).toContain('Keine Artikel gehen zur\xfcck ins Archiv.');
+    expect(content).not.toContain('Keine Artikel gehen zur\xfcck ins Archiv.');
     expect(content).toContain('Angeboten: 0 Artikel');
   });
 
