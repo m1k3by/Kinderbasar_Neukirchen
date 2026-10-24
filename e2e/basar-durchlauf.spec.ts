@@ -463,6 +463,63 @@ test('Kassenverlauf in der Oberfläche: Letzter Bon, Bon-Detail, Verkaufsliste �
   expect(r.status(), await show(r)).toBe(200);
 });
 
+// Basar 10/2026: zweimal ging ein Warenkorb mit über 100 Artikeln verloren – Anmeldung abgelaufen
+// bzw. Seite neu geladen. Jetzt liegt der Warenkorb auf dem Gerät, und eine abgelaufene Anmeldung
+// wird an der Kasse selbst erneuert.
+test('Kasse: Warenkorb übersteht Neuladen und abgelaufene Anmeldung', async ({ browser }) => {
+  const context = await browser.newContext({ baseURL: BASE, storageState: await kasse.storageState() });
+  const page = await context.newPage();
+  const addManual = async (title: string) => {
+    await page.getByRole('button', { name: /Manuell/ }).click();
+    await page.getByLabel('Verkäufernummer').fill(String(ORGA.sellerId));
+    await page.getByRole('button', { name: new RegExp(title) }).click();
+  };
+  try {
+    await page.goto(`/admin/basars/${st.basarId}/kasse`);
+    await page.waitForLoadState('networkidle');
+    await addManual('Orga 1');
+    await expect(page.getByText('Warenkorb (1)')).toBeVisible();
+
+    // 1. Neuladen: Warenkorb kommt vom Gerät zurück.
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByText(/Warenkorb von vorhin wiederhergestellt \(1 Artikel\)/)).toBeVisible();
+    await expect(page.getByText('Warenkorb (1)')).toBeVisible();
+    await page.getByRole('button', { name: 'Weiter' }).click();
+
+    // 2. Anmeldung weg (Cookie gelöscht = abgelaufen): Scannen geht aus dem Gerätecache weiter.
+    await context.clearCookies();
+    await addManual('Orga 2');
+    await expect(page.getByText('Warenkorb (2)')).toBeVisible();
+    await expect(page.getByText(/Anmeldung abgelaufen – Scannen geht weiter/)).toBeVisible();
+
+    // 3. Kassieren öffnet die Neuanmeldung über der Kasse; danach wird der Bon selbst gebucht.
+    await page.getByRole('button', { name: /Kassieren/ }).click();
+    const dialog = page.getByRole('dialog', { name: 'Bitte neu anmelden' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByPlaceholder('E-Mail oder Benutzername').fill(KASSE.email);
+    await dialog.getByPlaceholder('Passwort').fill(PW);
+    await dialog.locator('button[type="submit"]').click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Letzter Bon/ })).toContainText('2 Art.');
+    await expect(page.getByText('Warenkorb (0)')).toBeVisible();
+    expect(page.url(), 'kein Seitenwechsel (PWA)').toContain('/kasse');
+
+    // 4. Nach dem Kassieren ist der gespeicherte Warenkorb leer: Neuladen bringt nichts zurück.
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByText(/Warenkorb von vorhin wiederhergestellt/)).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
+
+  const sales = await prisma.sale.findMany({ where: { basarId: st.basarId, isCancelled: false, article: { title: { in: ['Orga 1', 'Orga 2'] } } } });
+  expect(sales, 'beide Artikel genau einmal verkauft').toHaveLength(2);
+  expect(new Set(sales.map(s => s.clientTxId)).size, 'ein Bon').toBe(1);
+  expect(sales.every(s => s.cashierId === KASSE.sellerId)).toBe(true);
+  for (const s of sales) expect((await admin.delete(`/api/sales/${s.id}`)).status()).toBe(200);
+});
+
 // ─── 10. Oberfläche: jede Hauptseite einmal echt laden ──────────────────────
 test('Hauptseiten laden ohne Absturz und ohne Browserfehler', async ({ browser }) => {
   const seiten: [APIRequestContext, string[]][] = [

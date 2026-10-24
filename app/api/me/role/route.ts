@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '../../../lib/prisma';
 import { requireAuth } from '../../../lib/apiAuth';
 import { setEmployeeStatus } from '../../../lib/employeeRole';
-import { createToken } from '../../../lib/auth';
+import { createToken, SESSION_MAX_AGE_SECONDS } from '../../../lib/auth';
 
 /**
  * PUT /api/me/role  body: { isEmployee: boolean }
@@ -67,7 +67,7 @@ export async function PUT(request: Request) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24,
+      maxAge: SESSION_MAX_AGE_SECONDS,
       path: '/',
     });
 

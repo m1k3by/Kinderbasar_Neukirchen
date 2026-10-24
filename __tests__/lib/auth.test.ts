@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import jwt from 'jsonwebtoken';
-import { createToken, verifyToken } from '@/app/lib/auth';
+import { createToken, verifyToken, SESSION_MAX_AGE_SECONDS } from '@/app/lib/auth';
 
 const SECRET = process.env.JWT_SECRET!;
 
@@ -19,11 +19,11 @@ describe('createToken / verifyToken', () => {
     expect(decoded.role).toBe('seller');
   });
 
-  it('generated token is valid for at least 23h 59m', () => {
+  it('generated token is valid for exactly 3 days (Basar-Wochenende Fr–So)', () => {
     const token = createToken({ role: 'admin' });
     const decoded = verifyToken(token) as jwt.JwtPayload;
-    const nowSec = Math.floor(Date.now() / 1000);
-    expect(decoded.exp!).toBeGreaterThan(nowSec + 23 * 3600);
+    expect(SESSION_MAX_AGE_SECONDS).toBe(3 * 24 * 60 * 60);
+    expect(decoded.exp! - decoded.iat!).toBe(3 * 24 * 60 * 60);
   });
 
   it('throws JsonWebTokenError for garbage input', () => {

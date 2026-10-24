@@ -38,6 +38,19 @@ describe('POST /api/login', () => {
     expect(json).toMatchObject({ success: true, role: 'admin' });
   });
 
+  it('admin cookie lives 3 days', async () => {
+    const res = await POST(makeRequest({ email: 'testadmin', password: 'test-admin-pass' }));
+    expect(res.cookies.get('token')?.maxAge).toBe(3 * 24 * 60 * 60);
+  });
+
+  it('seller cookies (token + sellerId) live 3 days', async () => {
+    prismaMock.seller.findUnique.mockResolvedValue({ sellerId: 1234, email: 'seller@test.de', password: 'hashed', isEmployee: false, isCashier: false });
+    bcryptCompareMock.mockResolvedValue(true);
+    const res = await POST(makeRequest({ email: 'seller@test.de', password: 'secret' }));
+    expect(res.cookies.get('token')?.maxAge).toBe(3 * 24 * 60 * 60);
+    expect(res.cookies.get('sellerId')?.maxAge).toBe(3 * 24 * 60 * 60);
+  });
+
   it('admin login is case-insensitive', async () => {
     const req = makeRequest({ email: 'TESTADMIN', password: 'test-admin-pass' });
     const res = await POST(req);

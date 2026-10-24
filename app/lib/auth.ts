@@ -1,8 +1,14 @@
 import jwt from 'jsonwebtoken';
 import { env } from './env';
 
+// Gültigkeit von Login-Token UND Cookie: 3 Tage, für alle Rollen. Ein Basar läuft Fr–So;
+// bei 24 h lief die Anmeldung mitten im Betrieb ab (Basar 10/2026: Kasse brach ab, Warenkorb
+// weg). Bewusst ein fester Ablauf statt gleitend erneuerter Token: eine Erneuerung pro Request
+// kostet Rechenzeit und Schreibzugriffe, ein fester Ablauf kostet nichts.
+export const SESSION_MAX_AGE_SECONDS = 3 * 24 * 60 * 60;
+
 export const createToken = (payload: object) => {
-  return jwt.sign(payload, env.JWT_SECRET, { expiresIn: '1d' });
+  return jwt.sign(payload, env.JWT_SECRET, { expiresIn: SESSION_MAX_AGE_SECONDS });
 };
 
 export const verifyToken = (token: string) => {

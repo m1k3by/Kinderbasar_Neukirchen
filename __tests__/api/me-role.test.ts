@@ -82,6 +82,14 @@ describe('PUT /api/me/role', () => {
     expect(await res.json()).toMatchObject({ isEmployee: true, orgaRemoved: false });
   });
 
+  it('neu ausgestelltes Token-Cookie gilt 3 Tage', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1460) });
+    prismaMock.seller.findUnique.mockResolvedValue({ isOrga: false, isCashier: false });
+    prismaMock.seller.update.mockResolvedValue({ isEmployee: true, isOrga: false });
+    const res = await PUT(makeRequest({ isEmployee: true }));
+    expect(res.cookies.get('token')?.maxAge).toBe(3 * 24 * 60 * 60);
+  });
+
   it('stuft zurück und entfernt dabei das Orga-Kennzeichen', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1460, { isEmployee: true }) });
     prismaMock.seller.findUnique.mockResolvedValue({ isOrga: true, isCashier: false });

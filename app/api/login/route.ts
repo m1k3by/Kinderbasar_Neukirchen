@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../lib/prisma';
-import { createToken, normalizeEmail } from '../../lib/auth';
+import { createToken, normalizeEmail, SESSION_MAX_AGE_SECONDS } from '../../lib/auth';
 import { rateLimit } from '../../lib/rateLimit';
 import { env } from '../../lib/env';
 import bcrypt from 'bcrypt';
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: 60 * 60 * 24,
+        maxAge: SESSION_MAX_AGE_SECONDS,
         path: '/',
       });
       return response;
@@ -103,14 +103,14 @@ export async function POST(request: Request) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24,
+      maxAge: SESSION_MAX_AGE_SECONDS,
       path: '/',
     });
     response.cookies.set('sellerId', seller.sellerId.toString(), {
       httpOnly: false, // Make sellerId available to client
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24,
+      maxAge: SESSION_MAX_AGE_SECONDS,
       path: '/',
     });
     return response;

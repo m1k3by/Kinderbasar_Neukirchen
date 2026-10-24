@@ -8,20 +8,8 @@ import { buildScannerConfig, hasNativeBarcodeDetector, scannerRecoveryAction, sc
 import type { LookupArticle } from '../../../../lib/manualLookup';
 import ManualLookup from '../../../../components/ManualLookup';
 import BonHistory, { type BonView, type LastBon } from './BonHistory';
-
-interface ScannedArticle {
-  id: string;
-  title: string;
-  sizeLabel?: string;
-  price: number;
-  salePrice: number;
-  sellerId: number;
-  sellerName: string;
-  qrCode: string;
-  basarId: string;
-  saleId?: string; // set after successful kassieren
-  status?: 'AVAILABLE' | 'SOLD' | 'RETURNED'; // as of last cache refresh – only set on cached (offline-lookup) entries
-}
+import ReLoginDialog from './ReLoginDialog';
+import { type ScannedArticle, loadCart, saveCart, loadPendingQrCodes, withoutPending, unbookedItems, cacheScanDecision } from '../../../../lib/kasseCart';
 
 interface PendingTransaction {
   id: string; // idempotency key
@@ -72,6 +60,51 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
   // Vorgänge; offline gespeicherte erzeugen bewusst keinen).
   const [lastBon, setLastBon] = useState<LastBon | null>(null);
   const [bonView, setBonView] = useState<BonView>(null);
+  // Anmeldung abgelaufen (API antwortet 401): Scannen läuft aus dem Gerätecache weiter, Kassieren
+  // und Synchronisieren brauchen eine Neuanmeldung – im Overlay, ohne Seitenwechsel (PWA).
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
+  // Nach der Neuanmeldung den abgebrochenen Kassiervorgang selbst wieder auslösen.
+  const [retryKassieren, setRetryKassieren] = useState(false);
+  const wantKassierenAfterLogin = useRef(false);
+  // Dieselbe clientTxId für alle Versuche eines Vorgangs (401 → Login → Wiederholung).
+  const kassierTxIdRef = useRef<string | null>(null);
+  // Warenkorb vom Gerät wiederhergestellt: Anzahl für den Hinweis (null = kein Hinweis).
+  const [restoredCount, setRestoredCount] = useState<number | null>(null);
+  // Gespeichert wird erst nach der Wiederherstellung – sonst überschriebe der leere Startzustand
+  // den gespeicherten Warenkorb, bevor er gelesen ist.
+  const cartReadyRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [stored, pending] = await Promise.all([loadCart(basarId), loadPendingQrCodes()]);
+      if (cancelled) return;
+      const restored = withoutPending(stored, pending);
+      if (restored.length > 0) {
+        setCart(prev => {
+          const have = new Set(prev.map(c => c.qrCode));
+          return [...prev, ...restored.filter(c => !have.has(c.qrCode))];
+        });
+        restored.forEach(c => scannedCodesRef.current.add(c.qrCode));
+        setRestoredCount(restored.length);
+      }
+      cartReadyRef.current = true;
+    })();
+    return () => { cancelled = true; };
+  }, [basarId]);
+
+  useEffect(() => {
+    if (!cartReadyRef.current) return;
+    void saveCart(basarId, cart);
+  }, [cart, basarId]);
+
+  useEffect(() => {
+    if (!retryKassieren) return;
+    setRetryKassieren(false);
+    void handleKassieren();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retryKassieren]);
 
   useEffect(() => {
     fetch('/api/me').then(res => res.ok ? res.json() : null).then(me => {
@@ -230,6 +263,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
         headers: storedEtag ? { 'If-None-Match': storedEtag } : {},
       });
       if (res.status === 304) return; // cache already up to date – keep existing IndexedDB contents
+      if (res.status === 401) setSessionExpired(true);
       if (!res.ok) return;
       const data = await res.json();
       const articles: Array<Omit<ScannedArticle, 'salePrice'>> = (data.articles ?? []).map((a: any) => ({
@@ -288,6 +322,9 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
               await set(key, { ...tx, items: unresolved, needsReview: true } as PendingTransaction);
             }
           }
+          // Anmeldung abgelaufen: Vorgang unangetastet lassen (nicht als "Prüfung" markieren, nicht
+          // löschen) – nach der Neuanmeldung wird normal synchronisiert. Weiter versuchen lohnt nicht.
+          if (res.status === 401) { setSessionExpired(true); break; }
           // non-ok response → keep the pending record untouched for the next sync attempt
         } catch { /* keep for next sync */ }
       }
@@ -376,6 +413,11 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
       // basarId: nur in diesem Basar suchen – sonst konnte bei zwei aktiven Basaren (Testbasar
       // neben dem echten) der Artikel mit demselben QR-Code aus dem anderen kommen.
       const res = await fetch(`/api/articles/scan/${encodeURIComponent(qrCode)}?basarId=${encodeURIComponent(basarId)}`);
+      // Anmeldung abgelaufen: kein Fehler, sondern wie offline aus dem Gerätecache übernehmen.
+      if (res.status === 401) {
+        setSessionExpired(true);
+        return scanFromCache(qrCode, true);
+      }
       const data = await res.json();
       if (!res.ok) {
         scannedCodesRef.current.delete(qrCode);
@@ -399,31 +441,42 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
       return tuningRef.current?.resumeDelayMs ?? 600;
     } catch {
       // When offline: try the local article cache first
-      const cached = articleCacheRef.current.get(qrCode);
-      if (cached && cached.status === 'SOLD') {
-        // Cache says this article was already sold as of the last sync – don't let it be
-        // scanned into the cart again (it would just get rejected once synced anyway).
-        scannedCodesRef.current.delete(qrCode);
-        showErrorFlash('Bereits verkauft (laut Cache)');
-        return 1000;
-      } else if (cached) {
-        setCart(prev => [{ ...cached, salePrice: cached.price }, ...prev]);
-        scanTimestampsRef.current.set(qrCode, Date.now());
-        setScanLastTitle(cached.title + ' (offline)');
-        setScanFlash('success');
-        setTimeout(() => setScanFlash(null), 1400);
-        playScanSuccess();
-        return tuningRef.current?.resumeDelayMs ?? 600;
-      } else if (!navigator.onLine) {
-        setPendingManualQr(qrCode);
-        showMessage('Offline: Artikel nicht im Cache – bitte manuell eingeben', 'info');
-        return 0;
-      } else {
-        scannedCodesRef.current.delete(qrCode);
-        showErrorFlash('Netzwerkfehler beim Scannen');
-        showMessage('Netzwerkfehler beim Scannen', 'error');
-        return 1000;
-      }
+      return scanFromCache(qrCode, false);
+    }
+  }
+
+  // Scan ohne Serverantwort: offline (fetch warf) oder Anmeldung abgelaufen (401).
+  function scanFromCache(qrCode: string, sessionOver: boolean): number {
+    const cached = articleCacheRef.current.get(qrCode);
+    const decision = cacheScanDecision(cached);
+    if (decision === 'sold') {
+      // Cache says this article was already sold as of the last sync – don't let it be
+      // scanned into the cart again (it would just get rejected once synced anyway).
+      scannedCodesRef.current.delete(qrCode);
+      showErrorFlash('Bereits verkauft (laut Cache)');
+      return 1000;
+    } else if (decision === 'use' && cached) {
+      setCart(prev => [{ ...cached, salePrice: cached.price }, ...prev]);
+      scanTimestampsRef.current.set(qrCode, Date.now());
+      setScanLastTitle(cached.title + (sessionOver ? ' (Cache)' : ' (offline)'));
+      setScanFlash('success');
+      setTimeout(() => setScanFlash(null), 1400);
+      playScanSuccess();
+      return tuningRef.current?.resumeDelayMs ?? 600;
+    } else if (sessionOver) {
+      scannedCodesRef.current.delete(qrCode);
+      showErrorFlash('Nicht im Cache – bitte neu anmelden');
+      showMessage('Anmeldung abgelaufen und Artikel nicht im Cache – bitte neu anmelden', 'error');
+      return 1000;
+    } else if (!navigator.onLine) {
+      setPendingManualQr(qrCode);
+      showMessage('Offline: Artikel nicht im Cache – bitte manuell eingeben', 'info');
+      return 0;
+    } else {
+      scannedCodesRef.current.delete(qrCode);
+      showErrorFlash('Netzwerkfehler beim Scannen');
+      showMessage('Netzwerkfehler beim Scannen', 'error');
+      return 1000;
     }
   }
 
@@ -487,14 +540,29 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
     // app/api/basars/[id]/sales/route.ts). Ein vom Client geschickter Preis wäre ein vom
     // Client bestimmter Preis – und genau den soll es an der Kasse nicht geben.
     const items = cart.map(i => ({ qrCode: i.qrCode }));
-    const clientTxId = crypto.randomUUID();
+    // Dieselbe ID für Wiederholungen desselben Vorgangs (Neuanmeldung, Doppelklick); erst nach
+    // einer Serverantwort bzw. dem Offline-Speichern beginnt ein neuer.
+    const clientTxId = (kassierTxIdRef.current ??= crypto.randomUUID());
     try {
       const res = await fetch(`/api/basars/${basarId}/sales`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items, clientTxId }),
       });
+      if (res.status === 401) {
+        // Anmeldung abgelaufen: NICHT offline speichern (der Vorgang würde beim Sync ebenfalls
+        // scheitern), Warenkorb behalten, Neuanmeldung anbieten und danach selbst wiederholen.
+        setSessionExpired(true);
+        wantKassierenAfterLogin.current = true;
+        setLoginOpen(true);
+        return;
+      }
+      if (res.status === 403) {
+        showMessage('Dieses Konto darf nicht kassieren', 'error');
+        return;
+      }
       if (res.ok) {
+        kassierTxIdRef.current = null;
         const data = await res.json();
         const failedCount = data.results.filter((r: any) => r.error).length;
         // results[i] gehört zu cart[i]; ins Banner kommen nur die gebuchten Positionen.
@@ -508,14 +576,19 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
           });
         }
         if (failedCount > 0) {
-          showMessage(`${cart.length - failedCount} kassiert, ${failedCount} Fehler`, 'error');
+          // Gebuchte Positionen verlassen den Warenkorb, die nicht gebuchten bleiben (und damit
+          // gespeichert) – ein erneutes Kassieren scheiterte sonst an den schon gebuchten.
+          const remaining = unbookedItems(cart, data.results);
+          setCart(remaining);
+          scannedCodesRef.current = new Set(remaining.map(i => i.qrCode));
+          showMessage(`${cart.length - failedCount} kassiert, ${failedCount} Fehler – die Positionen mit Fehler bleiben im Warenkorb`, 'error');
         } else {
           showMessage(`✓ ${cart.length} Artikel kassiert – Gesamt: ${totalAmount.toFixed(2)} €`, 'success');
           playKassierenSound();
-        setCart([]);
-        scannedCodesRef.current.clear();
-        scanTimestampsRef.current.clear();
-        setCashInput('');
+          setCart([]);
+          scannedCodesRef.current.clear();
+          scanTimestampsRef.current.clear();
+          setCashInput('');
         }
       } else if (!navigator.onLine) {
         // Genuinely offline → queue for later sync
@@ -540,7 +613,11 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
     try {
       const { set } = await import('idb-keyval');
       const key = `pending-sale-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      // Reihenfolge: erst den Offline-Vorgang schreiben, dann (setCart([]) → Effekt) den
+      // gespeicherten Warenkorb löschen. Ein Absturz dazwischen lässt beide Kopien zurück; beim
+      // Wiederherstellen filtert loadPendingQrCodes die Doppelten heraus.
       await set(key, { id: key, basarId, items: cart, timestamp: Date.now() } as PendingTransaction);
+      kassierTxIdRef.current = null;
       setPendingCount(p => p + 1);
       playKassierenSound();
     setCart([]);
@@ -551,6 +628,16 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
     } catch {
       showMessage('Fehler beim Offline-Speichern', 'error');
     }
+  }
+
+  function clearCartWithConfirm() {
+    if (!confirm('Warenkorb leeren?')) return;
+    setCart([]);
+    scannedCodesRef.current.clear();
+    scanTimestampsRef.current.clear();
+    setCashInput('');
+    setRestoredCount(null);
+    kassierTxIdRef.current = null;
   }
 
   async function handleStorno(item: ScannedArticle) {
@@ -587,7 +674,37 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
         {pendingCount > 0 && ` · ${pendingCount} Sync ausstehend`}
       </div>
 
+      {sessionExpired && (
+        <div className="flex items-center justify-between gap-2 bg-amber-100 border-b border-amber-300 text-amber-900 text-sm px-3 py-2">
+          <span>Anmeldung abgelaufen – Scannen geht weiter, zum Kassieren bitte neu anmelden.</span>
+          <button onClick={() => { wantKassierenAfterLogin.current = false; setLoginOpen(true); }}
+            className="flex-shrink-0 px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg">Anmelden</button>
+        </div>
+      )}
+      {loginOpen && (
+        <ReLoginDialog
+          onCancel={() => { wantKassierenAfterLogin.current = false; setLoginOpen(false); }}
+          onSuccess={() => {
+            setLoginOpen(false);
+            setSessionExpired(false);
+            if (wantKassierenAfterLogin.current) { wantKassierenAfterLogin.current = false; setRetryKassieren(true); }
+            // Liegengebliebene Offline-Vorgänge und Artikelcache jetzt nachziehen.
+            syncPending();
+            cacheBasarArticles();
+          }}
+        />
+      )}
+
       <div className="max-w-2xl mx-auto p-2">
+        {restoredCount !== null && cart.length > 0 && (
+          <div className="mb-2 px-3 py-2 rounded-lg border bg-blue-50 border-blue-300 text-blue-900 text-sm">
+            <p className="font-semibold mb-2">Warenkorb von vorhin wiederhergestellt ({restoredCount} Artikel)</p>
+            <div className="flex gap-2">
+              <button onClick={() => setRestoredCount(null)} className="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg">Weiter</button>
+              <button onClick={clearCartWithConfirm} className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium rounded-lg">Leeren</button>
+            </div>
+          </div>
+        )}
         {message && (
           <div className={`mb-2 px-3 py-2 rounded-lg text-sm font-medium border ${msgColors[messageType]}`}>
             {message}
@@ -725,7 +842,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm font-semibold text-gray-700">Warenkorb ({cart.length}){cart.length > 0 && <span className="ml-2 font-bold text-green-600">{totalAmount.toFixed(2)} €</span>}</h2>
             {cart.length > 0 && (
-              <button onClick={() => { if (confirm('Warenkorb leeren?')) { setCart([]); scannedCodesRef.current.clear(); scanTimestampsRef.current.clear(); setCashInput(''); } }}
+              <button onClick={clearCartWithConfirm}
                 className="text-xs text-red-500 hover:underline">Leeren</button>
             )}
           </div>
