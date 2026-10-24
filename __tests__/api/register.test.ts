@@ -277,11 +277,12 @@ describe('POST /api/register', () => {
       expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
       const sql = sqlOf(prismaMock.$queryRaw, 0);
       expect(sql).toContain('UPDATE "SellerIdCounter"');
-      // Die niedrigste *freie* Nummer, nicht die nächste nach der höchsten. Ein "+ 1" auf den
-      // alten Zählerstand ist genau der Fehler vom 26.08.2026 – siehe Regression unten.
+      // Eine *freie* Nummer nach der Regel vom 24.10.2026 (Stufe, Blockbelegung, Block, Nummer),
+      // nicht die nächste nach der höchsten. Ein "+ 1" auf den alten Zählerstand ist genau der
+      // Fehler vom 26.08.2026 – siehe Regression unten.
       expect(sql).toContain('generate_series(1000, 9999)');
-      expect(sql).toContain('MIN(gs)');
       expect(sql).toContain('NOT EXISTS');
+      expect(sql).toMatch(/ORDER BY[\s\S]*gs % 100 = 0[\s\S]*gs % 10 = 0[\s\S]*COALESCE\(b\.belegt, 0\)[\s\S]*gs \/ 1000[\s\S]*LIMIT 1/);
       expect(sql).not.toContain('"nextId" + 1');
       expect(sql).toContain('RETURNING');
       // Im Normalfall wird nicht nachgesät – das kostet sonst eine Anweisung pro Registrierung

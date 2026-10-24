@@ -19,7 +19,17 @@ async function seedSellerIdCounter(): Promise<void> {
   `;
 }
 
-// Setzt nextId auf die *niedrigste freie* Nummer im Bereich 1000-9999 und gibt sie zurück.
+// Setzt nextId auf die nächste zu vergebende Nummer im Bereich 1000-9999 und gibt sie zurück.
+//
+// Regel (Entscheidung Nutzer, 24.10.2026): Die Nummern sollen über die neun Tausender-Blöcke
+// verteilt und möglichst „runde" zuerst vergeben werden. Unter den freien Nummern gilt:
+//   1. Stufe: Vielfache von 100 (x000, x100 …) vor Vielfachen von 10 vor allen übrigen. Erst
+//      wenn in keinem Block mehr ein freier 100er existiert, kommen 10er dran, dann Einer.
+//   2. Innerhalb der Stufe der Block mit den wenigsten belegten Nummern (alle belegten
+//      Nummern des Blocks zählen, nicht nur die der Stufe).
+//   3. Gleichstand: kleinerer Block. 4. Im Block: kleinste freie Nummer der Stufe.
+// Spezifikation in TS: app/lib/sellerIdAllocation.ts (pickSellerId) – muss mit dieser SQL
+// übereinstimmen.
 //
 // Bewusst nicht MAX("sellerId") + 1: die vorhandenen Nummern sind über den ganzen Bereich
 // verstreut (historisch selbst vergeben, nicht fortlaufend). Am 26.08.2026 stand der Zähler
@@ -27,8 +37,8 @@ async function seedSellerIdCounter(): Promise<void> {
 // belegten Nummern meldete die Registrierung „alle Verkäufer-IDs sind vergeben".
 //
 // Die Zeile in "SellerIdCounter" bleibt als Serialisierungspunkt erhalten: das UPDATE sperrt
-// sie auf Zeilenebene. Der Wert wird nicht fortgeschrieben, sondern jedes Mal neu berechnet –
-// ein einmal falsch gesetzter Zähler heilt damit von selbst.
+// sie auf Zeilenebene. Der Wert wird nicht fortgeschrieben, sondern jedes Mal neu aus der
+// tatsächlichen Belegung berechnet – ein einmal falsch gesetzter Zähler heilt damit von selbst.
 //
 // Ist der Bereich erschöpft, liefert die Anweisung eine Zeile mit 10000 statt gar keiner.
 // Das ist wichtig: „keine Zeile" bedeutet dann eindeutig „Zählerzeile fehlt" (siehe unten)
@@ -36,17 +46,28 @@ async function seedSellerIdCounter(): Promise<void> {
 function runAllocate() {
   return prisma.$queryRaw<{ allocated: number | bigint }[]>`
     UPDATE "SellerIdCounter"
-    SET "nextId" = (
-      SELECT COALESCE(MIN(gs), 10000)
+    SET "nextId" = COALESCE((
+      SELECT gs
       FROM generate_series(1000, 9999) AS gs
+      LEFT JOIN (
+        SELECT "sellerId" / 1000 AS blk, COUNT(*) AS belegt
+        FROM "Seller"
+        GROUP BY 1
+      ) b ON b.blk = gs / 1000
       WHERE NOT EXISTS (SELECT 1 FROM "Seller" s WHERE s."sellerId" = gs)
-    )
+      ORDER BY
+        CASE WHEN gs % 100 = 0 THEN 0 WHEN gs % 10 = 0 THEN 1 ELSE 2 END,
+        COALESCE(b.belegt, 0),
+        gs / 1000,
+        gs
+      LIMIT 1
+    ), 10000)
     WHERE "id" = 'default'
     RETURNING "nextId" AS "allocated"
   `;
 }
 
-// Gibt die niedrigste freie sellerId zurück, oder null wenn der Bereich 1000-9999 voll ist.
+// Gibt die nächste sellerId nach obiger Regel zurück, oder null wenn der Bereich 1000-9999 voll ist.
 async function allocateSellerId(): Promise<number | null> {
   let rows = await runAllocate();
 

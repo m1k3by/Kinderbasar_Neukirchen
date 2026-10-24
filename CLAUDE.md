@@ -244,11 +244,19 @@ Regeln, die sich **nicht** aus dem Code erschließen lassen und deshalb nicht ne
 hergeleitet werden dürfen. Mehrere teure Fehler entstanden genau so: plausible
 Regel erfunden, Test dazu geschrieben, beide einig, beide falsch.
 
-- **Verkäufernummern werden als niedrigste freie Nummer vergeben**, per
-  `generate_series(1000, 9999)` gegen die belegten IDs – **nicht** als `MAX + 1`.
-  Der Unterschied ist nicht kosmetisch: mit `MAX + 1` stand der Zähler am 26.08.2026
-  auf 10000, obwohl nur 301 von 9000 Nummern belegt waren, und die Registrierung war
-  tot. Die jetzige Form heilt einen falschen Zählerstand von selbst.
+- **Verkäufernummern (Entscheidung Nutzer, 24.10.2026)** werden für alle Neuanmeldungen
+  (Verkäufer und Mitarbeiter) über die neun Tausender-Blöcke verteilt, runde Nummern zuerst.
+  Unter den freien Nummern (1000–9999) gilt `ORDER BY stufe, belegt_im_block, block, nummer`:
+  Stufe 1 = Vielfache von 100 (x000 zählt mit), dann Vielfache von 10, dann Einer – eine
+  niedrigere Stufe kommt erst dran, wenn in *keinem* Block mehr eine freie Nummer der höheren
+  existiert; innerhalb der Stufe der Block mit den wenigsten belegten Nummern *insgesamt*,
+  bei Gleichstand der kleinere Block, im Block die kleinste freie Nummer der Stufe.
+  Umgesetzt per SQL in `app/api/register/route.ts`; `app/lib/sellerIdAllocation.ts`
+  (`pickSellerId`) ist die Spezifikation und muss damit übereinstimmen.
+  Die Nummer wird **jedes Mal neu aus der Belegung berechnet**, nie fortgeschrieben
+  (**nicht** `MAX + 1`): mit `MAX + 1` stand der Zähler am 26.08.2026 auf 10000, obwohl
+  nur 301 von 9000 Nummern belegt waren, und die Registrierung war tot. Die jetzige Form
+  heilt einen falschen Zählerstand von selbst.
 - **Übernehmbarkeit aus dem Archiv entscheidet allein `SOLD`** – siehe letzter Punkt
   unter „Sonstige Konventionen". Nicht „solange noch ein Artikel dranhängt".
 - **Orga ist ein Zusatzkennzeichen, kein Rang** – siehe `Seller.isOrga` oben.
