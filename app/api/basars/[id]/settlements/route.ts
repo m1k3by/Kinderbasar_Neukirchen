@@ -16,15 +16,49 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const denied = await requireBasarAccess(authResult.auth, basarId);
     if (denied) return denied;
 
-    // Sellers can only see their own settlement
+    // „verkauft / eingestellt" je Verkäufer für die Tabelle: eine gruppierte Abfrage über alle
+    // Artikel (des Basars bzw. der übergebenen Bedingung) statt einer Zählung pro Zeile.
+    const countArticles = async (where: Prisma.ArticleWhereInput) => {
+      const counts = await prisma.article.groupBy({
+        by: ['basarSellerId', 'status'],
+        where,
+        _count: { _all: true },
+      });
+      const map = new Map<string, { sold: number; total: number }>();
+      for (const c of counts) {
+        const entry = map.get(c.basarSellerId) ?? { sold: 0, total: 0 };
+        entry.total += c._count._all;
+        if (c.status === 'SOLD') entry.sold += c._count._all;
+        map.set(c.basarSellerId, entry);
+      }
+      return map;
+    };
+
+    // Nicht-Admins (Verkäufer, Mitarbeiter, Kassierer) sehen nur ihre eigene Abrechnung – in
+    // derselben Form wie die Admin-Zeilen. Die Seite /admin/basars/[id]/abrechnung ist auch für
+    // Kassierer erreichbar und liest basarSeller.seller und articleCounts; mit der nackten
+    // Settlement-Zeile stürzte sie dort ab.
     if (auth.role !== 'admin') {
       const sellerId: number = auth.sellerId!;
       const basarSeller = await prisma.basarSeller.findUnique({
         where: { basarId_sellerId: { basarId, sellerId } },
-        include: { settlement: true },
+        include: {
+          settlement: true,
+          seller: { select: { firstName: true, lastName: true, sellerId: true, isOrga: true } },
+        },
       });
-      if (!basarSeller) return NextResponse.json({ settlements: [] });
-      return NextResponse.json({ settlements: basarSeller.settlement ? [basarSeller.settlement] : [] });
+      if (!basarSeller?.settlement) return NextResponse.json({ settlements: [] });
+      const { settlement, ...ownBasarSeller } = basarSeller;
+      const counts = await countArticles({ basarSellerId: basarSeller.id });
+      return NextResponse.json({
+        settlements: [
+          {
+            ...settlement,
+            basarSeller: ownBasarSeller,
+            articleCounts: counts.get(basarSeller.id) ?? { sold: 0, total: 0 },
+          },
+        ],
+      });
     }
 
     const settlements = await prisma.settlement.findMany({
@@ -39,20 +73,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       orderBy: { basarSeller: { sellerId: 'asc' } },
     });
 
-    // „verkauft / eingestellt" je Verkäufer für die Tabelle: eine gruppierte Abfrage über alle
-    // Artikel des Basars statt einer Zählung pro Zeile.
-    const counts = await prisma.article.groupBy({
-      by: ['basarSellerId', 'status'],
-      where: { basarSeller: { basarId } },
-      _count: { _all: true },
-    });
-    const articleCounts = new Map<string, { sold: number; total: number }>();
-    for (const c of counts) {
-      const entry = articleCounts.get(c.basarSellerId) ?? { sold: 0, total: 0 };
-      entry.total += c._count._all;
-      if (c.status === 'SOLD') entry.sold += c._count._all;
-      articleCounts.set(c.basarSellerId, entry);
-    }
+    const articleCounts = await countArticles({ basarSeller: { basarId } });
 
     return NextResponse.json({
       settlements: settlements.map((s) => ({

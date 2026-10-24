@@ -255,9 +255,12 @@ Regel erfunden, Test dazu geschrieben, beide einig, beide falsch.
 
 ### Ungeklärt – nicht erfinden, sondern fragen
 
-- **Etiketten: Papierart und Befestigung.** Ob Normalpapier zulässig ist und womit
-  befestigt wird, ist eine Orga-Entscheidung. Stand versehentlich schon zweimal als
-  erfundene Regel in Nutzertexten (FAQ, Anleitung).
+- **Etiketten: Befestigung.** Womit ausgeschnittene Etiketten befestigt werden, ist
+  eine Orga-Entscheidung und offen. Stand versehentlich schon zweimal als erfundene
+  Regel in Nutzertexten (FAQ, Anleitung). *Geklärt (Orga, 16.10.2026):* die Papierart –
+  Etiketten dürfen auf Normalpapier gedruckt und ausgeschnitten werden; dort darf
+  „An Seite anpassen“ gewählt werden, falls der Drucker oben/unten abschneidet. Auf
+  Etikettenbögen bleibt es bei „Tatsächliche Größe“ / 100 %.
 - **Helferschichten: Überschneidungen.** Eine Prüfung auf zeitliche Überschneidung
   gibt es nicht. Ob das gewollt ist oder eine Lücke, ist offen – bis dahin wird in
   Anleitungen nicht behauptet, Überschneidungen seien ausgeschlossen.

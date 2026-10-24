@@ -3,6 +3,7 @@ import { prisma } from '../../../../lib/prisma';
 import { requireAuth } from '../../../../lib/apiAuth';
 import { requireBasarAccess } from '../../../../lib/basarAccess';
 import { maxArticlesFor } from '../../../../lib/articleLimits';
+import { MAX_ARTICLE_PRICE, PRICE_TOO_HIGH_MESSAGE } from '../../../../lib/articlePrice';
 
 // GET /api/basars/:id/articles – get articles for calling seller in this basar
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -94,6 +95,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const priceNum = parseFloat(price);
     if (!Number.isFinite(priceNum) || priceNum <= 0) {
       return NextResponse.json({ error: 'Preis muss größer als 0 sein' }, { status: 400 });
+    }
+    if (priceNum > MAX_ARTICLE_PRICE) {
+      return NextResponse.json({ error: PRICE_TOO_HIGH_MESSAGE }, { status: 400 });
     }
     const genderValue = (gender === 'Junge' || gender === 'Mädchen' || gender === 'Unisex') ? gender : null;
     const titleTrimmed = String(title).substring(0, 120);

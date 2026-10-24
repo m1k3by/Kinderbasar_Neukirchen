@@ -9,20 +9,20 @@ export default function LegalFooter() {
             © {new Date().getFullYear()} Kinderbasar Neukirchen
           </p>
           <nav className="flex gap-6">
-            <Link 
-              href="/impressum" 
+            <Link
+              href="/impressum" prefetch={false} 
               className="hover:text-gray-900 hover:underline transition-colors"
             >
               Impressum
             </Link>
-            <Link 
-              href="/datenschutz" 
+            <Link
+              href="/datenschutz" prefetch={false} 
               className="hover:text-gray-900 hover:underline transition-colors"
             >
               Datenschutz
             </Link>
-            <Link 
-              href="/agb" 
+            <Link
+              href="/agb" prefetch={false} 
               className="hover:text-gray-900 hover:underline transition-colors"
             >
               AGB

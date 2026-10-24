@@ -662,7 +662,7 @@ export default function SellerPage() {
                   />
                   <span className="text-sm text-gray-700">
                     Ich akzeptiere die{' '}
-                    <Link href="/agb" target="_blank" className="text-blue-600 hover:underline font-medium">
+                    <Link href="/agb" prefetch={false} target="_blank" className="text-blue-600 hover:underline font-medium">
                       Allgemeinen Geschäftsbedingungen (AGB)
                     </Link>
                     .
@@ -678,7 +678,7 @@ export default function SellerPage() {
                   />
                   <span className="text-sm text-gray-700">
                     Ich habe die{' '}
-                    <Link href="/datenschutz" target="_blank" className="text-blue-600 hover:underline font-medium">
+                    <Link href="/datenschutz" prefetch={false} target="_blank" className="text-blue-600 hover:underline font-medium">
                       Datenschutzerklärung
                     </Link>
                     {' '}gelesen und stimme der Verarbeitung meiner Daten zu.

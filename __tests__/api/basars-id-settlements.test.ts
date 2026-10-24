@@ -72,7 +72,8 @@ describe('GET /api/basars/[id]/settlements', () => {
   it('seller: returns own settlement', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basarSeller.findUnique.mockResolvedValue({
-      id: 'bs-1', settlement: { id: 'set-1', netPayout: 10 },
+      id: 'bs-1', isActive: true, settlement: { id: 'set-1', netPayout: 10 },
+      seller: { firstName: 'A', lastName: 'B', sellerId: 1234, isOrga: false },
     });
     const res = await GET(makeGetRequest(), makeContext());
     expect(res.status).toBe(200);
@@ -80,9 +81,34 @@ describe('GET /api/basars/[id]/settlements', () => {
     expect(data.settlements).toHaveLength(1);
   });
 
+  // Kassierer erreichen /admin/basars/[id]/abrechnung (middleware.ts) und die Seite liest
+  // basarSeller.seller und articleCounts. Die nackte Settlement-Zeile ließ sie abstürzen.
+  it('Nicht-Admin: eigene Zeile hat dieselbe Form wie im Admin-Zweig, nur für die eigene Nummer', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basarSeller.findUnique.mockResolvedValue({
+      id: 'bs-1', isActive: true, settlement: { id: 'set-1', basarSellerId: 'bs-1', netPayout: 10 },
+      seller: { firstName: 'A', lastName: 'B', sellerId: 1234, isOrga: false },
+    });
+    prismaMock.article.groupBy.mockResolvedValue([
+      { basarSellerId: 'bs-1', status: 'SOLD', _count: { _all: 2 } },
+      { basarSellerId: 'bs-1', status: 'AVAILABLE', _count: { _all: 3 } },
+    ]);
+    const data = await (await GET(makeGetRequest(), makeContext())).json();
+    expect(data.settlements).toHaveLength(1);
+    expect(data.settlements[0].basarSeller.seller.sellerId).toBe(1234);
+    expect(data.settlements[0].basarSeller.isActive).toBe(true);
+    expect(data.settlements[0].basarSeller.settlement).toBeUndefined();
+    expect(data.settlements[0].articleCounts).toEqual({ sold: 2, total: 5 });
+    // Abfragen sind auf die eigene Nummer bzw. basarSellerId beschränkt – nie auf den ganzen Basar.
+    const bsArgs = prismaMock.basarSeller.findUnique.mock.calls[0][0];
+    expect(bsArgs.where).toEqual({ basarId_sellerId: { basarId: 'basar-1', sellerId: 1234 } });
+    expect(prismaMock.article.groupBy.mock.calls[0][0].where).toEqual({ basarSellerId: 'bs-1' });
+    expect(prismaMock.settlement.findMany).not.toHaveBeenCalled();
+  });
+
   it('seller: returns empty settlements when no settlement yet', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
-    prismaMock.basarSeller.findUnique.mockResolvedValue({ id: 'bs-1', settlement: null });
+    prismaMock.basarSeller.findUnique.mockResolvedValue({ id: 'bs-1', settlement: null, seller: {} });
     const res = await GET(makeGetRequest(), makeContext());
     expect(res.status).toBe(200);
     expect((await res.json()).settlements).toEqual([]);

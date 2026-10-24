@@ -114,6 +114,19 @@ describe('buildScannerConfig', () => {
     }
   });
 
+  // html5-qrcode wirft bei qrbox-Maßen < 50 px („minimum size of 'config.qrbox'…"). Ein
+  // Sucher mit Größe 0 beim Start (Seite verdeckt, App-Wechsel) lieferte genau das.
+  it('unterschreitet nie 50 px, auch wenn der Sucher winzig oder 0 ist', () => {
+    for (const native of [true, false]) {
+      const config = buildScannerConfig(scannerTuning(native));
+      for (const [w, h] of [[0, 0], [40, 30], [377, 0], [0, 400]]) {
+        const box = config.qrbox(w, h);
+        expect(box.width).toBeGreaterThanOrEqual(50);
+        expect(box.height).toBeGreaterThanOrEqual(50);
+      }
+    }
+  });
+
   // Die Begründung von qrboxRatio (weniger Bildpunkte je Dekodierlauf ohne nativen Decoder)
   // muss die Umstellung auf Querformat überleben.
   it('dekodiert ohne nativen Decoder weiterhin eine kleinere Fläche', () => {

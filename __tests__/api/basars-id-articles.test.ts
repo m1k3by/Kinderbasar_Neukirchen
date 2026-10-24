@@ -237,6 +237,33 @@ describe('POST /api/basars/[id]/articles', () => {
     expect(res.status).toBe(400);
   });
 
+  // Article.price / SellerArticle.price sind Decimal(6,2): ab 10000 wirft Postgres „numeric
+  // field overflow" (am 09.10. fünfmal als 500 in Produktion).
+  it('Preis 10000 → 400 mit Meldung, nichts wird angelegt', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basar.findUnique.mockResolvedValue(openBasar);
+    prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
+    prismaMock.article.count.mockResolvedValue(0);
+    const res = await POST(makePostRequest({ title: 'Shirt', price: 10000 }), makeContext());
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('Preis zu hoch – höchstens 9.999,99 €.');
+    expect(prismaMock.sellerArticle.create).not.toHaveBeenCalled();
+    expect(prismaMock.article.create).not.toHaveBeenCalled();
+  });
+
+  it('Preis 9999.99 wird angenommen und unverändert gespeichert', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basar.findUnique.mockResolvedValue(openBasar);
+    prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
+    prismaMock.article.count.mockResolvedValue(0);
+    prismaMock.sellerArticle.create.mockResolvedValue({ id: 'sa-1', title: 'Shirt', qrCode: 'uuid-1' });
+    prismaMock.article.create.mockResolvedValue({ id: 'art-1', title: 'Shirt', qrCode: 'uuid-1', status: 'AVAILABLE' });
+    const res = await POST(makePostRequest({ title: 'Shirt', price: 9999.99 }), makeContext());
+    expect(res.status).toBe(201);
+    expect(prismaMock.article.create.mock.calls[0][0].data.price).toBe(9999.99);
+    expect(prismaMock.sellerArticle.create.mock.calls[0][0].data.price).toBe(9999.99);
+  });
+
   it('creates article successfully → 201', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);

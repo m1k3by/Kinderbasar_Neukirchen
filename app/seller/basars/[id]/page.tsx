@@ -8,6 +8,7 @@ import { parseSizes, sizeGroups } from '../../../lib/sizes';
 import { getNavLinks } from '../../../lib/navLinks';
 import { formatArticleLimit, maxArticlesFor } from '../../../lib/articleLimits';
 import { settlementAmounts } from '../../../lib/payout';
+import { MAX_ARTICLE_PRICE, PRICE_TOO_HIGH_MESSAGE } from '../../../lib/articlePrice';
 
 interface Article {
   id: string;
@@ -248,6 +249,10 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
     const priceVal = parseFloat(form.price);
     if (isNaN(priceVal) || Math.round(priceVal * 100) % 50 !== 0 || priceVal < 0.5) {
       showMsg('Der Preis muss ein Vielfaches von 0,50 € sein (z.B. 0,50 – 1,00 – 1,50 …)', false);
+      return;
+    }
+    if (priceVal > MAX_ARTICLE_PRICE) {
+      showMsg(PRICE_TOO_HIGH_MESSAGE, false);
       return;
     }
 
@@ -879,7 +884,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
               <div className={isClothing ? undefined : 'md:col-span-2'}>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Preis (€) *</label>
                 <input
-                  required type="number" min="0.50" step="0.50"
+                  required type="number" min="0.50" max={MAX_ARTICLE_PRICE} step="0.50"
                   value={form.price}
                   onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
                   placeholder="0,50"
@@ -921,9 +926,10 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
             </div>
             {basar.status === 'OPEN' && (
               <p className="px-5 py-2.5 text-xs text-gray-700 bg-amber-50 border-b border-amber-100">
-                Beim Drucken <strong>{'„Tatsächliche Größe" / 100 %'}</strong> wählen – nicht{' '}
-                {'„An Seite anpassen".'} Papierformat A4, Etikettenbögen 70 × 36 mm (z. B. Avery
-                3475).{' '}
+                Auf Etikettenbögen immer <strong>{'„Tatsächliche Größe" / 100 %'}</strong> wählen.
+                Auf Normalpapier zum Ausschneiden darf {'„An Seite anpassen"'} gewählt werden, falls
+                der Drucker oben oder unten etwas abschneidet. Papierformat A4, Etikettenbögen
+                70 × 36 mm (z. B. Avery 3475).{' '}
                 <a
                   href={`/api/basars/${basarId}/labels.pdf?calibration=1`}
                   download
@@ -1091,8 +1097,9 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
               {/* Pflichthinweis an der Download-Stelle: ohne „Tatsächliche Größe" skaliert der
                   Druckdialog den Bogen und die Etiketten passen nicht mehr auf die Stanzung. */}
               <div className="px-5 py-2.5 text-xs text-gray-700 bg-amber-50 border-t border-amber-100">
-                Beim Drucken <strong>{'„Tatsächliche Größe" / 100 %'}</strong> wählen – nicht{' '}
-                {'„An Seite anpassen".'}
+                Auf Etikettenbögen immer <strong>{'„Tatsächliche Größe" / 100 %'}</strong> wählen.
+                Auf Normalpapier zum Ausschneiden darf {'„An Seite anpassen"'} gewählt werden, falls
+                der Drucker oben oder unten etwas abschneidet.
               </div>
 
               <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between gap-3">

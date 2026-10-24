@@ -111,6 +111,12 @@ export const SCANNER_VIEWPORT_HEIGHT = 220;
 /** Seitenverhältnis des Suchfensters (Breite : Höhe). Querformat wie der sichtbare Streifen. */
 export const QRBOX_ASPECT = 1.5;
 
+/**
+ * Kleinste Kantenlänge des Suchfensters (px). html5-qrcode wirft beim Start „minimum size of
+ * 'config.qrbox' dimension value is 50px", wenn Breite oder Höhe darunter liegen.
+ */
+export const QRBOX_MIN = 50;
+
 /** Fertige `Html5QrcodeCameraScanConfig` für `Html5Qrcode.start()`. */
 export function buildScannerConfig(tuning: ScannerTuning) {
   return {
@@ -124,7 +130,8 @@ export function buildScannerConfig(tuning: ScannerTuning) {
       const visibleHeight = Math.min(viewfinderHeight, SCANNER_VIEWPORT_HEIGHT);
       const height = Math.floor(visibleHeight * tuning.qrboxRatio);
       const width = Math.min(Math.floor(height * QRBOX_ASPECT), Math.floor(viewfinderWidth * 0.9));
-      return { width, height };
+      // Bei winzigem/0 großem Sucher (Seite verdeckt, App-Wechsel beim Start) käme < 50 heraus.
+      return { width: Math.max(QRBOX_MIN, width), height: Math.max(QRBOX_MIN, height) };
     },
     disableFlip: tuning.disableFlip,
     videoConstraints: tuning.videoConstraints,

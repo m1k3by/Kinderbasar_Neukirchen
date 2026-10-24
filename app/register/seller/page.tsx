@@ -161,7 +161,7 @@ export default function RegisterSellerPage() {
                 <label htmlFor="agb" className="text-gray-700 text-base">
                   Ich akzeptiere die{' '}
                   <Link 
-                    href="/agb" 
+                    href="/agb" prefetch={false} 
                     target="_blank"
                     className="text-blue-600 hover:underline font-medium"
                   >
