@@ -370,6 +370,9 @@ test('Doppelter Storno gleichzeitig: der Artikel darf danach nicht zweimal verka
   // Zustand muss stimmen, egal wie viele Antworten „ok" sagen: kein aktiver Verkauf, Artikel frei.
   expect(await prisma.sale.count({ where: { articleId: id, isCancelled: false } })).toBe(0);
   expect((await prisma.article.findUnique({ where: { id } }))?.status).toBe('AVAILABLE');
+  // Der Verlierer des Wettlaufs bekommt 409 (bedingtes Update), ein späterer zweiter Storno 400.
+  expect(res.map(r => r.status()).filter(s => s !== 200).every(s => s === 409 || s === 400)).toBe(true);
+  expect([400, 409]).toContain((await admin.delete(`/api/sales/${saleId}`)).status());
 });
 
 test('Kassierer ohne Einladung kann im Testbasar nicht kassieren', async () => {

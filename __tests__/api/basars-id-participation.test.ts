@@ -12,6 +12,8 @@ const prismaMock = vi.hoisted(() => ({
   seller: { findUnique: vi.fn() },
   basarSeller: { findUnique: vi.fn(), count: vi.fn(), upsert: vi.fn() },
   mailQueue: { create: vi.fn() },
+  $queryRaw: vi.fn(),
+  $transaction: vi.fn(),
 }));
 vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
 
@@ -60,6 +62,8 @@ describe('PUT /api/basars/[id]/participation', () => {
     prismaMock.seller.findUnique.mockResolvedValue(seller);
     prismaMock.basarSeller.findUnique.mockResolvedValue(null); // no existing row by default
     prismaMock.basarSeller.count.mockResolvedValue(0);
+    // Interaktive Transaktion: der gemockte tx-Client ist prismaMock selbst.
+    prismaMock.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prismaMock));
     prismaMock.mailQueue.create.mockResolvedValue({});
   });
 
@@ -172,6 +176,54 @@ describe('PUT /api/basars/[id]/participation', () => {
         privacyVersion: PRIVACY_VERSION,
       },
     });
+  });
+
+  // Drei gleichzeitige Anmeldungen auf den letzten Platz kamen alle durch: jede zählte, bevor
+  // eine geschrieben hatte. Ein gemocktes $transaction serialisiert nichts – belegbar ist die
+  // Reihenfolge: Sperre auf genau diese Basar-Zeile → count → upsert, alles in einer Transaktion.
+  it('sperrt die Basar-Zeile (FOR UPDATE), bevor gezählt und aktiviert wird', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basarSeller.upsert.mockResolvedValue(activeBasarSeller);
+
+    const res = await PUT(makeRequest({ isActive: true, acceptedTerms: true }), makeContext());
+
+    expect(res.status).toBe(200);
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+    expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
+    const [strings, ...values] = prismaMock.$queryRaw.mock.calls[0];
+    expect(strings.join('?')).toMatch(/SELECT 1 FROM "Basar" WHERE id = \? FOR UPDATE/);
+    expect(values).toEqual(['basar-1']);
+    const order = (m: { mock: { invocationCallOrder: number[] } }) => m.mock.invocationCallOrder[0];
+    expect(order(prismaMock.$queryRaw)).toBeLessThan(order(prismaMock.basarSeller.count));
+    expect(order(prismaMock.basarSeller.count)).toBeLessThan(order(prismaMock.basarSeller.upsert));
+  });
+
+  it('bei voller Basar-Zeile: gesperrt und gezählt, aber nichts geschrieben, keine Mail', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basarSeller.count.mockResolvedValue(100);
+
+    const res = await PUT(makeRequest({ isActive: true, acceptedTerms: true }), makeContext());
+
+    expect(res.status).toBe(400);
+    expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(prismaMock.basarSeller.upsert).not.toHaveBeenCalled();
+    expect(prismaMock.mailQueue.create).not.toHaveBeenCalled();
+  });
+
+  it('Abmelden und Admin-Aktivierung brauchen keine Sperre und keine Transaktion', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.basarSeller.upsert.mockResolvedValue(activeBasarSeller);
+    await PUT(makeRequest({ sellerId: 1234, isActive: true }), makeContext());
+
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basarSeller.findUnique.mockResolvedValue(activeBasarSeller);
+    prismaMock.basarSeller.upsert.mockResolvedValue({ ...activeBasarSeller, isActive: false });
+    await PUT(makeRequest({ isActive: false }), makeContext());
+
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    expect(prismaMock.$queryRaw).not.toHaveBeenCalled();
+    expect(prismaMock.basarSeller.count).not.toHaveBeenCalled();
+    expect(prismaMock.basarSeller.upsert).toHaveBeenCalledTimes(2);
   });
 
   it('deactivating is always allowed, even outside the activation window or at capacity', async () => {
@@ -363,6 +415,8 @@ describe('PUT /api/basars/[id]/participation – Fassungen im Zustimmungsnachwei
     prismaMock.seller.findUnique.mockResolvedValue(seller);
     prismaMock.basarSeller.findUnique.mockResolvedValue(null);
     prismaMock.basarSeller.count.mockResolvedValue(0);
+    // Interaktive Transaktion: der gemockte tx-Client ist prismaMock selbst.
+    prismaMock.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prismaMock));
     prismaMock.basarSeller.upsert.mockResolvedValue(activeBasarSeller);
     prismaMock.mailQueue.create.mockResolvedValue({ id: 'mail-1' });
   });

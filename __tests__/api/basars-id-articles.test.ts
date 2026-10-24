@@ -12,6 +12,7 @@ const prismaMock = vi.hoisted(() => ({
   seller: { findUnique: vi.fn() },
   basar: { findUnique: vi.fn() },
   sellerArticle: { create: vi.fn() },
+  $queryRaw: vi.fn(),
   $transaction: vi.fn(),
 }));
 vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
@@ -306,6 +307,63 @@ describe('POST /api/basars/[id]/articles', () => {
       update: {},
       create: { basarId: 'basar-1', sellerId: 1234, isActive: false, activatedAt: null },
     });
+  });
+
+  // Fünf gleichzeitige POSTs bei Limit 3 legten vier an: alle zählten, bevor einer schrieb.
+  // Ein gemocktes $transaction serialisiert nichts – belegbar ist nur die Reihenfolge der
+  // Aufrufe: upsert (Zeile existiert) → FOR UPDATE auf genau diese Zeile → count → create.
+  it('sperrt die BasarSeller-Zeile (FOR UPDATE), bevor gezählt und angelegt wird', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basar.findUnique.mockResolvedValue(openBasar);
+    prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
+    prismaMock.article.count.mockResolvedValue(0);
+    prismaMock.sellerArticle.create.mockResolvedValue({ id: 'sa-1', title: 'T', qrCode: 'uuid-1' });
+    prismaMock.article.create.mockResolvedValue({ id: 'art-1', title: 'T', qrCode: 'uuid-1', status: 'AVAILABLE' });
+
+    const res = await POST(makePostRequest({ title: 'T', price: 1 }), makeContext());
+
+    expect(res.status).toBe(201);
+    expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
+    const [strings, ...values] = prismaMock.$queryRaw.mock.calls[0];
+    expect(strings.join('?')).toMatch(/SELECT 1 FROM "BasarSeller" WHERE id = \? FOR UPDATE/);
+    expect(values).toEqual(['bs-1']);
+
+    const order = (m: { mock: { invocationCallOrder: number[] } }) => m.mock.invocationCallOrder[0];
+    expect(order(prismaMock.basarSeller.upsert)).toBeLessThan(order(prismaMock.$queryRaw));
+    expect(order(prismaMock.$queryRaw)).toBeLessThan(order(prismaMock.article.count));
+    expect(order(prismaMock.article.count)).toBeLessThan(order(prismaMock.article.create));
+    expect(prismaMock.article.count).toHaveBeenCalledWith({ where: { basarSellerId: 'bs-1' } });
+  });
+
+  it('sperrt auch, wenn die Zeile schon existiert (ohne Upsert) – und vor dem Zählen', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basar.findUnique.mockResolvedValue(openBasar);
+    prismaMock.basarSeller.findUnique.mockResolvedValue(fakeBasarSeller);
+    prismaMock.article.count.mockResolvedValue(0);
+    prismaMock.sellerArticle.create.mockResolvedValue({ id: 'sa-1' });
+    prismaMock.article.create.mockResolvedValue({ id: 'art-1' });
+
+    await POST(makePostRequest({ title: 'T', price: 1 }), makeContext());
+
+    expect(prismaMock.basarSeller.upsert).not.toHaveBeenCalled();
+    expect(prismaMock.$queryRaw.mock.calls[0].slice(1)).toEqual(['bs-1']);
+    expect(prismaMock.$queryRaw.mock.invocationCallOrder[0])
+      .toBeLessThan(prismaMock.article.count.mock.invocationCallOrder[0]);
+  });
+
+  it('bei erreichtem Limit: Sperre und Zählung ja, aber kein create', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basar.findUnique.mockResolvedValue({ ...openBasar, maxArticlesPerSeller: 3 });
+    prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
+    prismaMock.article.count.mockResolvedValue(3);
+
+    const res = await POST(makePostRequest({ title: 'T', price: 1 }), makeContext());
+
+    expect(res.status).toBe(400);
+    expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(prismaMock.article.count).toHaveBeenCalledTimes(1);
+    expect(prismaMock.sellerArticle.create).not.toHaveBeenCalled();
+    expect(prismaMock.article.create).not.toHaveBeenCalled();
   });
 
   it('upsert keeps working across repeated calls (double-click / two tabs)', async () => {

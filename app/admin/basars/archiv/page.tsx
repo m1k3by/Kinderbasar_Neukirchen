@@ -28,7 +28,7 @@ export default function BasarArchivPage() {
   const [message, setMessage] = useState('');
   // Default to admin nav until /api/me resolves – see app/admin/basars/page.tsx for why
   // this matters (cashiers can also reach /admin/basars/**).
-  const [navUser, setNavUser] = useState<NavUser>({ role: 'admin' });
+  const [navUser, setNavUser] = useState<NavUser | null>(null);
 
   useEffect(() => { loadArchive(); loadMe(); }, []);
 

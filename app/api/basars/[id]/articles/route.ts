@@ -148,6 +148,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         create: { basarId, sellerId, isActive: false, activatedAt: null },
       });
 
+      // Zeilensperre vor dem Zählen: ohne sie zählten fünf gleichzeitige Requests alle 0 bis 2
+      // Artikel, bevor einer geschrieben hat, und legten zusammen mehr als das Limit an.
+      // Der Sperrhalter wartet bis Commit; der nächste zählt dann den neuen Stand.
+      await tx.$queryRaw`SELECT 1 FROM "BasarSeller" WHERE id = ${basarSeller.id} FOR UPDATE`;
+
       const maxArticles = maxArticlesFor(basar, seller ?? { isEmployee: false, isOrga: false }, basarSeller.maxArticlesOverride);
       const articleCount = await tx.article.count({ where: { basarSellerId: basarSeller.id } });
       if (articleCount >= maxArticles) {

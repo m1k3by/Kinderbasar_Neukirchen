@@ -68,10 +68,15 @@ const ADMIN_LINKS: NavLinkDef[] = [
  *   (Basar-Auswahl). Seiten, die den aktuell laufenden Basar schon kennen (z.B.
  *   app/employee/page.tsx), können direkt auf dessen Kasse verlinken.
  */
-export function getNavLinks(user: NavUser, activeKey?: NavKey, opts?: { kasseHref?: string }): NavLink[] {
+export function getNavLinks(user: NavUser | null, activeKey?: NavKey, opts?: { kasseHref?: string }): NavLink[] {
   const defs: NavLinkDef[] = [];
 
-  if (user.role === 'admin') {
+  // user === null: Rolle noch unbekannt (Seiten unter /admin/basars/** warten auf /api/me).
+  // Dann nur Logout – sonst rendert der Header Admin-Links (Prefetch auf /admin/logs …, die
+  // die Middleware dem Kassierer verweigert) und fragt die Fehlerzahl ab (403).
+  if (!user) {
+    // nichts: nur Logout unten
+  } else if (user.role === 'admin') {
     defs.push(...ADMIN_LINKS);
   } else {
     defs.push({ key: 'verkaeufer', href: '/seller', label: 'Verkäuferbereich' });
@@ -88,7 +93,7 @@ export function getNavLinks(user: NavUser, activeKey?: NavKey, opts?: { kasseHre
   // Der erste Eintrag ist immer der eigene Bereich (/admin bzw. /seller) und damit das Ziel
   // des Logos. Ohne diesen Marker zeigte das Logo auf '/' – die oeffentliche Startseite, die
   // nur "Login" anbietet und deshalb wie eine Abmeldung aussieht.
-  if (links[0]) links[0].home = true;
+  if (links[0]) links[0].home = true; // vor dem Logout-Eintrag; bei user === null gibt es keinen
 
   // href bleibt '/' als Verhalten ohne JavaScript; abgemeldet wird ueber action.
   links.push({ href: '/', label: 'Logout', action: 'logout' });
@@ -102,6 +107,6 @@ export function getNavLinks(user: NavUser, activeKey?: NavKey, opts?: { kasseHre
  * "Kasse" – ein fest verdrahtetes 'basare' würde bei ihm auf gar keinen Eintrag passen,
  * seit der Seller-Zweig keinen 'basare'-Link mehr hat.
  */
-export function basarsAdminActiveKey(user: NavUser): NavKey {
-  return user.role === 'admin' ? 'basare' : 'kasse';
+export function basarsAdminActiveKey(user: NavUser | null): NavKey {
+  return user?.role === 'admin' ? 'basare' : 'kasse';
 }

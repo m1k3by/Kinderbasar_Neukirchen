@@ -42,7 +42,7 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
   const [filter, setFilter] = useState<SettlementFilter>('all');
   // Default to admin nav until /api/me resolves – see app/admin/basars/page.tsx for why
   // this matters (cashiers can also reach /admin/basars/**).
-  const [navUser, setNavUser] = useState<NavUser>({ role: 'admin' });
+  const [navUser, setNavUser] = useState<NavUser | null>(null);
 
   useEffect(() => { loadData(); loadMe(); }, [basarId]);
 
@@ -123,7 +123,7 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
             <h1 className="text-2xl font-bold text-gray-800">Abrechnung</h1>
             {basar && <p className="text-gray-500">{basar.title}</p>}
           </div>
-          {navUser.role === 'admin' && basar?.status === 'CLOSED' && (
+          {navUser?.role === 'admin' && basar?.status === 'CLOSED' && (
             <div className="flex items-center gap-2">
               {settlements.length > 0 && (
                 <a
@@ -252,7 +252,7 @@ export default function AbrechnungPage({ params }: { params: Promise<{ id: strin
 
         {settlements.length === 0 && basar?.status === 'CLOSED' && (
           <div className="text-center py-12 text-gray-400">
-            {navUser.role === 'admin'
+            {navUser?.role === 'admin'
               ? 'Noch keine Abrechnung generiert. Klicke auf „Abrechnung erstellen".'
               : 'Noch keine Abrechnung generiert.'}
           </div>

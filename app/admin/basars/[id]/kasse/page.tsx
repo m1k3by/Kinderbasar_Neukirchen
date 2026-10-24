@@ -55,7 +55,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
   // Default to admin nav until /api/me resolves – this page is reachable by both admins
   // and cashiers (see middleware.ts), so the nav must be corrected as soon as we know
   // who's asking, to avoid showing a cashier links the middleware would immediately block.
-  const [navUser, setNavUser] = useState<NavUser>({ role: 'admin' });
+  const [navUser, setNavUser] = useState<NavUser | null>(null);
   // Snapshot des zuletzt erfolgreich kassierten Bons fürs Banner (nur online gebuchte
   // Vorgänge; offline gespeicherte erzeugen bewusst keinen).
   const [lastBon, setLastBon] = useState<LastBon | null>(null);
@@ -711,7 +711,7 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
           </div>
         )}
 
-        <BonHistory basarId={basarId} lastBon={lastBon} isAdmin={navUser.role === 'admin'} view={bonView} setView={setBonView} onOpen={stopScanner} />
+        <BonHistory basarId={basarId} lastBon={lastBon} isAdmin={navUser?.role === 'admin'} view={bonView} setView={setBonView} onOpen={stopScanner} />
 
         {/* QR Scanner */}
         <div className="bg-white rounded-xl shadow-md p-3 mb-2">

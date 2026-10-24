@@ -387,7 +387,7 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
   const [saving, setSaving] = useState(false);
   // Default to admin nav until /api/me resolves – see app/admin/basars/page.tsx for why
   // this matters (cashiers can also reach /admin/basars/**).
-  const [navUser, setNavUser] = useState<NavUser>({ role: 'admin' });
+  const [navUser, setNavUser] = useState<NavUser | null>(null);
 
   useEffect(() => { loadBasar(); loadMe(); }, [id]);
 
@@ -646,19 +646,19 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {navUser.role === 'admin' && !editMode && basar.status !== 'CLOSED' && (
+            {navUser?.role === 'admin' && !editMode && basar.status !== 'CLOSED' && (
               <button onClick={() => setEditMode(true)}
                 className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm rounded-lg transition-colors">
                 Bearbeiten
               </button>
             )}
-            {navUser.role === 'admin' && PREVIOUS_STATUS[basar.status] && (
+            {navUser?.role === 'admin' && PREVIOUS_STATUS[basar.status] && (
               <button onClick={() => changeStatus(PREVIOUS_STATUS[basar.status])}
                 className="px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm rounded-lg transition-colors">
                 ← zurück zu {STATUS_LABELS[PREVIOUS_STATUS[basar.status]!]}
               </button>
             )}
-            {navUser.role === 'admin' && NEXT_STATUS_LABEL[basar.status] && (
+            {navUser?.role === 'admin' && NEXT_STATUS_LABEL[basar.status] && (
               <button onClick={() => changeStatus(NEXT_STATUS[basar.status])}
                 className="px-3 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-gray-900 text-sm font-medium rounded-lg transition-colors">
                 {NEXT_STATUS_LABEL[basar.status]}
@@ -668,7 +668,7 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
         </div>
 
         {/* Edit form */}
-        {editMode && navUser.role === 'admin' && (
+        {editMode && navUser?.role === 'admin' && (
           <div className="bg-white rounded-xl shadow-md p-6 mb-6">
             <form onSubmit={handleSave} className="grid md:grid-cols-2 gap-4">
               <BasarFormFields form={form} setForm={setForm} economicsLocked={basar.status === 'ACTIVE'} />
@@ -685,7 +685,7 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
         {/* Tabs – "Verkäufer" nur für Admins: GET /api/basars/[id] liefert die Verkäuferliste
             (Namen, E-Mails) nur an role==='admin', für alle anderen wäre der Tab immer leer. */}
         <div className="flex gap-1 mb-4 bg-gray-100 rounded-xl p-1 w-fit">
-          {(navUser.role === 'admin' ? (['overview', 'sellers', 'stats'] as const) : (['overview'] as const)).map(t => (
+          {(navUser?.role === 'admin' ? (['overview', 'sellers', 'stats'] as const) : (['overview'] as const)).map(t => (
             <button key={t} onClick={() => handleTabChange(t)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
               {tabLabels[t]}
@@ -710,11 +710,11 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
             ))}
           </div>
         )}
-        {tab === 'overview' && basar.isTest && navUser.role === 'admin' && (
+        {tab === 'overview' && basar.isTest && navUser?.role === 'admin' && (
           <InvitesPanel basarId={basar.id} />
         )}
 
-        {tab === 'sellers' && navUser.role === 'admin' && (
+        {tab === 'sellers' && navUser?.role === 'admin' && (
           <div>
             <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
               <div className="text-sm font-semibold text-gray-800 mb-2">Anlieferzettel drucken</div>
@@ -819,7 +819,7 @@ export default function AdminBasarDetailPage({ params }: { params: Promise<{ id:
           </div>
         )}
 
-        {tab === 'stats' && navUser.role === 'admin' && (
+        {tab === 'stats' && navUser?.role === 'admin' && (
           <div>
             {statsLoading ? (
               <div className="text-center py-8 text-gray-400">Laden…</div>

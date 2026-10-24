@@ -49,7 +49,7 @@ export default function AdminBasarsPage() {
   // Default to admin nav until /api/me resolves – this page is admin-focused, but
   // /admin/basars/** is also reachable by cashiers (see middleware.ts), so a cashier's
   // nav must be corrected as soon as we know who's asking.
-  const [navUser, setNavUser] = useState<NavUser>({ role: 'admin' });
+  const [navUser, setNavUser] = useState<NavUser | null>(null);
 
   useEffect(() => { loadBasars(); loadMe(); }, []);
 
@@ -145,7 +145,7 @@ export default function AdminBasarsPage() {
       <div className="max-w-5xl mx-auto p-4 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Basare verwalten</h1>
-          {navUser.role === 'admin' && (
+          {navUser?.role === 'admin' && (
             <button
               onClick={() => setShowForm(!showForm)}
               className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold rounded-lg transition-colors"
@@ -161,7 +161,7 @@ export default function AdminBasarsPage() {
           </div>
         )}
 
-        {showForm && navUser.role === 'admin' && (
+        {showForm && navUser?.role === 'admin' && (
           <div className="bg-white rounded-xl shadow-md p-6 mb-6">
             <h2 className="text-xl font-bold mb-4">Neuer Basar</h2>
             <form onSubmit={handleCreate} className="grid md:grid-cols-2 gap-4">
@@ -235,19 +235,19 @@ export default function AdminBasarsPage() {
                         Abrechnung
                       </Link>
                     )}
-                    {navUser.role === 'admin' && PREVIOUS_STATUS[basar.status] && (
+                    {navUser?.role === 'admin' && PREVIOUS_STATUS[basar.status] && (
                       <button onClick={() => changeStatus(basar, PREVIOUS_STATUS[basar.status])}
                         className="flex-1 sm:flex-none text-center whitespace-nowrap px-3 py-3 sm:py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm rounded-lg transition-colors">
                         ← zurück zu {STATUS_LABELS[PREVIOUS_STATUS[basar.status]!]}
                       </button>
                     )}
-                    {navUser.role === 'admin' && NEXT_STATUS_LABEL[basar.status] && (
+                    {navUser?.role === 'admin' && NEXT_STATUS_LABEL[basar.status] && (
                       <button onClick={() => changeStatus(basar, NEXT_STATUS[basar.status])}
                         className="flex-1 sm:flex-none text-center whitespace-nowrap px-3 py-3 sm:py-1.5 bg-yellow-500 hover:bg-yellow-600 text-gray-900 text-sm font-medium rounded-lg transition-colors">
                         {NEXT_STATUS_LABEL[basar.status]}
                       </button>
                     )}
-                    {navUser.role === 'admin' && basar.status === 'CLOSED' && (
+                    {navUser?.role === 'admin' && basar.status === 'CLOSED' && (
                       <button onClick={() => handleArchive(basar)}
                         className="flex-1 sm:flex-none text-center whitespace-nowrap px-3 py-3 sm:py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-600 text-sm font-medium rounded-lg transition-colors">
                         Archivieren

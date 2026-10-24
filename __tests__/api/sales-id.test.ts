@@ -6,20 +6,24 @@ vi.mock('next/headers', () => ({
   cookies: vi.fn(() => Promise.resolve({ get: cookiesGetMock })),
 }));
 
+// Prüfung und Schreiben laufen in einer interaktiven Transaktion über updateMany mit
+// `isCancelled: false` im WHERE. Der gemockte tx-Client ist derselbe wie prismaMock.
 const articleUpdateMock = vi.hoisted(() => vi.fn());
 const saleUpdateMock = vi.hoisted(() => vi.fn());
 const settlementFindUniqueMock = vi.hoisted(() => vi.fn());
 const prismaMock = vi.hoisted(() => ({
   sale: {
     findUnique: vi.fn(),
-    update: saleUpdateMock,
+    updateMany: saleUpdateMock,
   },
   article: {
-    update: articleUpdateMock,
+    updateMany: articleUpdateMock,
   },
   settlement: {
     findUnique: settlementFindUniqueMock,
   },
+  basar: { findUnique: vi.fn() },
+  basarInvite: { findUnique: vi.fn() },
   $transaction: vi.fn(),
 }));
 vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
@@ -33,6 +37,7 @@ function mockSale(overrides: Partial<{ id: string; isCancelled: boolean; soldAt:
     isCancelled: false,
     soldAt: new Date(),
     articleId: 'art-1',
+    basarId: 'basar-1',
     article: { basarSellerId: 'bs-1' },
     ...overrides,
   };
@@ -51,6 +56,10 @@ describe('DELETE /api/sales/[id]', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     settlementFindUniqueMock.mockResolvedValue(null);
+    prismaMock.basar.findUnique.mockResolvedValue({ isTest: false });
+    saleUpdateMock.mockResolvedValue({ count: 1 });
+    articleUpdateMock.mockResolvedValue({ count: 1 });
+    prismaMock.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prismaMock));
   });
 
   it('returns 401 when no token', async () => {
@@ -94,7 +103,6 @@ describe('DELETE /api/sales/[id]', () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     const recentDate = new Date(Date.now() - 60 * 1000);
     prismaMock.sale.findUnique.mockResolvedValue(mockSale({ soldAt: recentDate }));
-    prismaMock.$transaction.mockResolvedValue([{}, {}]);
     const res = await DELETE(makeRequest(), makeContext());
     expect(res.status).toBe(200);
     expect((await res.json()).success).toBe(true);
@@ -107,7 +115,6 @@ describe('DELETE /api/sales/[id]', () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     const oldDate = new Date(Date.now() - 11 * 60 * 1000);
     prismaMock.sale.findUnique.mockResolvedValue(mockSale({ soldAt: oldDate }));
-    prismaMock.$transaction.mockResolvedValue([{}, {}]);
 
     const res = await DELETE(makeRequest(), makeContext());
 
@@ -140,7 +147,6 @@ describe('DELETE /api/sales/[id]', () => {
     cookiesGetMock.mockReturnValue({ value: cashierToken(5555) });
     const recentDate = new Date(Date.now() - 30 * 1000);
     prismaMock.sale.findUnique.mockResolvedValue(mockSale({ soldAt: recentDate }));
-    prismaMock.$transaction.mockResolvedValue([{}, {}]);
 
     const res = await DELETE(makeRequest(), makeContext());
 
@@ -148,11 +154,12 @@ describe('DELETE /api/sales/[id]', () => {
     expect(await res.json()).toEqual({ success: true });
 
     expect(saleUpdateMock).toHaveBeenCalledWith({
-      where: { id: 'sale-1' },
+      where: { id: 'sale-1', isCancelled: false },
       data: { isCancelled: true, cancelledAt: expect.any(Date), cancelledById: 5555 },
     });
+    // Nur freigeben, wenn noch SOLD und kein anderer aktiver Verkauf (Wiederverkauf nach Storno).
     expect(articleUpdateMock).toHaveBeenCalledWith({
-      where: { id: 'art-1' },
+      where: { id: 'art-1', status: 'SOLD', sales: { none: { isCancelled: false } } },
       data: { status: 'AVAILABLE', soldAt: null },
     });
   });
@@ -162,7 +169,6 @@ describe('DELETE /api/sales/[id]', () => {
   it('protokolliert den stornierenden Kassierer', async () => {
     cookiesGetMock.mockReturnValue({ value: cashierToken(9004) });
     prismaMock.sale.findUnique.mockResolvedValue(mockSale({ soldAt: new Date(Date.now() - 30 * 1000) }));
-    prismaMock.$transaction.mockResolvedValue([{}, {}]);
 
     await DELETE(makeRequest(), makeContext());
 
@@ -176,7 +182,6 @@ describe('DELETE /api/sales/[id]', () => {
   it('protokolliert einen Admin-Storno mit cancelledById null, aber gesetztem cancelledAt', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.sale.findUnique.mockResolvedValue(mockSale({ soldAt: new Date(Date.now() - 60 * 1000) }));
-    prismaMock.$transaction.mockResolvedValue([{}, {}]);
 
     await DELETE(makeRequest(), makeContext());
 
@@ -184,25 +189,66 @@ describe('DELETE /api/sales/[id]', () => {
     expect(saleUpdateMock.mock.calls[0][0].data.cancelledAt).toBeInstanceOf(Date);
   });
 
-  it('führt beide Änderungen in einer einzigen Transaktion aus', async () => {
+  it('führt beide Änderungen in einer einzigen interaktiven Transaktion aus', async () => {
     cookiesGetMock.mockReturnValue({ value: cashierToken(5555) });
     prismaMock.sale.findUnique.mockResolvedValue(mockSale({ soldAt: new Date(Date.now() - 30 * 1000) }));
-    prismaMock.$transaction.mockResolvedValue([{}, {}]);
 
     await DELETE(makeRequest(), makeContext());
 
-    // Ohne Transaktion könnte der Verkauf storniert sein, der Artikel aber verkauft bleiben –
-    // dann fehlt er im Bestand und taucht in keiner Abrechnung mehr korrekt auf.
+    // Ohne Transaktion könnte der Verkauf storniert sein, der Artikel aber verkauft bleiben.
     expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
-    const [batch] = prismaMock.$transaction.mock.calls[0];
-    expect(Array.isArray(batch)).toBe(true);
-    expect(batch).toHaveLength(2);
+    expect(typeof prismaMock.$transaction.mock.calls[0][0]).toBe('function');
+    expect(saleUpdateMock).toHaveBeenCalledTimes(1);
+    expect(articleUpdateMock).toHaveBeenCalledTimes(1);
+  });
+
+  // Zwei gleichzeitige Stornos: beide haben isCancelled=false gelesen, aber nur einer
+  // gewinnt das bedingte Update. Der Verlierer darf den Artikel nicht anfassen – sonst könnte
+  // er einen inzwischen wiederverkauften Artikel freigeben.
+  it('409 und kein Artikel-Update, wenn das bedingte Update nichts trifft (gleichzeitiger Storno)', async () => {
+    cookiesGetMock.mockReturnValue({ value: cashierToken(5555) });
+    prismaMock.sale.findUnique.mockResolvedValue(mockSale({ soldAt: new Date(Date.now() - 30 * 1000) }));
+    saleUpdateMock.mockResolvedValue({ count: 0 });
+
+    const res = await DELETE(makeRequest(), makeContext());
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/storniert/i);
+    expect(saleUpdateMock.mock.calls[0][0].where).toEqual({ id: 'sale-1', isCancelled: false });
+    expect(articleUpdateMock).not.toHaveBeenCalled();
+  });
+
+  // Testbasar: für Nicht-Eingeladene existiert er nicht – auch kein Storno darin.
+  it('404 und keine Schreibzugriffe, wenn der Verkauf in einem Testbasar liegt und der Kassierer nicht eingeladen ist', async () => {
+    cookiesGetMock.mockReturnValue({ value: cashierToken(5555) });
+    prismaMock.sale.findUnique.mockResolvedValue(mockSale({ soldAt: new Date(Date.now() - 30 * 1000) }));
+    prismaMock.basar.findUnique.mockResolvedValue({ isTest: true });
+    prismaMock.basarInvite.findUnique.mockResolvedValue(null);
+
+    const res = await DELETE(makeRequest(), makeContext());
+
+    expect(res.status).toBe(404);
+    expect(prismaMock.basar.findUnique).toHaveBeenCalledWith({ where: { id: 'basar-1' }, select: { isTest: true } });
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    expect(saleUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it('Eingeladener Kassierer darf im Testbasar stornieren', async () => {
+    cookiesGetMock.mockReturnValue({ value: cashierToken(5555) });
+    prismaMock.sale.findUnique.mockResolvedValue(mockSale({ soldAt: new Date(Date.now() - 30 * 1000) }));
+    prismaMock.basar.findUnique.mockResolvedValue({ isTest: true });
+    prismaMock.basarInvite.findUnique.mockResolvedValue({ sellerId: 5555 });
+
+    const res = await DELETE(makeRequest(), makeContext());
+
+    expect(res.status).toBe(200);
+    expect(saleUpdateMock).toHaveBeenCalledTimes(1);
   });
 
   it('schreibt nichts, wenn das Storno-Zeitfenster abgelaufen ist', async () => {
     cookiesGetMock.mockReturnValue({ value: cashierToken(5555) });
     prismaMock.sale.findUnique.mockResolvedValue({
-      id: 'sale-1', isCancelled: false, soldAt: new Date(Date.now() - 11 * 60 * 1000), articleId: 'art-1',
+      id: 'sale-1', basarId: 'basar-1', isCancelled: false, soldAt: new Date(Date.now() - 11 * 60 * 1000), articleId: 'art-1',
     });
 
     const res = await DELETE(makeRequest(), makeContext());
@@ -216,7 +262,7 @@ describe('DELETE /api/sales/[id]', () => {
   it('schreibt nichts, wenn der Verkauf bereits storniert ist', async () => {
     cookiesGetMock.mockReturnValue({ value: cashierToken(5555) });
     prismaMock.sale.findUnique.mockResolvedValue({
-      id: 'sale-1', isCancelled: true, soldAt: new Date(), articleId: 'art-1',
+      id: 'sale-1', basarId: 'basar-1', isCancelled: true, soldAt: new Date(), articleId: 'art-1',
     });
 
     const res = await DELETE(makeRequest(), makeContext());

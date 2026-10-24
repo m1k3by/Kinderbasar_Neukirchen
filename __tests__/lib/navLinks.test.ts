@@ -82,6 +82,29 @@ describe('getNavLinks – Admin', () => {
   });
 });
 
+// Seiten unter /admin/basars/** starten ohne bekannte Rolle (bis /api/me antwortet). Startete
+// dort die Admin-Navigation, lud der Header bei Kassierern /api/admin/errors (403) und Next
+// prefetchte Admin-Seiten, die die Middleware auf /login umleitet.
+describe('getNavLinks – Rolle unbekannt (null)', () => {
+  it('liefert nur Logout, keinen einzigen Admin-Link', () => {
+    const links = getNavLinks(null, 'basare');
+    expect(links.map(l => l.href)).toEqual(['/']);
+    expect(links[0].action).toBe('logout');
+  });
+
+  it('enthält kein Fehler-Badge (sonst fragt der Header /api/admin/errors an)', () => {
+    expect(getNavLinks(null).some(l => l.badge === 'errors')).toBe(false);
+  });
+
+  it('markiert Logout nicht als Logo-Ziel', () => {
+    expect(getNavLinks(null).some(l => l.home)).toBe(false);
+  });
+
+  it('basarsAdminActiveKey(null) wirft nicht und nimmt nicht "basare"', () => {
+    expect(basarsAdminActiveKey(null)).toBe('kasse');
+  });
+});
+
 describe('basarsAdminActiveKey', () => {
   // /admin/basars/** ist laut middleware.ts für Admins UND Kassierer erreichbar, die dort
   // aber unterschiedliche Navigationen sehen. Ein festes 'basare' würde beim Kassierer auf

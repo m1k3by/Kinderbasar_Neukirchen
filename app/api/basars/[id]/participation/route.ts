@@ -92,22 +92,17 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         // (app/page.tsx) zählte dagegen schon immer alle aktiven Zeilen. Dadurch meldete
         // sie „ausgebucht", während die Prüfung hier noch fast 90 weitere durchgelassen
         // hätte. Beide rechnen jetzt dasselbe.
-        const activeSellers = await prisma.basarSeller.count({
-          where: { basarId, isActive: true },
-        });
-        if (activeSellers >= basar.maxSellers) {
-          console.log('[PARTICIPATION] Failed: capacity reached', { basarId, sellerId, isEmployee: seller.isEmployee, activeSellers, maxSellers: basar.maxSellers, ip });
-          return NextResponse.json(
-            { error: `Die maximale Anzahl von ${basar.maxSellers} Teilnehmern für diesen Basar ist bereits erreicht.` },
-            { status: 400 }
-          );
-        }
+        // Gezählt wird unten, zusammen mit dem Schreiben unter Sperre (atomar).
       }
     }
 
+    // Die Platzgrenze gilt nur für Nicht-Admins beim (Re-)Aktivieren (siehe oben).
+    const capacityGated = isActive && !(existing?.isActive) && auth.role !== 'admin';
+
     // Erst prüfen, ob eine Teilnahme überhaupt möglich ist – eine fehlende Zustimmung
-    // zu melden, wenn der Basar ohnehin geschlossen ist, wäre irreführend.
-    if (isSelfActivation && acceptedTerms !== true) {
+    // zu melden, wenn der Basar ohnehin geschlossen ist, wäre irreführend. Bei capacityGated
+    // folgt diese Prüfung in der Transaktion, NACH der Platzprüfung ("ausgebucht" zuerst).
+    if (!capacityGated && isSelfActivation && acceptedTerms !== true) {
       console.log('[PARTICIPATION] Failed: terms not accepted', { basarId, sellerId, ip });
       return NextResponse.json(
         { error: 'Bitte bestätige die AGB und die Datenschutzerklärung, um teilzunehmen.' },
@@ -124,7 +119,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       privacyVersion: PRIVACY_VERSION,
     };
 
-    const basarSeller = await prisma.basarSeller.upsert({
+    const upsertParticipation = (db: Pick<typeof prisma, 'basarSeller'>) => db.basarSeller.upsert({
       where: { basarId_sellerId: { basarId, sellerId } },
       update: {
         isActive,
@@ -139,6 +134,37 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         ...(isSelfActivation ? consent : { termsAcceptedAt: null, termsVersion: null, privacyVersion: null }),
       },
     });
+
+    // Platzgrenze atomar: Zählen und Aktivieren unter einer Sperre auf der Basar-Zeile.
+    // Vorher zählten drei gleichzeitige Anmeldungen beim letzten freien Platz alle "1 von 2"
+    // und kamen alle durch. Der Wartende zählt nach dem Commit des Vorgängers neu.
+    let basarSeller;
+    if (capacityGated) {
+      const outcome = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT 1 FROM "Basar" WHERE id = ${basarId} FOR UPDATE`;
+        const activeSellers = await tx.basarSeller.count({ where: { basarId, isActive: true } });
+        if (activeSellers >= basar.maxSellers) return { full: activeSellers } as const;
+        if (isSelfActivation && acceptedTerms !== true) return { terms: true } as const;
+        return { row: await upsertParticipation(tx) } as const;
+      });
+      if ('full' in outcome) {
+        console.log('[PARTICIPATION] Failed: capacity reached', { basarId, sellerId, isEmployee: seller.isEmployee, activeSellers: outcome.full, maxSellers: basar.maxSellers, ip });
+        return NextResponse.json(
+          { error: `Die maximale Anzahl von ${basar.maxSellers} Teilnehmern für diesen Basar ist bereits erreicht.` },
+          { status: 400 }
+        );
+      }
+      if ('terms' in outcome) {
+        console.log('[PARTICIPATION] Failed: terms not accepted', { basarId, sellerId, ip });
+        return NextResponse.json(
+          { error: 'Bitte bestätige die AGB und die Datenschutzerklärung, um teilzunehmen.' },
+          { status: 400 }
+        );
+      }
+      basarSeller = outcome.row;
+    } else {
+      basarSeller = await upsertParticipation(prisma);
+    }
 
     // War dies eine (Re-)Aktivierung, die vorher nicht aktiv war? Dann jetzt genau in diesem
     // Moment die Anlieferungs-/Abholzeiten per Mail bestätigen – das ist der Zeitpunkt, an dem
