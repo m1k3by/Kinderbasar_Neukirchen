@@ -478,19 +478,19 @@ test('Kasse: Warenkorb übersteht Neuladen und abgelaufene Anmeldung', async ({ 
     await page.goto(`/admin/basars/${st.basarId}/kasse`);
     await page.waitForLoadState('networkidle');
     await addManual('Orga 1');
-    await expect(page.getByText('Warenkorb (1)')).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^Warenkorb \(1\)/ })).toBeVisible();
 
     // 1. Neuladen: Warenkorb kommt vom Gerät zurück.
     await page.reload();
     await page.waitForLoadState('networkidle');
     await expect(page.getByText(/Warenkorb von vorhin wiederhergestellt \(1 Artikel\)/)).toBeVisible();
-    await expect(page.getByText('Warenkorb (1)')).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^Warenkorb \(1\)/ })).toBeVisible();
     await page.getByRole('button', { name: 'Weiter' }).click();
 
     // 2. Anmeldung weg (Cookie gelöscht = abgelaufen): Scannen geht aus dem Gerätecache weiter.
     await context.clearCookies();
     await addManual('Orga 2');
-    await expect(page.getByText('Warenkorb (2)')).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^Warenkorb \(2\)/ })).toBeVisible();
     await expect(page.getByText(/Anmeldung abgelaufen – Scannen geht weiter/)).toBeVisible();
 
     // 3. Kassieren öffnet die Neuanmeldung über der Kasse; danach wird der Bon selbst gebucht.
@@ -502,7 +502,7 @@ test('Kasse: Warenkorb übersteht Neuladen und abgelaufene Anmeldung', async ({ 
     await dialog.locator('button[type="submit"]').click();
     await expect(dialog).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Letzter Bon/ })).toContainText('2 Art.');
-    await expect(page.getByText('Warenkorb (0)')).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^Warenkorb \(0\)/ })).toBeVisible();
     expect(page.url(), 'kein Seitenwechsel (PWA)').toContain('/kasse');
 
     // 4. Nach dem Kassieren ist der gespeicherte Warenkorb leer: Neuladen bringt nichts zurück.
