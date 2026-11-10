@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../../lib/prisma';
 import { requireAdmin } from '../../../lib/apiAuth';
-import { assessDb, assessServer, supabaseProjectRef, type DbStatsRow } from '../../../lib/systemStatus';
+import { assessDb, assessLimits, assessServer, supabaseProjectRef, type DbStatsRow } from '../../../lib/systemStatus';
 
 /** GET /api/admin/status – eine Momentaufnahme (eine Abfrage), gelesen von app/admin/status. */
 export async function GET() {
@@ -35,6 +35,36 @@ export async function GET() {
     }
     const row = rows[0];
 
+    // Typisierte Aufrufe statt Raw-SQL: tsc prüft die Spaltennamen. Die where-Klauseln sind
+    // exakt die der Routen, deren Grenzen hier überwacht werden (scan-cache, transactions).
+    const [basars, mailPending, mailFailed, oldestPending, sellerNumbersUsed] = await Promise.all([
+      prisma.basar.findMany({
+        where: { isArchived: false },
+        select: { id: true, title: true, status: true, isTest: true, maxSellers: true },
+        orderBy: { eventDate: 'desc' },
+      }),
+      prisma.mailQueue.count({ where: { status: 'PENDING' } }),
+      prisma.mailQueue.count({ where: { status: 'FAILED' } }),
+      prisma.mailQueue.findFirst({ where: { status: 'PENDING' }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } }),
+      prisma.seller.count({ where: { sellerId: { gte: 1000, lte: 9999 } } }),
+    ]);
+    const basarCounts = await Promise.all(
+      basars.map(async (b) => {
+        const [activeSellers, scanArticles, sales] = await Promise.all([
+          prisma.basarSeller.count({ where: { basarId: b.id, isActive: true } }),
+          prisma.article.count({ where: { basarSeller: { basarId: b.id }, status: { in: ['AVAILABLE', 'SOLD'] } } }),
+          prisma.sale.count({ where: { basarId: b.id } }),
+        ]);
+        return { ...b, activeSellers, scanArticles, sales };
+      }),
+    );
+    const limits = assessLimits({
+      basars: basarCounts,
+      mail: { pending: mailPending, failed: mailFailed, oldestPendingAt: oldestPending?.createdAt ?? null },
+      sellerNumbersUsed,
+      now: new Date(),
+    });
+
     const rssBytes = process.memoryUsage().rss;
     const limitMb = Number(process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE) || null;
     const ref = supabaseProjectRef(process.env.POSTGRES_PRISMA_URL);
@@ -47,6 +77,7 @@ export async function GET() {
         latencyMs,
         ...assessDb(row, latencyMs),
       },
+      limits,
       server: {
         region: process.env.VERCEL_REGION ?? 'lokal',
         rssBytes,

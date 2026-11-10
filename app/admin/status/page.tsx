@@ -35,6 +35,35 @@ interface StatusResponse {
     deadlockLevel: Level;
     latencyLevel: Level;
   };
+  limits: {
+    basars: {
+      id: string;
+      title: string;
+      status: string;
+      isTest: boolean;
+      maxSellers: number;
+      activeSellers: number;
+      scanArticles: number;
+      sales: number;
+      scanCacheBytes: number;
+      scanCacheUsage: number;
+      scanCacheLevel: Level;
+      salesUsage: number;
+      salesLevel: Level;
+      sellerUsage: number;
+      sellerLevel: Level;
+    }[];
+    mail: {
+      pending: number;
+      failed: number;
+      oldestPendingMinutes: number | null;
+      pendingLevel: Level;
+      failedLevel: Level;
+    };
+    sellerNumbersUsed: number;
+    sellerNumberUsage: number;
+    sellerNumberLevel: Level;
+  };
   server: {
     region: string;
     rssBytes: number;
@@ -112,6 +141,10 @@ function Stat({ title, value, level, hint, sub }: { title: string; value: string
     </Panel>
   );
 }
+
+const STATUS_TEXT: Record<string, string> = { DRAFT: 'Entwurf', OPEN: 'Offen', ACTIVE: 'Aktiv', CLOSED: 'Beendet' };
+
+const ageText = (minutes: number) => (minutes < 60 ? `${num(minutes)} Min.` : `${num(minutes / 60, 1)} Std.`);
 
 function Row({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -278,6 +311,66 @@ export default function StatusPage() {
           server &&
           data && (
             <>
+              <Row title="App-Grenzen">
+                {data.limits.basars.length === 0 && (
+                  <Panel title="Kein laufender Basar" className="col-span-2 md:col-span-4 lg:col-span-6">
+                    <p className="mt-2 text-sm text-[#8e8e8e]">Es gibt keinen nicht archivierten Basar.</p>
+                  </Panel>
+                )}
+                {data.limits.basars.map((b) => (
+                  <div key={b.id} className="col-span-2 md:col-span-4 lg:col-span-6">
+                    <h3 className="mb-2 flex flex-wrap items-center gap-2 text-sm text-[#d8d9da]">
+                      {b.title}
+                      <span className="rounded border border-[#2c3235] px-1.5 py-0.5 text-xs text-[#8e8e8e]">
+                        {STATUS_TEXT[b.status] ?? b.status}
+                      </span>
+                      {b.isTest && <span className="rounded border border-[#fade2a] px-1.5 py-0.5 text-xs text-[#fade2a]">Test</span>}
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                      <Gauge
+                        title="Kassen-Katalog"
+                        hint="Geschätzt. Die Kasse lädt alle Artikel in einer Antwort; über 4,5 MB lehnt Vercel sie ab und die Kasse kann nicht mehr offline scannen."
+                        value={b.scanCacheUsage}
+                        level={b.scanCacheLevel}
+                        text={`${num(b.scanCacheUsage * 100)} %`}
+                        detail={`~${num(b.scanCacheBytes / MB, 1)} / 4,5 MB · ${num(b.scanArticles)} Artikel`}
+                        ticks={[0.7, 0.9]}
+                      />
+                      <Gauge
+                        title="Verkäufe in Admin-Liste"
+                        hint="Ab 5.000 Verkäufen zeigen ‚Alle Verkäufe‘ und die Kassenvorgänge nicht mehr alles."
+                        value={b.salesUsage}
+                        level={b.salesLevel}
+                        text={`${num(b.salesUsage * 100)} %`}
+                        detail={`${num(b.sales)} / 5.000`}
+                        ticks={[0.8, 1]}
+                      />
+                      <Stat
+                        title="Plätze"
+                        value={`${num(b.activeSellers)} / ${num(b.maxSellers)}`}
+                        level={b.sellerLevel}
+                        hint="Aktive Teilnehmer gegen die Platzgrenze. Ausgebucht ist kein Fehler."
+                      />
+                    </div>
+                  </div>
+                ))}
+                <Stat
+                  title="Mails wartend"
+                  value={num(data.limits.mail.pending)}
+                  level={data.limits.mail.pendingLevel}
+                  sub={data.limits.mail.oldestPendingMinutes === null ? undefined : `älteste seit ${ageText(data.limits.mail.oldestPendingMinutes)}`}
+                />
+                <Stat title="Mails fehlgeschlagen" value={num(data.limits.mail.failed)} level={data.limits.mail.failedLevel} />
+                <Gauge
+                  title="Verkäufernummern"
+                  value={data.limits.sellerNumberUsage}
+                  level={data.limits.sellerNumberLevel}
+                  text={`${num(data.limits.sellerNumberUsage * 100)} %`}
+                  detail={`${num(data.limits.sellerNumbersUsed)} / 9.000`}
+                  ticks={[0.8, 0.95]}
+                />
+              </Row>
+
               <Row title="Datenbank">
                 <Gauge
                   title="Verbindungsauslastung"

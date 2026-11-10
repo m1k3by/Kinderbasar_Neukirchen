@@ -58,6 +58,67 @@ export function assessServer({ rssBytes, limitMb }: { rssBytes: number; limitMb:
   };
 }
 
+/** Grenzen, die /admin/status überwacht. */
+export const RAW_FETCH_CAP = 5000; // Sales je Abruf in GET /api/basars/[id]/transactions
+export const VERCEL_RESPONSE_LIMIT_BYTES = 4.5 * 1024 * 1024; // max. Antwortgröße einer Vercel Function
+// ponytail: Schätzung aus einer Messung (24.10.2026: 2,8 MB bei 15.845 Artikeln ≈ 185 B/Artikel),
+// keine echte Größenmessung. Ändert sich die Projektion in scan-cache/route.ts, neu messen.
+export const SCAN_CACHE_BYTES_PER_ARTICLE = 185;
+export const SELLER_NUMBER_CAPACITY = 9000; // 1000–9999, siehe app/lib/sellerIdAllocation.ts
+
+export interface LimitsInput {
+  basars: {
+    id: string;
+    title: string;
+    status: string;
+    isTest: boolean;
+    maxSellers: number;
+    activeSellers: number;
+    scanArticles: number;
+    sales: number;
+  }[];
+  mail: { pending: number; failed: number; oldestPendingAt: Date | string | null };
+  sellerNumbersUsed: number;
+  now: Date;
+}
+
+export function assessLimits({ basars, mail, sellerNumbersUsed, now }: LimitsInput) {
+  const oldestPendingMinutes =
+    mail.pending > 0 && mail.oldestPendingAt
+      ? Math.max(0, Math.floor((now.getTime() - new Date(mail.oldestPendingAt).getTime()) / 60000))
+      : null;
+  const sellerNumberUsage = sellerNumbersUsed / SELLER_NUMBER_CAPACITY;
+  return {
+    basars: basars.map((b) => {
+      const scanCacheBytes = b.scanArticles * SCAN_CACHE_BYTES_PER_ARTICLE;
+      const scanCacheUsage = scanCacheBytes / VERCEL_RESPONSE_LIMIT_BYTES;
+      const salesUsage = b.sales / RAW_FETCH_CAP;
+      const sellerUsage = b.maxSellers > 0 ? b.activeSellers / b.maxSellers : 0;
+      return {
+        ...b,
+        scanCacheBytes,
+        scanCacheUsage,
+        scanCacheLevel: levelAbove(scanCacheUsage, 0.7, 0.9),
+        salesUsage,
+        salesLevel: levelAbove(salesUsage, 0.8, 1.0),
+        sellerUsage,
+        sellerLevel: levelAbove(sellerUsage, 0.9, Infinity),
+      };
+    }),
+    mail: {
+      pending: mail.pending,
+      failed: mail.failed,
+      oldestPendingMinutes,
+      // Eine wartende Mail ohne Datum (sollte nicht vorkommen) zählt als frisch.
+      pendingLevel: levelAbove(oldestPendingMinutes ?? 0, 60, 24 * 60),
+      failedLevel: levelAbove(mail.failed, 1, Infinity),
+    },
+    sellerNumbersUsed,
+    sellerNumberUsage,
+    sellerNumberLevel: levelAbove(sellerNumberUsage, 0.8, 0.95),
+  };
+}
+
 /** Der Pooler-Benutzername hat die Form `postgres.<ref>`. */
 export function supabaseProjectRef(url: string | undefined): string | null {
   if (!url) return null;

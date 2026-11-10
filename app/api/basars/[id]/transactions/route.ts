@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../../../lib/prisma';
 import { requireCashier } from '../../../../lib/apiAuth';
 import { requireBasarAccess } from '../../../../lib/basarAccess';
+import { RAW_FETCH_CAP } from '../../../../lib/systemStatus';
 
 // Sicherheitsdeckel für die Rohabfrage – siehe Kommentar bei RAW_FETCH_CAP unten.
 // ponytail: In-Memory-Gruppierung statt SQL-groupBy über clientTxId, weil Zeilen mit
@@ -11,7 +12,7 @@ import { requireBasarAccess } from '../../../../lib/basarAccess';
 // realistischer Basar-Größe (ein paar tausend Sales) ist das unproblematisch; sollte ein
 // Basar RAW_FETCH_CAP an gefilterten Sales überschreiten, fehlen ältere Vorgänge auf
 // späteren Seiten – dann bräuchte es echte Cursor-Pagination auf DB-Ebene.
-const RAW_FETCH_CAP = 5000;
+// Konstante liegt in app/lib/systemStatus.ts, weil /admin/status sie überwacht.
 
 // Höchstens sechs Wörter je Feld – schützt davor, dass ein eingefügter Absatz zu einer
 // Abfrage mit hunderten UND-verknüpften LIKE-Bedingungen wird.
