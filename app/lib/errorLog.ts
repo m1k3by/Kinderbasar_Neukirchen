@@ -8,6 +8,7 @@
 import { after } from 'next/server';
 import { prisma } from './prisma';
 import { deliverMail } from './mailQueue';
+import { stringify } from './logForward';
 
 /** Spaltenlängen aus prisma/schema.prisma. Zu lange Werte werden gekürzt, nicht verworfen. */
 const MAX_LENGTH = { route: 200, message: 500, stack: 4000, userAgent: 300 } as const;
@@ -115,17 +116,6 @@ export async function recordError(input: RecordErrorInput): Promise<void> {
     originalConsoleError('[ERRORLOG] Fehler konnte nicht gespeichert werden:', error);
   } finally {
     writing--;
-  }
-}
-
-function stringify(value: unknown): string {
-  if (typeof value === 'string') return value;
-  if (value instanceof Error) return `${value.name}: ${value.message}`;
-  if (value === null || value === undefined) return String(value);
-  try {
-    return JSON.stringify(value) ?? String(value);
-  } catch {
-    return String(value);
   }
 }
 
