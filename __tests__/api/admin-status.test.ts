@@ -57,7 +57,7 @@ describe('GET /api/admin/status', () => {
     expect(body.db.statsReset).toBe('2026-10-01T00:00:00.000Z');
     expect(typeof body.db.latencyMs).toBe('number');
     expect(body.links.supabase).toContain('abcdef');
-    expect(body.links.vercel).toBe('https://vercel.com/dashboard');
+    expect(body.links.vercel).toBe('https://vercel.com/basar-neukirchens-projects/basar_neukirchen/usage');
     expect(text).not.toContain('geheimesPasswort123');
     expect(text).not.toContain(URL_WITH_PW);
   });

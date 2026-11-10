@@ -56,7 +56,7 @@ export async function GET() {
       },
       links: {
         supabase: ref ? `https://supabase.com/dashboard/project/${ref}/reports/database` : null,
-        vercel: 'https://vercel.com/dashboard',
+        vercel: 'https://vercel.com/basar-neukirchens-projects/basar_neukirchen/usage',
       },
     });
   } catch (error) {
