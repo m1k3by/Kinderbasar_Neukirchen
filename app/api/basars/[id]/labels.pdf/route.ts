@@ -60,6 +60,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const from =
       Number.isFinite(fromParam) && fromParam >= 0 && fromParam < LABELS_PER_SHEET ? fromParam : 0;
 
+    // Verbrauchte Plätze eines angebrochenen Bogens. Anders als bei `from` kein stiller
+    // Rückfall: ein falsch gelesener Platz würde ein Etikett auf eine leere Stelle eines
+    // physisch schon benutzten Bogens setzen. Ungültig → 400, alle 24 belegt → 400.
+    const skipRaw = (url.searchParams.get('skip') || '').split(',').filter(Boolean);
+    const skip = [...new Set(skipRaw.map(Number))];
+    if (skip.some(n => !Number.isInteger(n) || n < 0 || n >= LABELS_PER_SHEET)) {
+      return NextResponse.json({ error: 'Ungültige Etikettenplätze' }, { status: 400 });
+    }
+    if (skip.length >= LABELS_PER_SHEET) {
+      return NextResponse.json({ error: 'Auf dem Bogen ist kein Platz mehr frei' }, { status: 400 });
+    }
+
     // Auswahl einzelner Artikel. Leer = alle, wie bisher. Doppelte Einträge werden entfernt,
     // sonst schlüge der Abgleich mit der gefundenen Anzahl weiter unten fälschlich fehl.
     const ids = [...new Set((url.searchParams.get('ids') || '').split(',').filter(Boolean))];
@@ -126,7 +138,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       qrCode: a.qrCode,
     }));
 
-    const doc = buildLabelSheet(labels, { sellerNr: basarSeller.sellerId, from });
+    const doc = buildLabelSheet(labels, { sellerNr: basarSeller.sellerId, from, skip });
     return pdfResponse(
       doc.output('arraybuffer'),
       `etiketten-${slug(basar.title)}-vk${basarSeller.sellerId}.pdf`

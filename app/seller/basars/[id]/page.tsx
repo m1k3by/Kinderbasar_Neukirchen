@@ -106,6 +106,11 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   const [labelDialog, setLabelDialog] = useState<null | 'choice' | 'pick' | 'downloading'>(null);
   const [labelDownloadSettled, setLabelDownloadSettled] = useState(false);
   const [selectedLabelIds, setSelectedLabelIds] = useState<Set<string>>(new Set());
+  // Angebrochener Etikettenbogen: Plätze 0–23 (zeilenweise von oben links), die schon
+  // verbraucht sind und frei bleiben müssen. Leer = vollständiger Bogen.
+  const [usedSlots, setUsedSlots] = useState<Set<number>>(new Set());
+  // Entwurf im Bogen-Overlay; erst „Übernehmen" schreibt ihn nach usedSlots.
+  const [slotDraft, setSlotDraft] = useState<Set<number> | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -421,10 +426,15 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   // und die URL bleibt kurz.
   // ponytail: IDs in der URL, bei ~200 Artikeln rund 5 KB. Trägt jeder Browser; erst wenn
   // jemand vierstellig auswählt (Orga hat kein Artikellimit), bräuchte es POST + Token.
-  const labelHref =
-    selectedLabelIds.size > 0 && selectedLabelIds.size < articles.length
-      ? `/api/basars/${basarId}/labels.pdf?ids=${[...selectedLabelIds].join(',')}`
-      : `/api/basars/${basarId}/labels.pdf`;
+  const labelQuery = new URLSearchParams();
+  if (selectedLabelIds.size > 0 && selectedLabelIds.size < articles.length) {
+    labelQuery.set('ids', [...selectedLabelIds].join(','));
+  }
+  if (usedSlots.size > 0) {
+    labelQuery.set('skip', [...usedSlots].sort((a, b) => a - b).join(','));
+  }
+  const labelQs = labelQuery.toString();
+  const labelHref = `/api/basars/${basarId}/labels.pdf${labelQs ? `?${labelQs}` : ''}`;
 
   const toggleLabel = (id: string) => {
     setSelectedLabelIds(prev => {
@@ -929,6 +939,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
                   type="button"
                   onClick={() => {
                     setSelectedLabelIds(new Set());
+                    setUsedSlots(new Set());
                     setLabelDialog('choice');
                   }}
                   className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
@@ -1107,6 +1118,23 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
                 </>
               )}
 
+              {labelDialog !== 'downloading' && (
+                <div className="px-5 py-2.5 border-t border-gray-100 flex items-center justify-between gap-3 text-sm">
+                  <span className="text-gray-700">
+                    {usedSlots.size === 0
+                      ? 'Etikettenbogen: vollständig'
+                      : `Etikettenbogen: angebrochen, ${24 - usedSlots.size} von 24 frei`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSlotDraft(new Set(usedSlots))}
+                    className="text-blue-600 hover:underline font-medium whitespace-nowrap"
+                  >
+                    {usedSlots.size === 0 ? 'Bogen ist angebrochen?' : 'Ändern'}
+                  </button>
+                </div>
+              )}
+
               {/* Pflichthinweis an der Download-Stelle: ohne „Tatsächliche Größe" skaliert der
                   Druckdialog den Bogen und die Etiketten passen nicht mehr auf die Stanzung. */}
               <div className="px-5 py-2.5 text-xs text-gray-700 bg-amber-50 border-t border-amber-100">
@@ -1147,6 +1175,94 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
                       : 'Etiketten drucken'}
                   </a>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Bogen-Overlay über dem Etikettendialog: 3 × 8 Plätze wie auf dem Avery-3475-Bogen.
+            Grün = frei, wird bedruckt; grau = schon verbraucht, bleibt leer. */}
+        {slotDraft && (
+          <div
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4"
+            onClick={() => setSlotDraft(null)}
+          >
+            <div
+              className="bg-white rounded-xl shadow-xl w-full max-w-sm max-h-[90vh] flex flex-col"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="slot-title"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="px-5 py-4 border-b border-gray-100">
+                <h3 id="slot-title" className="text-lg font-bold text-gray-800">Angebrochener Bogen</h3>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  Tippe die Felder an, die schon abgezogen oder bedruckt sind. Dort wird nichts gedruckt.
+                </p>
+              </div>
+              <div className="flex-1 overflow-y-auto px-5 py-3">
+                {/* Seitenverhältnis wie der Bogen (210 × 297 mm), damit die Lage auf einen Blick passt. */}
+                <div className="grid grid-cols-3 gap-1 aspect-[210/297] max-h-[55vh] mx-auto p-1 border border-gray-300 rounded bg-gray-50">
+                  {Array.from({ length: 24 }, (_, i) => {
+                    const used = slotDraft.has(i);
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        aria-pressed={!used}
+                        aria-label={`Feld ${i + 1}: ${used ? 'verbraucht' : 'frei'}`}
+                        onClick={() =>
+                          setSlotDraft(prev => {
+                            const next = new Set(prev);
+                            if (next.has(i)) next.delete(i);
+                            else next.add(i);
+                            return next;
+                          })
+                        }
+                        className={`rounded text-xs font-semibold transition-colors ${
+                          used
+                            ? 'bg-gray-300 text-gray-500 line-through'
+                            : 'bg-green-500 text-white hover:bg-green-600'
+                        }`}
+                      >
+                        {i + 1}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-sm text-gray-600 mt-3 text-center">
+                  {24 - slotDraft.size} von 24 Feldern frei
+                  {slotDraft.size === 24 && ' – mindestens eines muss frei bleiben'}
+                </p>
+              </div>
+              <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSlotDraft(new Set())}
+                  className="px-3 py-2 text-gray-600 hover:text-gray-800 font-medium text-sm"
+                >
+                  Alle frei
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSlotDraft(null)}
+                    className="px-3 py-2 text-gray-600 hover:text-gray-800 font-medium text-sm"
+                  >
+                    Abbrechen
+                  </button>
+                  <button
+                    type="button"
+                    disabled={slotDraft.size === 24}
+                    onClick={() => {
+                      setUsedSlots(slotDraft);
+                      setSlotDraft(null);
+                    }}
+                    className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white font-semibold text-sm rounded-lg transition-colors"
+                  >
+                    Übernehmen
+                  </button>
+                </div>
               </div>
             </div>
           </div>

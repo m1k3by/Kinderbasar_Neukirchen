@@ -86,6 +86,11 @@ export interface LabelSheetOptions {
   sellerNr: number | string;
   /** Index des ersten belegten Etiketts auf dem Bogen (0-basiert) – für angebrochene Bögen. */
   from?: number;
+  /**
+   * Plätze des ersten Bogens (0–23), die schon verbraucht sind – auf einem angebrochenen
+   * Bogen dürfen sie nicht bedruckt werden. Ab dem zweiten Bogen gilt wieder jeder Platz.
+   */
+  skip?: number[];
 }
 
 const fmtPrice = (n: number) => `${n.toFixed(2).replace('.', ',')} €`;
@@ -231,10 +236,13 @@ function newDoc(): jsPDF {
 export function buildLabelSheet(labels: LabelData[], opts: LabelSheetOptions): jsPDF {
   const doc = newDoc();
   const from = Math.max(0, Math.min(opts.from ?? 0, LABELS_PER_SHEET - 1));
+  const blocked = new Set(opts.skip ?? []);
+  for (let i = 0; i < from; i++) blocked.add(i);
 
   let lastPage = 0;
-  labels.forEach((label, i) => {
-    const slot = from + i;
+  let slot = -1;
+  labels.forEach(label => {
+    do slot++; while (slot < LABELS_PER_SHEET && blocked.has(slot));
     const page = Math.floor(slot / LABELS_PER_SHEET);
     if (page > lastPage) {
       doc.addPage();

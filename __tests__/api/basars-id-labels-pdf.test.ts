@@ -293,6 +293,40 @@ describe('GET /api/basars/[id]/labels.pdf – Geometrie', () => {
     expect(maxY).toBeGreaterThan(4.5 + 36); // zweite Zeile
   });
 
+  /** Belegte Plätze (0–23) aus den Verkäufernummer-Ankern, eine je Etikett. */
+  function occupiedSlots(content: string): number[] {
+    return textAnchors(content)
+      .map(a => ({ x: a.x / PT_PER_MM, y: 297 - a.y / PT_PER_MM }))
+      .filter(a => Math.abs(((a.y - 4.5) % 36) - 7.5) < 0.01) // Grundlinie der Verkäufernummer
+      .map(a => Math.floor((a.y - 4.5) / 36) * 3 + Math.floor(a.x / 70))
+      .sort((a, b) => a - b);
+  }
+
+  it('?skip lässt verbrauchte Plätze eines angebrochenen Bogens frei', async () => {
+    happyPath(makeArticles(3));
+    const buf = await pdfBuffer(await GET(makeRequest('?skip=0,1,2,4,7'), makeContext()));
+    expect(occupiedSlots(contentStream(buf))).toEqual([3, 5, 6]);
+  });
+
+  it('?skip gilt nur für den ersten Bogen, der zweite beginnt wieder oben links', async () => {
+    happyPath(makeArticles(LABELS_PER_SHEET));
+    const buf = await pdfBuffer(await GET(makeRequest('?skip=0,1,2,3'), makeContext()));
+    expect(buf.toString('latin1').match(/\/Type\s*\/Page[^s]/g)).toHaveLength(2);
+  });
+
+  it.each(['?skip=24', '?skip=-1', '?skip=a', '?skip=1.5'])('lehnt %s mit 400 ab', async q => {
+    happyPath();
+    const res = await GET(makeRequest(q), makeContext());
+    expect(res.status).toBe(400);
+  });
+
+  it('lehnt einen vollständig verbrauchten Bogen mit 400 ab', async () => {
+    happyPath();
+    const all = Array.from({ length: LABELS_PER_SHEET }, (_, i) => i).join(',');
+    const res = await GET(makeRequest(`?skip=${all}`), makeContext());
+    expect(res.status).toBe(400);
+  });
+
   it('ignoriert ein unbrauchbares from und beginnt bei Etikett 1', async () => {
     happyPath(makeArticles(1));
     const buf = await pdfBuffer(await GET(makeRequest('?from=999'), makeContext()));
