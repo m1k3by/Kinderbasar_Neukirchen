@@ -60,6 +60,8 @@ export default function SellerArticlesPage() {
   const [basarOverride, setBasarOverride] = useState<number | null>(null);
   const [directToBasar, setDirectToBasar] = useState(true);
   const [showSizes, setShowSizes] = useState(false);
+  // Formular eingeklappt, solange es Artikel gibt – die Liste ist der Hauptinhalt der Seite.
+  const [showForm, setShowForm] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
   const [openBasars, setOpenBasars] = useState<OpenBasar[]>([]);
   const [targetBasarId, setTargetBasarId] = useState('');
@@ -164,10 +166,13 @@ export default function SellerArticlesPage() {
     setEditingId(a.id);
     setIsClothing(!!(a.sizeLabel || a.gender));
     setForm({ title: a.title, sizeLabel: a.sizeLabel ?? '', gender: a.gender ?? '', price: String(a.price), tags: a.tags });
-    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setShowForm(true);
+    // Erst nach dem Aufklappen scrollen, sonst zielt scrollIntoView ins Leere.
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
   }
 
   function resetForm() {
+    if (editingId) setShowForm(false);
     setEditingId(null);
     setIsClothing(true);
     setForm(EMPTY_FORM);
@@ -272,337 +277,485 @@ export default function SellerArticlesPage() {
     return n;
   };
   const filtersActive = q || tagFilter.size > 0 || untaggedOnly || genderFilter || statusFilter !== 'all';
+  const soldTotal = items.filter(a => a.soldPreviously).length;
+  const inBasarTotal = items.filter(a => a.alreadyInBasar).length;
+  // Ohne Artikel ist das Formular der einzige sinnvolle Inhalt – dann immer offen.
+  const formOpen = showForm || !!editingId || (!loading && items.length === 0);
+  const statusTabs: { key: StatusFilter; label: string; count: number }[] = [
+    { key: 'all', label: 'Alle', count: items.length },
+    { key: 'available', label: targetBasar ? 'Nicht im Basar' : 'Verfügbar', count: items.filter(a => !a.soldPreviously && !a.alreadyInBasar).length },
+    ...(targetBasar ? [{ key: 'inBasar' as const, label: 'Im Basar', count: inBasarTotal }] : []),
+    { key: 'sold', label: 'Verkauft', count: soldTotal },
+  ];
+  const inputCls =
+    'w-full rounded-xl border-0 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-900 ring-1 ring-inset ring-gray-200 placeholder:text-gray-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-yellow-500 disabled:bg-gray-100 disabled:text-gray-500';
+  const labelCls = 'block text-xs font-semibold text-gray-500 mb-1.5';
+  const chip = (active: boolean) =>
+    `px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
+      // `!`: app/globals.css erzwingt auf Handys schwarze Schrift für jeden <button> (!important).
+      active ? 'bg-gray-900 text-white!' : 'bg-white text-gray-600 ring-1 ring-gray-900/5 hover:bg-gray-100'
+    }`;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100/60">
       <Header
         links={getNavLinks({ role: isEmployee ? 'employee' : 'seller', isEmployee, isCashier }, 'verkaeufer')}
         sellerInfo={sellerInfo}
       />
-      <div className="max-w-3xl mx-auto p-4 md:p-6">
-        <Link href="/seller" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 mb-4">
-          ← Zurück zum Verkäuferbereich
+      <div className="max-w-4xl mx-auto px-4 py-5 md:px-6 md:py-8 pb-32">
+        <Link href="/seller" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 mb-5">
+          <IconChevronLeft /> Verkäuferbereich
         </Link>
 
-        <div className="bg-white rounded-xl shadow-sm p-5 mb-5">
-          <h1 className="text-2xl font-bold text-gray-800">Meine Artikel</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Hier legst du deine Artikel jederzeit an – auch wenn gerade kein Basar läuft. Sobald ein
-            Basar zur Anmeldung offen ist, übernimmst du sie von hier in den Basar. Erst dann können
-            sie an der Kasse verkauft werden.
-          </p>
+        {/* Kopf */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-6">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-gray-900">Meine Artikel</h1>
+            <p className="text-sm text-gray-500 mt-1.5 max-w-xl">
+              Jederzeit anlegen und ordnen. Verkauft werden kann ein Artikel erst, wenn er in einem Basar ist.
+            </p>
+            <div className="flex flex-wrap gap-2 mt-3">
+              <Stat value={items.length} label="Artikel" />
+              {targetBasar && <Stat value={inBasarTotal} label="im Basar" tone="amber" />}
+              <Stat value={soldTotal} label="verkauft" tone="green" />
+            </div>
+          </div>
+          {!formOpen && (
+            <button
+              type="button"
+              onClick={() => { setShowForm(true); setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0); }}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-yellow-500 px-5 py-3 font-bold text-gray-900 shadow-lg shadow-yellow-500/25 hover:bg-yellow-400 active:scale-[0.98] transition"
+            >
+              <IconPlus /> Neuer Artikel
+            </button>
+          )}
         </div>
 
-        {message && (
-          <div className={`mb-4 px-4 py-3 rounded-lg font-medium border ${message.ok ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200'}`}>
-            {message.text}
+        {/* Formular: anlegen oder bearbeiten */}
+        {formOpen && (
+          <div ref={formRef} className="scroll-mt-24 bg-white rounded-3xl shadow-sm ring-1 ring-gray-900/5 p-5 md:p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900">{editingId ? 'Artikel bearbeiten' : 'Neuer Artikel'}</h2>
+              {items.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => { resetForm(); setShowForm(false); }}
+                  className="p-2 -m-2 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                  aria-label="Formular schließen"
+                >
+                  <IconX />
+                </button>
+              )}
+            </div>
+            <form onSubmit={handleSubmit} className="grid md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <div className="inline-flex rounded-xl bg-gray-100 p-1">
+                  {([true, false] as const).map(c => (
+                    <button
+                      key={String(c)}
+                      type="button"
+                      aria-pressed={isClothing === c}
+                      onClick={() => setIsClothing(c)}
+                      className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition ${isClothing === c ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                    >
+                      {c ? '👕 Kleidung' : '🧸 Keine Kleidung'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="md:col-span-2">
+                <label className={labelCls}>
+                  Beschreibung <span className="font-normal text-gray-400">· {form.title.length}/30</span>
+                </label>
+                <input
+                  required maxLength={30}
+                  value={form.title}
+                  onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                  placeholder={isClothing ? 'z.B. Jeans blau, Winterjacke…' : 'z.B. Holzeisenbahn, Kindersitz…'}
+                  className={inputCls}
+                />
+              </div>
+              {isClothing && (
+                <div className="md:col-span-2">
+                  <span className={labelCls}>Für wen?</span>
+                  <div className="flex flex-wrap gap-2">
+                    {(['Junge', 'Mädchen', 'Unisex'] as const).map(g => (
+                      <button
+                        key={g} type="button" aria-pressed={form.gender === g}
+                        // Erneutes Tippen hebt die Auswahl auf – „Für wen?" ist optional.
+                        onClick={() => setForm(f => ({ ...f, gender: f.gender === g ? '' : g }))}
+                        className={`px-4 py-2 rounded-xl text-sm font-semibold ring-1 ring-inset transition ${
+                          form.gender === g ? `${GENDER_STYLE[g]} ring-transparent` : 'bg-white text-gray-600 ring-gray-200 hover:ring-gray-300'
+                        }`}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {isClothing && (
+                <div>
+                  <div className="relative flex items-center gap-1.5 mb-1.5">
+                    <label className="text-xs font-semibold text-gray-500">Größe</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowSizes(o => !o)}
+                      className="w-4 h-4 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 text-[10px] font-bold flex items-center justify-center leading-none"
+                      title="Unterstützte Größen anzeigen"
+                    >
+                      i
+                    </button>
+                    {showSizes && (
+                      <div className="absolute left-0 top-6 z-50 bg-white rounded-2xl shadow-2xl ring-1 ring-gray-900/10 p-4 w-72 max-w-[calc(100vw-2rem)]">
+                        <div className="flex justify-between items-center mb-3">
+                          <span className="font-semibold text-sm text-gray-800">Unterstützte Größen</span>
+                          <button type="button" onClick={() => setShowSizes(false)} className="text-gray-400 hover:text-gray-600" aria-label="Schließen"><IconX /></button>
+                        </div>
+                        {sizeGroups(sizes).map(group => group.sizes.length > 0 && (
+                          <div key={group.label} className="mb-2 last:mb-0">
+                            <p className="text-xs text-gray-700 font-semibold mb-1">{group.label}</p>
+                            <div className="flex flex-wrap gap-1">
+                              {group.sizes.map(sz => (
+                                <button
+                                  key={sz} type="button"
+                                  onClick={() => { setForm(f => ({ ...f, sizeLabel: sz })); setShowSizes(false); }}
+                                  className="px-1.5 py-0.5 bg-gray-100 hover:bg-yellow-100 rounded-md text-xs font-mono font-bold text-gray-900"
+                                >
+                                  {sz}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                        <p className="text-xs text-gray-500 mt-2 border-t pt-2">Auf eine Größe klicken, um sie einzufügen.</p>
+                      </div>
+                    )}
+                  </div>
+                  <input
+                    list="article-size-options" maxLength={40}
+                    value={form.sizeLabel}
+                    onChange={e => setForm(f => ({ ...f, sizeLabel: e.target.value }))}
+                    placeholder="z.B. 110, M, W32…"
+                    className={inputCls}
+                  />
+                  <datalist id="article-size-options">{sizes.map(s => <option key={s} value={s} />)}</datalist>
+                </div>
+              )}
+              <div className={isClothing ? undefined : 'md:col-span-2'}>
+                <label className={labelCls}>Preis (€)</label>
+                {/* Preis nach dem Anlegen gesperrt – Begründung an PATCH /api/seller-articles. */}
+                <input
+                  required type="number" min="0.50" max={MAX_ARTICLE_PRICE} step="0.50"
+                  value={form.price}
+                  disabled={!!editingId}
+                  onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
+                  placeholder="0,50"
+                  className={inputCls}
+                />
+                {editingId && (
+                  <p className="text-xs text-gray-500 mt-1.5">
+                    Der Preis lässt sich nicht ändern. Für einen anderen Preis den Artikel löschen und neu
+                    anlegen – er bekommt dann einen neuen QR-Code und braucht ein neues Etikett.
+                  </p>
+                )}
+              </div>
+              <div className="md:col-span-2">
+                <span className={labelCls}>Tags <span className="font-normal text-gray-400">· optional, mehrere möglich</span></span>
+                <TagPicker value={form.tags} onChange={tags => setForm(f => ({ ...f, tags }))} suggestions={tagOptions} />
+              </div>
+              {!editingId && targetBasar && (
+                <label className="md:col-span-2 flex items-start gap-3 rounded-2xl bg-amber-50 ring-1 ring-inset ring-amber-200/70 p-3.5 text-sm text-gray-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox" checked={directToBasar} onChange={e => setDirectToBasar(e.target.checked)}
+                    className="w-5 h-5 mt-0.5 accent-yellow-500 flex-shrink-0"
+                  />
+                  <span>
+                    Direkt in <strong>{targetBasar.title}</strong> übernehmen
+                    <span className={`ml-1.5 tabular-nums ${basarFull ? 'text-orange-600 font-semibold' : 'text-gray-400'}`}>
+                      {basarCount}/{formatArticleLimit(maxArticles)}
+                    </span>
+                    {directToBasar && basarFull && (
+                      <span className="block text-xs text-orange-700 mt-0.5">
+                        Maximale Artikelanzahl im Basar erreicht – der Artikel kann nur ohne Übernahme angelegt werden.
+                      </span>
+                    )}
+                  </span>
+                </label>
+              )}
+              <div className="md:col-span-2 flex gap-2 justify-end pt-1">
+                {editingId && (
+                  <button type="button" onClick={resetForm} className="px-4 py-2.5 rounded-xl text-gray-600 hover:bg-gray-100 text-sm font-semibold">
+                    Abbrechen
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={saving || (!editingId && !!targetBasar && directToBasar && basarFull)}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-bold text-sm shadow-md shadow-yellow-500/20 disabled:opacity-50 disabled:shadow-none transition"
+                >
+                  {saving ? '…' : editingId ? 'Speichern' : <><IconPlus /> Anlegen</>}
+                </button>
+              </div>
+            </form>
           </div>
         )}
 
-        {/* Formular: anlegen oder bearbeiten */}
-        <div ref={formRef} className="bg-white rounded-xl shadow-sm p-5 mb-5 scroll-mt-4">
-          <h2 className="font-semibold text-gray-700 mb-3">{editingId ? 'Artikel bearbeiten' : 'Neuen Artikel anlegen'}</h2>
-          <form onSubmit={handleSubmit} className="grid md:grid-cols-3 gap-3">
-            <div className="md:col-span-3 flex gap-2">
-              {([true, false] as const).map(c => (
-                <button
-                  key={String(c)}
-                  type="button"
-                  aria-pressed={isClothing === c}
-                  onClick={() => setIsClothing(c)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${isClothing === c ? 'bg-yellow-500 text-gray-900' : 'bg-gray-100 text-gray-500 hover:text-gray-700'}`}
-                >
-                  {c ? '👕 Kleidung' : '🧸 Keine Kleidung'}
-                </button>
-              ))}
-            </div>
-            <div className="md:col-span-3">
-              <label className="block text-xs font-medium text-gray-600 mb-1">Beschreibung * (max. 30 Zeichen)</label>
-              <input
-                required maxLength={30}
-                value={form.title}
-                onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                placeholder={isClothing ? 'z.B. Jeans blau, Winterjacke…' : 'z.B. Holzeisenbahn, Kindersitz…'}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
-              />
-            </div>
-            {isClothing && (
-              <div className="md:col-span-3">
-                <span className="block text-xs font-medium text-gray-600 mb-1">Für wen?</span>
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-                  {(['Junge', 'Mädchen', 'Unisex'] as const).map(g => (
-                    <label key={g} className="flex items-center gap-2 cursor-pointer select-none">
-                      <input
-                        type="radio" name="gender" checked={form.gender === g}
-                        onChange={() => setForm(f => ({ ...f, gender: g }))}
-                        className="accent-yellow-500 w-4 h-4 shrink-0"
-                      />
-                      <span className="text-sm text-gray-700">{g}</span>
-                    </label>
-                  ))}
-                  {form.gender && (
-                    <button type="button" onClick={() => setForm(f => ({ ...f, gender: '' }))} className="text-xs text-gray-400 hover:text-gray-600 underline">
-                      Auswahl aufheben
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-            {isClothing && (
-              <div>
-                <div className="relative flex items-center gap-1.5 mb-1">
-                  <label className="block text-xs font-medium text-gray-600">Größe</label>
-                  <button
-                    type="button"
-                    onClick={() => setShowSizes(o => !o)}
-                    className="w-4 h-4 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 text-xs flex items-center justify-center leading-none"
-                    title="Unterstützte Größen anzeigen"
+        {/* Ziel-Basar */}
+        {targetBasar ? (
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-yellow-400 to-amber-500 p-5 md:p-6 mb-6 text-gray-900 shadow-lg shadow-amber-500/20">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-xs font-bold uppercase tracking-wider text-gray-900/60">Anmeldung offen</p>
+                {openBasars.length > 1 ? (
+                  <select
+                    value={targetBasarId}
+                    onChange={e => { setSelected(new Set()); setTargetBasarId(e.target.value); }}
+                    className="mt-1 max-w-full rounded-xl border-0 bg-white/70 px-3 py-1.5 text-lg font-bold focus:ring-2 focus:ring-gray-900"
                   >
-                    i
-                  </button>
-                  {showSizes && (
-                    <div className="absolute left-0 top-6 z-50 bg-white border border-gray-200 rounded-xl shadow-xl p-4 w-72 max-w-[calc(100vw-2rem)]">
-                      <div className="flex justify-between items-center mb-3">
-                        <span className="font-semibold text-sm text-gray-800">Unterstützte Größen</span>
-                        <button type="button" onClick={() => setShowSizes(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
-                      </div>
-                      {sizeGroups(sizes).map(group => group.sizes.length > 0 && (
-                        <div key={group.label} className="mb-2 last:mb-0">
-                          <p className="text-xs text-gray-700 font-semibold mb-1">{group.label}</p>
-                          <div className="flex flex-wrap gap-1">
-                            {group.sizes.map(sz => (
-                              <button
-                                key={sz} type="button"
-                                onClick={() => { setForm(f => ({ ...f, sizeLabel: sz })); setShowSizes(false); }}
-                                className="px-1.5 py-0.5 bg-gray-100 hover:bg-yellow-100 border border-gray-200 rounded text-xs font-mono font-bold text-gray-900"
-                              >
-                                {sz}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                      <p className="text-xs text-gray-500 mt-2 border-t pt-2">Auf eine Größe klicken, um sie einzufügen.</p>
-                    </div>
-                  )}
-                </div>
-                <input
-                  list="article-size-options" maxLength={40}
-                  value={form.sizeLabel}
-                  onChange={e => setForm(f => ({ ...f, sizeLabel: e.target.value }))}
-                  placeholder="z.B. 110, M, W32…"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                />
-                <datalist id="article-size-options">{sizes.map(s => <option key={s} value={s} />)}</datalist>
+                    {openBasars.map(b => <option key={b.id} value={b.id}>{b.title}{b.isTest ? ' (TEST)' : ''}</option>)}
+                  </select>
+                ) : (
+                  <p className="text-xl font-extrabold truncate">{targetBasar.title}</p>
+                )}
               </div>
-            )}
-            <div className={isClothing ? undefined : 'md:col-span-2'}>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Preis (€) *</label>
-              {/* Preis nach dem Anlegen gesperrt – Begründung an PATCH /api/seller-articles. */}
-              <input
-                required type="number" min="0.50" max={MAX_ARTICLE_PRICE} step="0.50"
-                value={form.price}
-                disabled={!!editingId}
-                onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
-                placeholder="0,50"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 disabled:bg-gray-100 disabled:text-gray-500"
-              />
-              {editingId && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Der Preis lässt sich nicht ändern. Für einen anderen Preis den Artikel löschen und neu
-                  anlegen – er bekommt dann einen neuen QR-Code und braucht ein neues Etikett.
-                </p>
-              )}
+              <Link
+                href={`/seller/basars/${targetBasar.id}`}
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 shrink-0"
+              >
+                Etiketten drucken <IconChevronRight />
+              </Link>
             </div>
-            <div className="md:col-span-3">
-              <span className="block text-xs font-medium text-gray-600 mb-1">Tags (optional, mehrere möglich)</span>
-              <TagPicker value={form.tags} onChange={tags => setForm(f => ({ ...f, tags }))} suggestions={tagOptions} />
-            </div>
-            {!editingId && targetBasar && (
-              <label className="md:col-span-3 flex items-start gap-2 text-sm text-gray-700 cursor-pointer select-none">
-                <input
-                  type="checkbox" checked={directToBasar} onChange={e => setDirectToBasar(e.target.checked)}
-                  className="w-4 h-4 mt-0.5 accent-yellow-500 flex-shrink-0"
+            <div className="mt-4">
+              <div className="flex justify-between text-xs font-semibold text-gray-900/70 mb-1.5">
+                <span>Artikel im Basar</span>
+                <span className="tabular-nums">{basarCount} / {formatArticleLimit(maxArticles)}</span>
+              </div>
+              <div className="h-2 rounded-full bg-white/40 overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${basarFull ? 'bg-orange-700' : 'bg-gray-900'}`}
+                  style={{ width: `${Number.isFinite(maxArticles) ? Math.min(100, (basarCount / maxArticles) * 100) : 0}%` }}
                 />
-                <span>
-                  Direkt in <strong>{targetBasar.title}</strong> übernehmen
-                  <span className={`ml-1 ${basarFull ? 'text-orange-600 font-semibold' : 'text-gray-400'}`}>
-                    ({basarCount}/{formatArticleLimit(maxArticles)})
-                  </span>
-                  {directToBasar && basarFull && (
-                    <span className="block text-xs text-orange-700">
-                      Maximale Artikelanzahl im Basar erreicht – der Artikel kann nur ohne Übernahme angelegt werden.
-                    </span>
-                  )}
-                </span>
-              </label>
-            )}
-            <div className="md:col-span-3 flex gap-2 justify-end">
-              {editingId && (
-                <button type="button" onClick={resetForm} className="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm font-medium">
-                  Abbrechen
-                </button>
-              )}
-              <button type="submit" disabled={saving || (!editingId && !!targetBasar && directToBasar && basarFull)} className="px-5 py-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold text-sm rounded-lg disabled:opacity-50">
-                {saving ? '…' : editingId ? 'Speichern' : '+ Anlegen'}
-              </button>
+              </div>
+              <p className="text-xs text-gray-900/70 mt-2.5">
+                Artikel unten anhaken und übernehmen. Der QR-Code bleibt gleich – gedruckte Etiketten gelten weiter.
+              </p>
             </div>
-          </form>
-        </div>
+          </div>
+        ) : (
+          <div className="flex items-start gap-3 rounded-2xl bg-white/70 ring-1 ring-gray-900/5 px-4 py-3 mb-6 text-sm text-gray-500">
+            <span aria-hidden="true">🗓️</span>
+            <span>
+              Gerade ist kein Basar zur Anmeldung offen. Deine Artikel bleiben hier und lassen sich übernehmen,
+              sobald der nächste Basar öffnet.
+            </span>
+          </div>
+        )}
 
         {/* Filter */}
-        <div className="bg-white rounded-xl shadow-sm p-5 mb-5 space-y-3">
-          <input
-            type="search" value={q} onChange={e => setQ(e.target.value)}
-            placeholder="Suchen (Beschreibung, Größe)…"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
-          />
-          <div className="flex flex-wrap gap-1.5 items-center">
-            <span className="text-xs font-medium text-gray-500 mr-1">Tags:</span>
+        <div className="mb-4 space-y-3">
+          <div className="relative">
+            <span className="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-gray-400"><IconSearch /></span>
+            <input
+              type="search" value={q} onChange={e => setQ(e.target.value)}
+              placeholder="Suchen nach Beschreibung oder Größe"
+              className="w-full rounded-2xl border-0 bg-white py-3 pl-11 pr-4 text-sm shadow-sm ring-1 ring-gray-900/5 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+            />
+          </div>
+          {/* Am Handy 2×2 statt einer Zeile: vier Reiter mit Zahl passen nicht auf 375 px. */}
+          <div className="grid grid-cols-2 sm:flex gap-1 rounded-2xl bg-white p-1 shadow-sm ring-1 ring-gray-900/5">
+            {statusTabs.map(t => (
+              <button
+                key={t.key} type="button" aria-pressed={statusFilter === t.key}
+                onClick={() => setStatusFilter(t.key)}
+                className={`flex-1 min-w-fit inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold whitespace-nowrap transition ${
+                  statusFilter === t.key ? 'bg-gray-900 text-white! shadow' : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                {t.label}
+                <span className={`tabular-nums text-xs ${statusFilter === t.key ? 'text-white/60' : 'text-gray-400'}`}>{t.count}</span>
+              </button>
+            ))}
+          </div>
+          {/* Am Handy eine waagerecht wischbare Zeile statt drei umbrechender Reihen. */}
+          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap [scrollbar-width:none]">
+            {(['Mädchen', 'Junge', 'Unisex'] as const).map(g => (
+              <button key={g} type="button" aria-pressed={genderFilter === g} onClick={() => setGenderFilter(v => (v === g ? '' : g))} className={chip(genderFilter === g)}>
+                {g}
+              </button>
+            ))}
+            <span className="w-px shrink-0 bg-gray-200 mx-1" aria-hidden="true" />
             {tagOptions.map(t => (
               <button
                 key={t} type="button" aria-pressed={tagFilter.has(t)}
                 onClick={() => { setUntaggedOnly(false); setTagFilter(s => toggleSet(s, t)); }}
-                className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${tagFilter.has(t) ? 'bg-yellow-500 border-yellow-500 text-gray-900' : 'bg-white border-gray-300 text-gray-600 hover:border-yellow-500'}`}
+                className={chip(tagFilter.has(t))}
               >
-                {t}
+                #{t}
               </button>
             ))}
             <button
               type="button" aria-pressed={untaggedOnly}
               onClick={() => { setTagFilter(new Set()); setUntaggedOnly(u => !u); }}
-              className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${untaggedOnly ? 'bg-gray-700 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-500 hover:border-gray-500'}`}
+              className={chip(untaggedOnly)}
             >
               ohne Tag
             </button>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <select value={genderFilter} onChange={e => setGenderFilter(e.target.value)} className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
-              <option value="">Für alle</option>
-              <option value="Junge">Junge</option>
-              <option value="Mädchen">Mädchen</option>
-              <option value="Unisex">Unisex</option>
-            </select>
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as StatusFilter)} className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
-              <option value="all">Alle Artikel</option>
-              <option value="available">{targetBasar ? 'Noch nicht im Basar' : 'Nicht verkauft'}</option>
-              {targetBasar && <option value="inBasar">Schon im Basar</option>}
-              <option value="sold">Verkauft</option>
-            </select>
-            {filtersActive && (
-              <button
-                type="button"
-                onClick={() => { setQ(''); setTagFilter(new Set()); setUntaggedOnly(false); setGenderFilter(''); setStatusFilter('all'); }}
-                className="text-sm text-gray-500 hover:text-gray-800 underline"
-              >
-                Filter zurücksetzen
-              </button>
-            )}
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-1 text-sm">
+            <span className="text-gray-500">
+              {filtersActive
+                ? <><strong className="text-gray-900">{filtered.length}</strong> von {items.length} Artikeln</>
+                : <><strong className="text-gray-900">{items.length}</strong> Artikel</>}
+            </span>
+            <div className="flex items-center gap-4">
+              {targetBasar && selectableVisible.length > 0 && (
+                <button type="button" onClick={() => setSelected(new Set(selectableVisible.map(a => a.id)))} className="font-semibold text-amber-700! hover:text-amber-900! whitespace-nowrap">
+                  Alle {selectableVisible.length} auswählen
+                </button>
+              )}
+              {filtersActive && (
+                <button
+                  type="button"
+                  onClick={() => { setQ(''); setTagFilter(new Set()); setUntaggedOnly(false); setGenderFilter(''); setStatusFilter('all'); }}
+                  className="font-semibold text-gray-500! hover:text-gray-900! whitespace-nowrap"
+                >
+                  Zurücksetzen
+                </button>
+              )}
+            </div>
           </div>
         </div>
-
-        {/* In Basar übernehmen */}
-        {openBasars.length > 0 ? (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5 space-y-2">
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="font-semibold text-gray-800">In Basar übernehmen:</span>
-              {openBasars.length > 1 ? (
-                <select value={targetBasarId} onChange={e => { setSelected(new Set()); setTargetBasarId(e.target.value); }} className="border border-amber-300 rounded-lg px-2 py-1 bg-white">
-                  {openBasars.map(b => <option key={b.id} value={b.id}>{b.title}{b.isTest ? ' (TEST)' : ''}</option>)}
-                </select>
-              ) : (
-                <span className="text-gray-700">{targetBasar?.title}</span>
-              )}
-              <span className={basarFull ? 'text-orange-600 font-semibold' : 'text-gray-500'}>
-                {basarCount}/{formatArticleLimit(maxArticles)} Artikel im Basar
-              </span>
-            </div>
-            <p className="text-xs text-amber-800">
-              Artikel anhaken und übernehmen. Der QR-Code bleibt gleich – schon gedruckte Etiketten gelten weiter.
-            </p>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={() => setSelected(new Set(selectableVisible.map(a => a.id)))}
-                disabled={selectableVisible.length === 0}
-                className="text-xs text-amber-700 hover:underline font-medium disabled:opacity-50"
-              >
-                Alle angezeigten auswählen ({selectableVisible.length})
-              </button>
-              <button
-                type="button" onClick={handleTransfer} disabled={selected.size === 0}
-                className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold text-sm rounded-lg disabled:opacity-50"
-              >
-                {selected.size > 0 ? `${selected.size} übernehmen` : 'Übernehmen'}
-              </button>
-            </div>
-            {targetBasar && (
-              <Link href={`/seller/basars/${targetBasar.id}`} className="inline-block text-xs text-amber-700 underline">
-                Zum Basar (Etiketten drucken) →
-              </Link>
-            )}
-          </div>
-        ) : (
-          <p className="text-sm text-gray-500 mb-5 px-1">
-            Gerade ist kein Basar zur Anmeldung offen. Deine Artikel bleiben hier gespeichert und lassen
-            sich übernehmen, sobald der nächste Basar öffnet.
-          </p>
-        )}
 
         {/* Liste */}
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100 font-semibold text-gray-700">
-            {filtersActive ? `${filtered.length} von ${items.length} Artikeln` : `${items.length} Artikel`}
+        {loading ? (
+          <div className="grid sm:grid-cols-2 gap-3">
+            {[0, 1, 2, 3].map(i => <div key={i} className="h-28 rounded-2xl bg-white/70 ring-1 ring-gray-900/5 animate-pulse" />)}
           </div>
-          {loading ? (
-            <div className="text-center py-10 text-gray-400">Laden…</div>
-          ) : filtered.length === 0 ? (
-            <div className="text-center py-10 text-gray-400">
-              {items.length === 0 ? 'Noch keine Artikel. Leg oben deinen ersten an!' : 'Keine Artikel passen zum Filter.'}
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {filtered.map(a => (
-                <div key={a.id} className={`flex items-center gap-3 px-4 py-3 ${editingId === a.id ? 'bg-yellow-50' : ''}`}>
-                  {targetBasarId && (
-                    <input
-                      type="checkbox"
-                      aria-label={`${a.title} auswählen`}
-                      disabled={!transferable(a)}
-                      checked={selected.has(a.id)}
-                      onChange={() => setSelected(s => toggleSet(s, a.id))}
-                      className="w-5 h-5 accent-yellow-500 flex-shrink-0 disabled:opacity-30"
-                    />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-800 truncate">{a.title}</p>
-                    <p className="text-xs text-gray-500">
-                      {a.sizeLabel && `Größe: ${a.sizeLabel} · `}
-                      {a.gender && <span className="inline-block mr-1 px-1.5 py-0.5 rounded font-semibold bg-blue-50 text-blue-600">{a.gender}</span>}
-                      {fmt(a.price)} €
-                    </p>
-                    {(a.tags.length > 0 || a.alreadyInBasar || a.soldPreviously) && (
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {a.soldPreviously && <span className="px-1.5 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">✓ Verkauft</span>}
-                        {a.alreadyInBasar && <span className="px-1.5 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">Im Basar</span>}
-                        {a.tags.map(t => <span key={t} className="px-1.5 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600">{t}</span>)}
-                      </div>
+        ) : filtered.length === 0 ? (
+          <div className="rounded-3xl bg-white ring-1 ring-gray-900/5 py-14 text-center">
+            <div className="text-4xl mb-2" aria-hidden="true">{items.length === 0 ? '🧺' : '🔍'}</div>
+            <p className="font-semibold text-gray-800">{items.length === 0 ? 'Noch keine Artikel' : 'Nichts gefunden'}</p>
+            <p className="text-sm text-gray-500 mt-1">{items.length === 0 ? 'Leg oben deinen ersten Artikel an.' : 'Kein Artikel passt zu diesem Filter.'}</p>
+          </div>
+        ) : (
+          <div className="grid sm:grid-cols-2 gap-3">
+            {filtered.map(a => {
+              const canPick = transferable(a);
+              const isSel = selected.has(a.id);
+              return (
+                <div
+                  key={a.id}
+                  className={`relative flex flex-col rounded-2xl bg-white p-4 shadow-sm ring-1 transition ${
+                    editingId === a.id ? 'ring-2 ring-yellow-500' : isSel ? 'ring-2 ring-amber-500 bg-amber-50/40' : 'ring-gray-900/5 hover:shadow-md'
+                  } ${a.soldPreviously ? 'opacity-70' : ''}`}
+                >
+                  <div className="flex items-start gap-3">
+                    {targetBasar && (
+                      <input
+                        type="checkbox"
+                        aria-label={`${a.title} auswählen`}
+                        disabled={!canPick}
+                        checked={isSel}
+                        onChange={() => setSelected(s => toggleSet(s, a.id))}
+                        className="mt-1 w-5 h-5 accent-amber-500 flex-shrink-0 disabled:opacity-25"
+                      />
                     )}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-900 leading-snug break-words">{a.title}</p>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                        {a.sizeLabel && <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-xs font-mono font-bold text-gray-700">{a.sizeLabel}</span>}
+                        {a.gender && <span className={`rounded-md px-1.5 py-0.5 text-xs font-semibold ${GENDER_STYLE[a.gender] ?? 'bg-gray-100 text-gray-600'}`}>{a.gender}</span>}
+                      </div>
+                    </div>
+                    <span className="text-lg font-extrabold tabular-nums text-gray-900 whitespace-nowrap">{fmt(a.price)} €</span>
                   </div>
-                  <button type="button" onClick={() => startEdit(a)} className="px-2 py-1 text-sm text-gray-500 hover:text-gray-800 flex-shrink-0" title="Bearbeiten">
-                    ✎
-                  </button>
-                  <button type="button" onClick={() => handleDelete(a)} className="p-1 text-red-400 hover:text-red-600 flex-shrink-0" title="Löschen">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
+                  <div className="flex items-end justify-between gap-2 mt-3">
+                    <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                      {a.soldPreviously && <Badge tone="green">✓ Verkauft</Badge>}
+                      {a.alreadyInBasar && <Badge tone="amber">Im Basar</Badge>}
+                      {a.tags.map(t => <span key={t} className="text-xs font-medium text-gray-400">#{t}</span>)}
+                    </div>
+                    <div className="flex shrink-0 -mr-1.5 -mb-1.5">
+                      <button type="button" onClick={() => startEdit(a)} className="p-2 rounded-full text-gray-400 hover:text-gray-900 hover:bg-gray-100" title="Bearbeiten" aria-label="Bearbeiten">
+                        <IconPencil />
+                      </button>
+                      <button type="button" onClick={() => handleDelete(a)} className="p-2 rounded-full text-gray-400 hover:text-red-600 hover:bg-red-50" title="Löschen" aria-label="Löschen">
+                        <IconTrash />
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
+
+      {/* Schwebende Auswahl-Leiste. Rechts Platz für den Chat-Knopf (ChatWidget, bottom-4 right-4). */}
+      {targetBasar && selected.size > 0 && (
+        <div className="fixed inset-x-0 bottom-4 z-30 px-4 pr-24 sm:pr-4 flex justify-center pointer-events-none">
+          <div className="pointer-events-auto flex w-full max-w-lg items-center gap-2 rounded-2xl bg-gray-900 p-2 text-white shadow-2xl">
+            <button
+              type="button" onClick={() => setSelected(new Set())}
+              className="shrink-0 rounded-xl px-2.5 text-white/60! hover:text-white! hover:bg-white/10"
+              aria-label="Auswahl aufheben" title="Auswahl aufheben"
+            >
+              <IconX />
+            </button>
+            <button
+              type="button" onClick={handleTransfer}
+              className="flex-1 rounded-xl bg-yellow-500 px-4 py-2 text-sm font-bold text-gray-900 hover:bg-yellow-400 whitespace-nowrap tabular-nums"
+            >
+              {selected.size} übernehmen
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Rückmeldung als Toast, damit sie auch weit unten in der Liste sichtbar ist. */}
+      {message && (
+        <div
+          role="status"
+          className={`fixed left-1/2 top-24 z-50 -translate-x-1/2 w-[calc(100%-2rem)] max-w-md rounded-2xl px-4 py-3 text-sm font-semibold shadow-2xl ${
+            message.ok ? 'bg-gray-900 text-white' : 'bg-red-600 text-white'
+          }`}
+        >
+          {message.text}
+        </div>
+      )}
     </div>
   );
 }
+
+const GENDER_STYLE: Record<string, string> = {
+  Mädchen: 'bg-pink-50 text-pink-700',
+  Junge: 'bg-sky-50 text-sky-700',
+  Unisex: 'bg-violet-50 text-violet-700',
+};
+
+function Stat({ value, label, tone = 'gray' }: { value: number; label: string; tone?: 'gray' | 'amber' | 'green' }) {
+  const cls = { gray: 'bg-white text-gray-700', amber: 'bg-amber-100 text-amber-800', green: 'bg-green-100 text-green-800' }[tone];
+  return (
+    <span className={`inline-flex items-baseline gap-1 rounded-full px-3 py-1 text-sm shadow-sm ring-1 ring-gray-900/5 ${cls}`}>
+      <strong className="tabular-nums">{value}</strong> {label}
+    </span>
+  );
+}
+
+function Badge({ tone, children }: { tone: 'green' | 'amber'; children: React.ReactNode }) {
+  const cls = tone === 'green' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800';
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${cls}`}>{children}</span>;
+}
+
+const svg = {
+  width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
+  strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true,
+};
+const IconSearch = () => <svg {...svg}><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>;
+const IconPlus = () => <svg {...svg}><path d="M12 5v14M5 12h14" /></svg>;
+const IconX = () => <svg {...svg}><path d="M18 6 6 18M6 6l12 12" /></svg>;
+const IconPencil = () => <svg {...svg}><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>;
+const IconTrash = () => <svg {...svg}><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></svg>;
+const IconChevronLeft = () => <svg {...svg} width={16} height={16}><path d="m15 18-6-6 6-6" /></svg>;
+const IconChevronRight = () => <svg {...svg} width={16} height={16}><path d="m9 18 6-6-6-6" /></svg>;

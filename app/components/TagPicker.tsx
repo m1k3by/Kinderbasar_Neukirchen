@@ -49,10 +49,10 @@ export default function TagPicker({
             type="button"
             aria-pressed={has(t)}
             onClick={() => toggle(t)}
-            className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold ring-1 ring-inset transition-colors ${
               has(t)
-                ? 'bg-yellow-500 border-yellow-500 text-gray-900'
-                : 'bg-white border-gray-300 text-gray-600 hover:border-yellow-500'
+                ? 'bg-yellow-500 ring-yellow-500 text-gray-900'
+                : 'bg-white ring-gray-200 text-gray-600 hover:ring-yellow-500'
             }`}
           >
             {has(t) ? '✓ ' : ''}{t}
@@ -67,13 +67,13 @@ export default function TagPicker({
           // Enter legt den Tag an, statt das ganze Artikelformular abzuschicken.
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addDraft(); } }}
           placeholder="Eigenen Tag anlegen, z. B. Mädchen 4 J."
-          className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
+          className="flex-1 min-w-0 rounded-xl border-0 bg-gray-50 px-3.5 py-2 text-sm ring-1 ring-inset ring-gray-200 placeholder:text-gray-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-yellow-500"
         />
         <button
           type="button"
           onClick={addDraft}
           disabled={!draft.trim()}
-          className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg disabled:opacity-50"
+          className="px-3.5 py-2 bg-gray-900 hover:bg-gray-800 text-white! text-sm font-semibold rounded-xl disabled:opacity-30"
         >
           + Tag
         </button>
