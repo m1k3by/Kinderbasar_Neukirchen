@@ -238,6 +238,10 @@ model SellerArticle {
   gender    String?   @db.VarChar(10)
   price     Decimal   @db.Decimal(6, 2)
   qrCode    String?   @unique
+  // Freie Ordnungs-Tags des Verkäufers (z. B. „Sommer", „Winter", „Mädchen 4 J.").
+  // Am Archiv-Eintrag, nicht am Article: der Tag gehört zum Kleidungsstück, nicht zum Basar.
+  // Normalisiert über app/lib/articleTags.ts; gefiltert wird clientseitig.
+  tags      String[]  @default([])
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   seller    Seller    @relation(fields: [sellerId], references: [sellerId], onDelete: Cascade)

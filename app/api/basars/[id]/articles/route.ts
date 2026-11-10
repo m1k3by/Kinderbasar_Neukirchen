@@ -3,7 +3,7 @@ import { prisma } from '../../../../lib/prisma';
 import { requireAuth } from '../../../../lib/apiAuth';
 import { requireBasarAccess } from '../../../../lib/basarAccess';
 import { maxArticlesFor } from '../../../../lib/articleLimits';
-import { MAX_ARTICLE_PRICE, PRICE_TOO_HIGH_MESSAGE } from '../../../../lib/articlePrice';
+import { parseArticleInput } from '../../../../lib/articleInput';
 
 // GET /api/basars/:id/articles – get articles for calling seller in this basar
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -86,22 +86,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     // Parse and validate the request body BEFORE any DB round trips, so a malformed request
     // is rejected cheaply instead of paying for seller/basar lookups first.
-    const body = await request.json();
-    const { title, sizeLabel, gender, price } = body;
-
-    if (!title || !price) {
-      return NextResponse.json({ error: 'Beschreibung und Preis sind Pflichtfelder' }, { status: 400 });
-    }
-    const priceNum = parseFloat(price);
-    if (!Number.isFinite(priceNum) || priceNum <= 0) {
-      return NextResponse.json({ error: 'Preis muss größer als 0 sein' }, { status: 400 });
-    }
-    if (priceNum > MAX_ARTICLE_PRICE) {
-      return NextResponse.json({ error: PRICE_TOO_HIGH_MESSAGE }, { status: 400 });
-    }
-    const genderValue = (gender === 'Junge' || gender === 'Mädchen' || gender === 'Unisex') ? gender : null;
-    const titleTrimmed = String(title).substring(0, 120);
-    const sizeLabelTrimmed = sizeLabel ? String(sizeLabel).substring(0, 40) : null;
+    const parsed = parseArticleInput(await request.json());
+    if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const { title: titleTrimmed, sizeLabel: sizeLabelTrimmed, gender: genderValue, price: priceNum, tags } = parsed.data;
 
     // Beide Lesezugriffe hängen nicht voneinander ab und laufen deshalb parallel: ein
     // Roundtrip zur DB (eu-central-1) kostet ~90 ms, sequenziell wären es zwei.
@@ -170,6 +157,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           gender: genderValue,
           price: priceNum,
           qrCode: stableQrCode,
+          tags,
         },
       });
 

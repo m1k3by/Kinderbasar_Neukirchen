@@ -8,12 +8,89 @@ vi.mock('next/headers', () => ({
 }));
 
 const prismaMock = vi.hoisted(() => ({
-  sellerArticle: { findMany: vi.fn(), findUnique: vi.fn(), delete: vi.fn() },
+  sellerArticle: { findMany: vi.fn(), findUnique: vi.fn(), delete: vi.fn(), create: vi.fn(), update: vi.fn() },
   article: { updateMany: vi.fn() },
+  $transaction: vi.fn(),
 }));
 vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
 
-import { GET, DELETE } from '@/app/api/seller-articles/route';
+import { GET, POST, PATCH, DELETE } from '@/app/api/seller-articles/route';
+
+function makeJsonRequest(method: string, body: object) {
+  return new Request('http://localhost/api/seller-articles', {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+describe('POST /api/seller-articles (Anlegen ohne Basar)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('401 für Admin (keine sellerId)', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    const res = await POST(makeJsonRequest('POST', { title: 'Shirt', price: 2 }));
+    expect(res.status).toBe(401);
+    expect(prismaMock.sellerArticle.create).not.toHaveBeenCalled();
+  });
+
+  it('400 ohne Preis, nichts geschrieben', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    const res = await POST(makeJsonRequest('POST', { title: 'Shirt' }));
+    expect(res.status).toBe(400);
+    expect(prismaMock.sellerArticle.create).not.toHaveBeenCalled();
+  });
+
+  it('legt den Eintrag für den eigenen Verkäufer an (sellerId aus dem Body ignoriert), mit QR-Code und Tags', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.sellerArticle.create.mockResolvedValue({ id: 'sa-9', price: dec(2.5), tags: ['Sommer'] });
+    const res = await POST(makeJsonRequest('POST', { title: 'Shirt', price: 2.5, gender: 'Junge', tags: ['sommer'], sellerId: 1 }));
+    expect(res.status).toBe(201);
+    const data = prismaMock.sellerArticle.create.mock.calls[0][0].data;
+    expect(data).toMatchObject({ sellerId: 1234, title: 'Shirt', price: 2.5, gender: 'Junge', tags: ['Sommer'] });
+    expect(typeof data.qrCode).toBe('string');
+    expect((await res.json()).sellerArticle.price).toBe(2.5);
+  });
+});
+
+describe('PATCH /api/seller-articles (Bearbeiten)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prismaMock.$transaction.mockImplementation(async (ops: Promise<unknown>[]) => Promise.all(ops));
+  });
+
+  it('404 für fremden Eintrag, nichts geschrieben', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.sellerArticle.findUnique.mockResolvedValue({ id: 'sa-1', sellerId: 9999 });
+    const res = await PATCH(makeJsonRequest('PATCH', { id: 'sa-1', title: 'X', price: 1 }));
+    expect(res.status).toBe(404);
+    expect(prismaMock.sellerArticle.update).not.toHaveBeenCalled();
+    expect(prismaMock.article.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('ändert den Eintrag und zieht nur verfügbare Artikel in nicht laufenden Basaren mit', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.sellerArticle.findUnique.mockResolvedValue({ id: 'sa-1', sellerId: 1234 });
+    prismaMock.sellerArticle.update.mockResolvedValue({ id: 'sa-1', price: dec(3), tags: ['Winter'] });
+    prismaMock.article.updateMany.mockResolvedValue({ count: 1 });
+    const res = await PATCH(makeJsonRequest('PATCH', { id: 'sa-1', title: 'Jacke', sizeLabel: '110', price: 3, tags: ['Winter'] }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).updatedBasarArticles).toBe(1);
+
+    expect(prismaMock.sellerArticle.update.mock.calls[0][0]).toEqual({
+      where: { id: 'sa-1' },
+      data: { title: 'Jacke', sizeLabel: '110', gender: null, price: 3, tags: ['Winter'] },
+    });
+    expect(prismaMock.article.updateMany.mock.calls[0][0]).toEqual({
+      where: {
+        sellerArticleId: 'sa-1',
+        status: 'AVAILABLE',
+        basarSeller: { basar: { status: { in: ['DRAFT', 'OPEN'] } } },
+      },
+      data: { title: 'Jacke', sizeLabel: '110', gender: null, price: 3 },
+    });
+  });
+});
 
 function makeGetRequest(basarId?: string) {
   const url = basarId

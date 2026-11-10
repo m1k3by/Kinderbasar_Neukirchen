@@ -265,6 +265,19 @@ describe('POST /api/basars/[id]/articles', () => {
     expect(prismaMock.sellerArticle.create.mock.calls[0][0].data.price).toBe(9999.99);
   });
 
+  it('Tags landen normalisiert am Archiv-Eintrag, nicht am Article', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basar.findUnique.mockResolvedValue(openBasar);
+    prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
+    prismaMock.article.count.mockResolvedValue(0);
+    prismaMock.sellerArticle.create.mockResolvedValue({ id: 'sa-1', title: 'Shirt', qrCode: 'uuid-1' });
+    prismaMock.article.create.mockResolvedValue({ id: 'art-1', title: 'Shirt', qrCode: 'uuid-1', status: 'AVAILABLE' });
+    const res = await POST(makePostRequest({ title: 'Shirt', price: 2, tags: ['winter', ' Mädchen ', 'Winter'] }), makeContext());
+    expect(res.status).toBe(201);
+    expect(prismaMock.sellerArticle.create.mock.calls[0][0].data.tags).toEqual(['Winter', 'Mädchen']);
+    expect(prismaMock.article.create.mock.calls[0][0].data).not.toHaveProperty('tags');
+  });
+
   it('creates article successfully → 201', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);

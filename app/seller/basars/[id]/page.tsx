@@ -4,6 +4,7 @@ import { useState, useEffect, use, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Header from '../../../components/Header';
+import TagPicker, { allTags } from '../../../components/TagPicker';
 import { parseSizes, sizeGroups } from '../../../lib/sizes';
 import { getNavLinks } from '../../../lib/navLinks';
 import { formatArticleLimit, maxArticlesFor } from '../../../lib/articleLimits';
@@ -60,6 +61,7 @@ interface SellerArchiveEntry {
   title: string;
   sizeLabel?: string;
   price: number;
+  tags?: string[];
   alreadyInBasar: boolean;
   soldPreviously: boolean;
 }
@@ -95,6 +97,8 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
   // Bewusst nicht Teil von `form`: nach dem Absenden wird das Formular geleert, die Kategorie
   // bleibt aber stehen – wer zehn Spielsachen erfasst, will nicht zehnmal umschalten.
   const [isClothing, setIsClothing] = useState(true);
+  // Tags bleiben wie die Kategorie nach dem Absenden stehen (zehn Wintersachen hintereinander).
+  const [formTags, setFormTags] = useState<string[]>([]);
   // Etiketten-Dialog: 'choice' = Abfrage ganzer Bogen oder Einzelauswahl, 'pick' = Auswahlliste.
   // 'downloading': nach dem Antippen des Druck-Links. Vorher schloss sich der Dialog sofort, und
   // bis das PDF da war, zeigte die Seite nichts – auf dem Handy wirkte das wie „passiert nichts"
@@ -286,12 +290,14 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
       const res = await fetch(`/api/basars/${basarId}/articles`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: tempArticle.title, sizeLabel: tempArticle.sizeLabel, gender: tempArticle.gender, price: tempArticle.price }),
+        body: JSON.stringify({ title: tempArticle.title, sizeLabel: tempArticle.sizeLabel, gender: tempArticle.gender, price: tempArticle.price, tags: formTags }),
       });
       const data = await res.json();
       if (res.ok) {
         // Replace temp article with real one from server
         setArticles(prev => prev.map(a => a.id === tempId ? data.article : a));
+        // Neue eigene Tags sofort als Vorschlag anbieten (die Vorschläge kommen aus dem Archiv).
+        if (formTags.length > 0) setArchiveItems(prev => [...prev, { id: data.article.sellerArticleId, title: data.article.title, price: Number(data.article.price), tags: formTags, alreadyInBasar: true, soldPreviously: false }]);
         if (!basarSeller) setBasarSeller(data.basarSeller);
         showMsg('✓ Artikel hinzugefügt', true);
       } else {
@@ -699,6 +705,9 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
           <div className="bg-white rounded-xl shadow-sm p-5 mb-5">
             <h2 className="font-semibold text-gray-700 mb-3">
               Neuen Artikel hinzufügen
+              <Link href="/seller/articles" className="float-right text-sm font-normal text-yellow-700 hover:underline">
+                Alle meine Artikel →
+              </Link>
               <span className={`ml-2 text-sm font-normal ${articles.length >= maxArticles ? 'text-orange-600 font-semibold' : 'text-gray-400'}`}>
                 ({articles.length}/{formatArticleLimit(maxArticles)})
               </span>
@@ -890,6 +899,10 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
                   placeholder="0,50"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
                 />
+              </div>
+              <div className="md:col-span-3 md:order-last">
+                <span className="block text-xs font-medium text-gray-600 mb-1">Tags (optional, mehrere möglich)</span>
+                <TagPicker value={formTags} onChange={setFormTags} suggestions={allTags(archiveItems)} />
               </div>
               <div className="flex items-end">
                 <button

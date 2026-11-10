@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -376,6 +376,20 @@ export default function SellerPage() {
             </div>
           )}
         </div>
+
+        {/* Eigener Artikelbestand – unabhängig davon, ob gerade ein Basar offen ist. */}
+        <Link
+          href="/seller/articles"
+          className="flex items-center justify-between gap-4 bg-white rounded-lg shadow-md p-5 mb-8 hover:bg-yellow-50 transition-colors"
+        >
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">📦 Meine Artikel</h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Artikel jederzeit anlegen, bearbeiten, mit Tags (z. B. Sommer/Winter) ordnen und in einen offenen Basar übernehmen.
+            </p>
+          </div>
+          <span className="text-yellow-600 font-bold text-xl">→</span>
+        </Link>
 
         {closedBasars.length > 0 && (
           <div className="mb-8">
