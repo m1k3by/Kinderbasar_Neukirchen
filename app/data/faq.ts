@@ -22,7 +22,7 @@ export const faqData: FaqItem[] = [
     id: 'seller-artikel-erstellen',
     question: 'Wie lege ich einen neuen Artikel an?',
     answer:
-      'Gehe zu **Basare** → wähle einen Basar → scrolle zum Formular **"Neuen Artikel hinzufügen"**.\n\nFülle aus:\n– **Beschreibung** (max. 30 Zeichen, z.B. "Jeans blau")\n– **Für wen?** (Junge / Mädchen / Unisex)\n– **Größe** (z.B. 110, M, W32) – klicke auf **ⓘ** für alle gültigen Größen\n– **Preis** in €\n\nDann auf **"+ Hinzufügen"** klicken. Der Artikel bekommt automatisch einen QR-Code.',
+      'Gehe zu **Meine Artikel** (im Verkäuferbereich oder über **"Artikel anlegen"** bei einem Basar). Das geht **jederzeit**, auch wenn gerade kein Basar läuft.\n\nFülle aus:\n– **Beschreibung** (max. 30 Zeichen, z.B. "Jeans blau")\n– **Für wen?** (Junge / Mädchen / Unisex)\n– **Größe** (z.B. 110, M, W32) – klicke auf **ⓘ** für alle Größen\n– **Preis** in €\n– optional **Tags**, z.B. Sommer oder Winter\n\nDann auf **"+ Anlegen"** klicken. Der Artikel bekommt automatisch einen QR-Code.\n\nIst gerade ein Basar zur Anmeldung offen, ist **"Direkt in … übernehmen"** angehakt – der Artikel landet dann sofort in diesem Basar. Ohne Haken bleibt er nur in deinen Artikeln und muss später noch übernommen werden.',
     keywords: ['artikel', 'erstellen', 'anlegen', 'neu', 'hinzufügen', 'neuer', 'eintragen', 'erfassen'],
     roles: ['seller', 'employee'],
     category: 'Artikel & Etiketten',
@@ -72,7 +72,7 @@ export const faqData: FaqItem[] = [
     id: 'seller-artikel-bearbeiten',
     question: 'Kann ich Artikel nachträglich ändern?',
     answer:
-      'Ein direktes Bearbeiten ist aktuell **nicht möglich** – es gibt keine "Ändern"-Funktion für bereits angelegte Artikel.\n\nMöchtest du etwas korrigieren:\n\n– Solange der Basar noch **nicht gestartet** ist (Status "Anmeldung offen"), kannst du den Artikel über das **Papierkorb-Symbol** löschen und mit den korrekten Angaben neu anlegen.\n\n**Achtung:** Hast du für den alten Artikel schon ein Etikett gedruckt, gilt dieses danach nicht mehr – drucke für den neuen Artikel ein neues Etikett.\n\nSobald der Basar **läuft** oder **beendet** ist, können Artikel generell nicht mehr gelöscht oder geändert werden – verkaufte Artikel ohnehin nie.',
+      'Teilweise. In **Meine Artikel** auf das **Stift-Symbol ✎** neben dem Artikel tippen. Ändern kannst du **Beschreibung**, **Für wen?**, **Größe** und **Tags**, dann **"Speichern"**. Der **QR-Code bleibt dabei gleich**.\n\n**Der Preis lässt sich nicht ändern.** An der Kasse zählt der Preis im System, nicht der auf dem Etikett. Für einen anderen Preis den Artikel über das **Papierkorb-Symbol** löschen und neu anlegen. Er bekommt dann einen **neuen QR-Code** – drucke dafür ein neues Etikett.\n\n**Achtung:** Steckt der Artikel schon in einem Basar, lösche ihn **auch auf der Basar-Seite** (Papierkorb in der Liste "Artikel in diesem Basar"). Sonst bleibt er dort mit altem Preis und altem QR-Code verkaufbar.\n\n– Ist der Artikel schon in einem Basar, dessen Anmeldung noch **offen** ist, werden deine Änderungen dort übernommen. Druck dann das **Etikett neu**, denn auf dem alten stehen noch die alten Angaben.\n– In einem Basar, der schon **läuft** oder **beendet** ist, ändert sich nichts mehr.',
     keywords: ['bearbeiten', 'ändern', 'editieren', 'korrigieren', 'anpassen', 'nachträglich', 'aktualisieren'],
     roles: ['seller', 'employee'],
     category: 'Artikel & Etiketten',
@@ -119,10 +119,19 @@ export const faqData: FaqItem[] = [
   },
 
   {
+    id: 'seller-artikel-tags',
+    question: 'Kann ich meine Artikel sortieren oder filtern, z.B. nach Sommer und Winter?',
+    answer:
+      'Ja. In **Meine Artikel** kannst du jedem Artikel **Tags** geben – beim Anlegen oder später über **✎**. **Sommer** und **Winter** sind immer da, eigene Tags (z.B. "Mädchen 4 J.") legst du im Feld darunter an. Mehrere Tags pro Artikel sind möglich, keiner ist Pflicht.\n\nOberhalb der Liste filterst du nach **Tags**, **"ohne Tag"**, **Für wen?** und danach, ob ein Artikel **schon im Basar** oder **verkauft** ist. Mehrere gewählte Tags zeigen nur Artikel, die **alle** davon haben. Dazu gibt es eine Suche nach Beschreibung und Größe.',
+    keywords: ['tag', 'tags', 'sommer', 'winter', 'filter', 'filtern', 'sortieren', 'ordnen', 'kategorie', 'suchen'],
+    roles: ['seller', 'employee'],
+    category: 'Artikel & Etiketten',
+  },
+  {
     id: 'seller-archiv-import',
     question: 'Kann ich Artikel aus einem früheren Basar übernehmen?',
     answer:
-      'Ja! Auf der Basar-Seite gibt es die gelbe Box **"Aus früherem Basar übernehmen"**. Klicke auf **"Anzeigen"** und wähle die gewünschten Artikel aus.\n\n**Wichtig:** Du **musst** sie aktiv importieren – sonst sind sie nur im Archiv und können an der Kasse nicht gescannt werden.\n\nGute Nachricht: **Deine QR-Codes bleiben gültig** – du brauchst keine neuen Etiketten zu drucken!',
+      'Ja! In **Meine Artikel** stehen alle deine Artikel, auch die aus früheren Basaren. Ist ein Basar zur Anmeldung offen, siehst du die gelbe Box **"In Basar übernehmen"**: Artikel anhaken (oder **"Alle angezeigten auswählen"**, z.B. nach dem Filter "Winter") und auf **"Übernehmen"** tippen.\n\n**Wichtig:** Du **musst** sie aktiv übernehmen – sonst können sie an der Kasse nicht gescannt werden.\n\nGute Nachricht: **Deine QR-Codes bleiben gültig** – du brauchst keine neuen Etiketten zu drucken!\n\nBereits verkaufte Artikel lassen sich nicht erneut übernehmen.',
     keywords: ['archiv', 'früher', 'übernehmen', 'importieren', 'altes', 'letztes', 'vorheriger', 'kopieren'],
     roles: ['seller', 'employee'],
     category: 'Artikel & Etiketten',
@@ -152,7 +161,7 @@ export const faqData: FaqItem[] = [
     id: 'seller-max-artikel',
     question: 'Wie viele Artikel darf ich anmelden?',
     answer:
-      'Das legt der Veranstalter pro Basar fest. Du siehst das Limit im Formular als **"Neuen Artikel hinzufügen (X/Y)"** – X = deine aktuellen Artikel, Y = Maximum.\n\nSobald du das Limit erreichst, ist der **"+ Hinzufügen"**-Button deaktiviert.',
+      'Das legt der Veranstalter pro Basar fest. Du siehst den Stand in **Meine Artikel** als **"X/Y Artikel im Basar"** – X = deine Artikel in diesem Basar, Y = Maximum. Dieselbe Zahl steht auf der Basar-Seite.\n\nSobald du das Limit erreichst, kannst du keine weiteren Artikel in diesen Basar übernehmen. In deinen Artikeln anlegen kannst du trotzdem.',
     keywords: ['maximal', 'anzahl', 'limit', 'maximum', 'viele', 'artikel', 'anmelden', 'registrieren', 'erlaubt', 'wie viele'],
     roles: ['seller', 'employee'],
     category: 'Artikel & Etiketten',

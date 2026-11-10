@@ -70,7 +70,7 @@ describe('PATCH /api/seller-articles (Bearbeiten)', () => {
 
   it('ändert den Eintrag und zieht nur verfügbare Artikel in nicht laufenden Basaren mit', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
-    prismaMock.sellerArticle.findUnique.mockResolvedValue({ id: 'sa-1', sellerId: 1234 });
+    prismaMock.sellerArticle.findUnique.mockResolvedValue({ id: 'sa-1', sellerId: 1234, price: dec(3) });
     prismaMock.sellerArticle.update.mockResolvedValue({ id: 'sa-1', price: dec(3), tags: ['Winter'] });
     prismaMock.article.updateMany.mockResolvedValue({ count: 1 });
     const res = await PATCH(makeJsonRequest('PATCH', { id: 'sa-1', title: 'Jacke', sizeLabel: '110', price: 3, tags: ['Winter'] }));
@@ -79,7 +79,8 @@ describe('PATCH /api/seller-articles (Bearbeiten)', () => {
 
     expect(prismaMock.sellerArticle.update.mock.calls[0][0]).toEqual({
       where: { id: 'sa-1' },
-      data: { title: 'Jacke', sizeLabel: '110', gender: null, price: 3, tags: ['Winter'] },
+      // Kein price: der Preis ist nach dem Anlegen gesperrt.
+      data: { title: 'Jacke', sizeLabel: '110', gender: null, tags: ['Winter'] },
     });
     expect(prismaMock.article.updateMany.mock.calls[0][0]).toEqual({
       where: {
@@ -87,8 +88,29 @@ describe('PATCH /api/seller-articles (Bearbeiten)', () => {
         status: 'AVAILABLE',
         basarSeller: { basar: { status: { in: ['DRAFT', 'OPEN'] } } },
       },
-      data: { title: 'Jacke', sizeLabel: '110', gender: null, price: 3 },
+      data: { title: 'Jacke', sizeLabel: '110', gender: null },
     });
+  });
+
+  it('lehnt eine Preisänderung ab und schreibt nichts (Preis gesperrt wie bei Basarlino)', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.sellerArticle.findUnique.mockResolvedValue({ id: 'sa-1', sellerId: 1234, price: dec(3) });
+    const res = await PATCH(makeJsonRequest('PATCH', { id: 'sa-1', title: 'Jacke', price: 1 }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/Preis/);
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    expect(prismaMock.sellerArticle.update).not.toHaveBeenCalled();
+    expect(prismaMock.article.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('ohne mitgeschickten Preis: bleibt beim alten, Bearbeiten klappt', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.sellerArticle.findUnique.mockResolvedValue({ id: 'sa-1', sellerId: 1234, price: dec(2.5) });
+    prismaMock.sellerArticle.update.mockResolvedValue({ id: 'sa-1', price: dec(2.5), tags: [] });
+    prismaMock.article.updateMany.mockResolvedValue({ count: 0 });
+    const res = await PATCH(makeJsonRequest('PATCH', { id: 'sa-1', title: 'Neu' }));
+    expect(res.status).toBe(200);
+    expect(prismaMock.sellerArticle.update.mock.calls[0][0].data).not.toHaveProperty('price');
   });
 });
 

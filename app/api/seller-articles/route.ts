@@ -83,11 +83,17 @@ export async function POST(request: Request) {
   }
 }
 
-// PATCH /api/seller-articles  body: { id, title, sizeLabel?, gender?, price, tags? }
-// Bearbeitet einen Eintrag im eigenen Bestand. Ist er bereits in einen Basar übernommen, der
-// noch nicht läuft (DRAFT/OPEN), wird der dortige Artikel mitgezogen – sonst stünde an der
-// Kasse ein anderer Preis als hier. Laufende und beendete Basare bleiben unberührt: dort
-// gilt, was auf dem gedruckten Etikett steht bzw. was abgerechnet wurde.
+// PATCH /api/seller-articles  body: { id, title, sizeLabel?, gender?, tags?, price? }
+// Bearbeitet Beschreibung, Größe, Geschlecht und Tags eines Eintrags im eigenen Bestand.
+//
+// Der PREIS ist nach dem Anlegen gesperrt (Entscheidung Nutzer, 10.11.2026, wie Basarlino):
+// die Kasse rechnet mit dem Preis aus dem System, nicht mit dem auf dem Etikett. Wäre er
+// änderbar, ließe sich ein Etikett mit 1 € drucken und der Preis danach anheben. Wer einen
+// anderen Preis will, löscht den Artikel und legt ihn neu an – mit neuem QR-Code und neuem
+// Etikett. Ein mitgeschickter, unveränderter Preis wird toleriert (das Formular schickt ihn mit).
+//
+// Ist der Eintrag in einem Basar, der noch nicht läuft (DRAFT/OPEN), werden Beschreibung,
+// Größe und Geschlecht dort mitgezogen; laufende und beendete Basare bleiben unberührt.
 export async function PATCH(request: Request) {
   try {
     const authResult = await requireAuth();
@@ -96,25 +102,33 @@ export async function PATCH(request: Request) {
     if (!sellerId) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
 
     const body = await request.json();
-    const parsed = parseArticleInput(body);
-    if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
-
     const sa = await prisma.sellerArticle.findUnique({ where: { id: String(body.id) } });
     if (!sa || sa.sellerId !== sellerId) {
       return NextResponse.json({ error: 'Nicht gefunden' }, { status: 404 });
     }
 
-    // Tags gehören nur zum Archiv-Eintrag, Article hat keine.
-    const { title, sizeLabel, gender, price } = parsed.data;
+    // In Cent verglichen: sa.price ist Prisma.Decimal, body.price eine JSON-Zahl.
+    const oldCents = Math.round(Number(sa.price) * 100);
+    if (body.price !== undefined && Math.round(parseFloat(String(body.price)) * 100) !== oldCents) {
+      return NextResponse.json({
+        error: 'Der Preis lässt sich nachträglich nicht ändern. Bitte den Artikel löschen und neu anlegen (neuer QR-Code, neues Etikett).',
+      }, { status: 400 });
+    }
+
+    const parsed = parseArticleInput({ ...body, price: oldCents / 100 });
+    if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
+
+    // Preis bleibt unangetastet; Tags gehören nur zum Archiv-Eintrag, Article hat keine.
+    const { title, sizeLabel, gender, tags } = parsed.data;
     const [sellerArticle, propagated] = await prisma.$transaction([
-      prisma.sellerArticle.update({ where: { id: sa.id }, data: parsed.data }),
+      prisma.sellerArticle.update({ where: { id: sa.id }, data: { title, sizeLabel, gender, tags } }),
       prisma.article.updateMany({
         where: {
           sellerArticleId: sa.id,
           status: 'AVAILABLE',
           basarSeller: { basar: { status: { in: ['DRAFT', 'OPEN'] } } },
         },
-        data: { title, sizeLabel, gender, price },
+        data: { title, sizeLabel, gender },
       }),
     ]);
 

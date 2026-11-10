@@ -356,7 +356,8 @@ export default function SellerPage() {
                       {/* Auch für Nicht-Teilnehmer sichtbar – was ohne aktive Teilnahme
                           erlaubt ist, entscheidet die Detailseite, nicht diese Karte. */}
                       <Link
-                        href={`/seller/basars/${basar.id}`}
+                        // Bei offener Anmeldung direkt zur einen Artikel-Oberfläche, mit diesem Basar als Ziel.
+                        href={basar.status === 'OPEN' ? `/seller/articles?basar=${basar.id}` : `/seller/basars/${basar.id}`}
                         className="px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold rounded-xl transition-colors shadow-sm text-center"
                       >
                         {CTA_LABELS[basar.status]} →

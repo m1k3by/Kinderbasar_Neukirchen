@@ -6,15 +6,18 @@ import { useRouter } from 'next/navigation';
 import Header from '../../components/Header';
 import TagPicker, { allTags } from '../../components/TagPicker';
 import { getNavLinks } from '../../lib/navLinks';
-import { parseSizes } from '../../lib/sizes';
+import { parseSizes, sizeGroups } from '../../lib/sizes';
 import { MAX_ARTICLE_PRICE, PRICE_TOO_HIGH_MESSAGE } from '../../lib/articlePrice';
+import { formatArticleLimit, maxArticlesFor } from '../../lib/articleLimits';
 
 /**
- * Eigener Artikelbestand – unabhängig von jedem Basar.
+ * Die eine Stelle, an der Verkäufer ihre Artikel pflegen – unabhängig von jedem Basar.
  *
  * Artikel werden hier jederzeit angelegt, bearbeitet, getaggt und gefiltert. Ist ein Basar
- * zur Anmeldung offen, lassen sie sich von hier in ihn übernehmen (dieselbe Route wie
- * „Aus früherem Basar übernehmen" auf der Basar-Seite, inkl. Artikellimit).
+ * zur Anmeldung offen, landet ein neuer Artikel standardmäßig direkt darin
+ * (POST /api/basars/[id]/articles, mit Artikellimit und Größenliste des Basars); bestehende
+ * werden per Auswahl übernommen (POST /api/basars/[id]/articles/import). Die Basar-Seite hat
+ * bewusst kein eigenes Formular mehr – zwei Oberflächen für dasselbe liefen auseinander.
  */
 
 interface Item {
@@ -29,12 +32,20 @@ interface Item {
   soldPreviously: boolean;
 }
 
-interface OpenBasar { id: string; title: string; status: string; isArchived: boolean; isTest: boolean }
+interface OpenBasar {
+  id: string;
+  title: string;
+  status: string;
+  isArchived: boolean;
+  isTest: boolean;
+  allowedSizes?: string | null;
+  maxArticlesPerSeller: number;
+  maxArticlesPerEmployee?: number | null;
+}
 
 type StatusFilter = 'all' | 'available' | 'inBasar' | 'sold';
 const EMPTY_FORM = { title: '', sizeLabel: '', gender: '', price: '', tags: [] as string[] };
 const fmt = (n: number) => n.toFixed(2).replace('.', ',');
-const SIZES = parseSizes();
 
 export default function SellerArticlesPage() {
   const router = useRouter();
@@ -42,6 +53,13 @@ export default function SellerArticlesPage() {
   const [sellerInfo, setSellerInfo] = useState<{ name: string; sellerId: number } | null>(null);
   const [isEmployee, setIsEmployee] = useState(false);
   const [isCashier, setIsCashier] = useState(false);
+  const [isOrga, setIsOrga] = useState(false);
+  // Stand im Ziel-Basar aus GET /api/basars/[id]/articles: zählt auch Artikel ohne
+  // Archiv-Eintrag (Altbestand) und kennt das persönliche Limit (maxArticlesOverride).
+  const [basarCount, setBasarCount] = useState(0);
+  const [basarOverride, setBasarOverride] = useState<number | null>(null);
+  const [directToBasar, setDirectToBasar] = useState(true);
+  const [showSizes, setShowSizes] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
   const [openBasars, setOpenBasars] = useState<OpenBasar[]>([]);
   const [targetBasarId, setTargetBasarId] = useState('');
@@ -71,13 +89,16 @@ export default function SellerArticlesPage() {
           setSellerInfo({ name: `${me.firstName} ${me.lastName}`, sellerId: me.sellerId });
           setIsEmployee(me.isEmployee || false);
           setIsCashier(me.isCashier || false);
+          setIsOrga(me.isOrga || false);
         }
       }
       if (basarsRes.ok) {
         const data = await basarsRes.json();
         const open = (data.basars ?? []).filter((b: OpenBasar) => b.status === 'OPEN' && !b.isArchived);
         setOpenBasars(open);
-        if (open.length > 0) setTargetBasarId(open[0].id);
+        // ?basar=<id> von der Basar-Karte in /seller wählt den Ziel-Basar vor.
+        const wanted = new URLSearchParams(window.location.search).get('basar');
+        if (open.length > 0) setTargetBasarId(open.some((b: OpenBasar) => b.id === wanted) ? wanted! : open[0].id);
       }
       setReady(true);
     })();
@@ -93,9 +114,17 @@ export default function SellerArticlesPage() {
   async function loadItems() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/seller-articles${targetBasarId ? `?basarId=${targetBasarId}` : ''}`);
+      const [res, basarRes] = await Promise.all([
+        fetch(`/api/seller-articles${targetBasarId ? `?basarId=${targetBasarId}` : ''}`),
+        targetBasarId ? fetch(`/api/basars/${targetBasarId}/articles`) : Promise.resolve(null),
+      ]);
       if (res.ok) setItems((await res.json()).sellerArticles ?? []);
       else showMsg('Artikel konnten nicht geladen werden', false);
+      if (basarRes?.ok) {
+        const data = await basarRes.json();
+        setBasarCount(data.articles?.length ?? 0);
+        setBasarOverride(data.basarSeller?.maxArticlesOverride ?? null);
+      }
     } finally {
       setLoading(false);
     }
@@ -107,6 +136,10 @@ export default function SellerArticlesPage() {
   }
 
   const tagOptions = useMemo(() => allTags(items), [items]);
+  const targetBasar = openBasars.find(b => b.id === targetBasarId);
+  const sizes = parseSizes(targetBasar?.allowedSizes);
+  const maxArticles = targetBasar ? maxArticlesFor(targetBasar, { isEmployee, isOrga }, basarOverride) : Infinity;
+  const basarFull = basarCount >= maxArticles;
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -148,6 +181,15 @@ export default function SellerArticlesPage() {
       return;
     }
     if (priceVal > MAX_ARTICLE_PRICE) { showMsg(PRICE_TOO_HIGH_MESSAGE, false); return; }
+    const intoBasar = !editingId && !!targetBasar && directToBasar;
+    const size = isClothing ? form.sizeLabel.trim() : '';
+    // Größen prüft nur der Basar (seine Liste); im eigenen Bestand ist jede Größe erlaubt,
+    // sonst scheiterte die spätere Übernahme in einen Basar mit anderer Liste nie – aber
+    // die Anlage hier grundlos (app/lib/sizes.ts).
+    if (intoBasar && size && !sizes.includes(size)) {
+      showMsg(`„${size}" ist in diesem Basar keine gültige Größe. Bitte eine Größe aus der Vorschlagsliste wählen.`, false);
+      return;
+    }
 
     const payload = {
       ...(editingId ? { id: editingId } : {}),
@@ -159,7 +201,7 @@ export default function SellerArticlesPage() {
     };
     setSaving(true);
     try {
-      const res = await fetch('/api/seller-articles', {
+      const res = await fetch(intoBasar ? `/api/basars/${targetBasar!.id}/articles` : '/api/seller-articles', {
         method: editingId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -174,7 +216,7 @@ export default function SellerArticlesPage() {
           true,
         );
       } else {
-        showMsg('✓ Artikel angelegt', true);
+        showMsg(intoBasar ? `✓ Artikel angelegt und in „${targetBasar!.title}" übernommen` : '✓ Artikel angelegt', true);
       }
       // Tags bleiben beim Neuanlegen stehen – wer zehn Wintersachen erfasst, will nicht zehnmal klicken.
       if (editingId) resetForm();
@@ -229,7 +271,6 @@ export default function SellerArticlesPage() {
     if (n.has(v)) n.delete(v); else n.add(v);
     return n;
   };
-  const targetBasar = openBasars.find(b => b.id === targetBasarId);
   const filtersActive = q || tagFilter.size > 0 || untaggedOnly || genderFilter || statusFilter !== 'all';
 
   return (
@@ -309,7 +350,42 @@ export default function SellerArticlesPage() {
             )}
             {isClothing && (
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Größe</label>
+                <div className="relative flex items-center gap-1.5 mb-1">
+                  <label className="block text-xs font-medium text-gray-600">Größe</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowSizes(o => !o)}
+                    className="w-4 h-4 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 text-xs flex items-center justify-center leading-none"
+                    title="Unterstützte Größen anzeigen"
+                  >
+                    i
+                  </button>
+                  {showSizes && (
+                    <div className="absolute left-0 top-6 z-50 bg-white border border-gray-200 rounded-xl shadow-xl p-4 w-72 max-w-[calc(100vw-2rem)]">
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="font-semibold text-sm text-gray-800">Unterstützte Größen</span>
+                        <button type="button" onClick={() => setShowSizes(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
+                      </div>
+                      {sizeGroups(sizes).map(group => group.sizes.length > 0 && (
+                        <div key={group.label} className="mb-2 last:mb-0">
+                          <p className="text-xs text-gray-700 font-semibold mb-1">{group.label}</p>
+                          <div className="flex flex-wrap gap-1">
+                            {group.sizes.map(sz => (
+                              <button
+                                key={sz} type="button"
+                                onClick={() => { setForm(f => ({ ...f, sizeLabel: sz })); setShowSizes(false); }}
+                                className="px-1.5 py-0.5 bg-gray-100 hover:bg-yellow-100 border border-gray-200 rounded text-xs font-mono font-bold text-gray-900"
+                              >
+                                {sz}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                      <p className="text-xs text-gray-500 mt-2 border-t pt-2">Auf eine Größe klicken, um sie einzufügen.</p>
+                    </div>
+                  )}
+                </div>
                 <input
                   list="article-size-options" maxLength={40}
                   value={form.sizeLabel}
@@ -317,30 +393,57 @@ export default function SellerArticlesPage() {
                   placeholder="z.B. 110, M, W32…"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
                 />
-                <datalist id="article-size-options">{SIZES.map(s => <option key={s} value={s} />)}</datalist>
+                <datalist id="article-size-options">{sizes.map(s => <option key={s} value={s} />)}</datalist>
               </div>
             )}
             <div className={isClothing ? undefined : 'md:col-span-2'}>
               <label className="block text-xs font-medium text-gray-600 mb-1">Preis (€) *</label>
+              {/* Preis nach dem Anlegen gesperrt – Begründung an PATCH /api/seller-articles. */}
               <input
                 required type="number" min="0.50" max={MAX_ARTICLE_PRICE} step="0.50"
                 value={form.price}
+                disabled={!!editingId}
                 onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
                 placeholder="0,50"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 disabled:bg-gray-100 disabled:text-gray-500"
               />
+              {editingId && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Der Preis lässt sich nicht ändern. Für einen anderen Preis den Artikel löschen und neu
+                  anlegen – er bekommt dann einen neuen QR-Code und braucht ein neues Etikett.
+                </p>
+              )}
             </div>
             <div className="md:col-span-3">
               <span className="block text-xs font-medium text-gray-600 mb-1">Tags (optional, mehrere möglich)</span>
               <TagPicker value={form.tags} onChange={tags => setForm(f => ({ ...f, tags }))} suggestions={tagOptions} />
             </div>
+            {!editingId && targetBasar && (
+              <label className="md:col-span-3 flex items-start gap-2 text-sm text-gray-700 cursor-pointer select-none">
+                <input
+                  type="checkbox" checked={directToBasar} onChange={e => setDirectToBasar(e.target.checked)}
+                  className="w-4 h-4 mt-0.5 accent-yellow-500 flex-shrink-0"
+                />
+                <span>
+                  Direkt in <strong>{targetBasar.title}</strong> übernehmen
+                  <span className={`ml-1 ${basarFull ? 'text-orange-600 font-semibold' : 'text-gray-400'}`}>
+                    ({basarCount}/{formatArticleLimit(maxArticles)})
+                  </span>
+                  {directToBasar && basarFull && (
+                    <span className="block text-xs text-orange-700">
+                      Maximale Artikelanzahl im Basar erreicht – der Artikel kann nur ohne Übernahme angelegt werden.
+                    </span>
+                  )}
+                </span>
+              </label>
+            )}
             <div className="md:col-span-3 flex gap-2 justify-end">
               {editingId && (
                 <button type="button" onClick={resetForm} className="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm font-medium">
                   Abbrechen
                 </button>
               )}
-              <button type="submit" disabled={saving} className="px-5 py-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold text-sm rounded-lg disabled:opacity-50">
+              <button type="submit" disabled={saving || (!editingId && !!targetBasar && directToBasar && basarFull)} className="px-5 py-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold text-sm rounded-lg disabled:opacity-50">
                 {saving ? '…' : editingId ? 'Speichern' : '+ Anlegen'}
               </button>
             </div>
@@ -410,6 +513,9 @@ export default function SellerArticlesPage() {
               ) : (
                 <span className="text-gray-700">{targetBasar?.title}</span>
               )}
+              <span className={basarFull ? 'text-orange-600 font-semibold' : 'text-gray-500'}>
+                {basarCount}/{formatArticleLimit(maxArticles)} Artikel im Basar
+              </span>
             </div>
             <p className="text-xs text-amber-800">
               Artikel anhaken und übernehmen. Der QR-Code bleibt gleich – schon gedruckte Etiketten gelten weiter.
