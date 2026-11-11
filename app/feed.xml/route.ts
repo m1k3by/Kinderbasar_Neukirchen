@@ -27,7 +27,7 @@ export async function GET(request: Request) {
       <description>${esc(p.body)}</description>
       <pubDate>${(p.publishedAt ?? new Date(0)).toUTCString()}</pubDate>
       <guid isPermaLink="false">${esc(p.id)}</guid>
-      <link>${esc(`${origin}/#post-${p.id}`)}</link>${enclosure}
+      <link>${esc(`${origin}/neuigkeiten/${p.id}`)}</link>${enclosure}
     </item>`;
       })
       .join('\n');

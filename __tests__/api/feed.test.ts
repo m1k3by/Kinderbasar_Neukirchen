@@ -37,7 +37,7 @@ describe('GET /feed.xml', () => {
     const xml = await res.text();
     expect(xml).toContain('<rss version="2.0"');
     expect(xml).toContain('<atom:link href="https://basar.example/feed.xml" rel="self"');
-    expect(xml).toContain('<link>https://basar.example/#post-a1</link>');
+    expect(xml).toContain('<link>https://basar.example/neuigkeiten/a1</link>');
     expect(xml).toContain('<guid isPermaLink="false">a1</guid>');
     expect(xml).toContain('<pubDate>Sun, 01 Nov 2026 10:00:00 GMT</pubDate>');
   });
