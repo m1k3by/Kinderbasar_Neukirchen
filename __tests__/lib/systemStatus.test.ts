@@ -48,6 +48,15 @@ describe('assessDb', () => {
     expect(r.latencyLevel).toBe('warn');
     expect(assessDb(base, 1000).latencyLevel).toBe('bad');
   });
+
+  it('Datenbankgröße gegen 500 MiB: 349 MiB ok, 350 warn, 450 bad', () => {
+    const MiB = 1024 * 1024;
+    expect(assessDb({ ...base, dbBytes: 349 * MiB }, 0).dbSizeLevel).toBe('ok');
+    const r = assessDb({ ...base, dbBytes: 350 * MiB }, 0);
+    expect(r.dbSizeUsage).toBeCloseTo(0.7);
+    expect(r.dbSizeLevel).toBe('warn');
+    expect(assessDb({ ...base, dbBytes: 450 * MiB }, 0).dbSizeLevel).toBe('bad');
+  });
 });
 
 describe('assessServer', () => {

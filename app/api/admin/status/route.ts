@@ -21,7 +21,7 @@ export async function GET() {
         (SELECT count(*)::int FROM pg_stat_activity WHERE wait_event_type = 'Lock') AS "waitingOnLock",
         (SELECT coalesce(extract(epoch FROM max(now() - query_start)), 0)::float8 FROM pg_stat_activity
            WHERE backend_type = 'client backend' AND state = 'active' AND pid <> pg_backend_pid()) AS "longestQuerySeconds",
-        pg_database_size(current_database())::float8 AS "dbBytes",
+        (SELECT sum(pg_database_size(datname))::float8 FROM pg_database) AS "dbBytes",
         d.blks_hit::float8 AS "blocksHit", d.blks_read::float8 AS "blocksRead",
         d.temp_bytes::float8 AS "tempBytes", d.deadlocks::float8 AS "deadlocks",
         d.xact_commit::float8 AS "commits", d.xact_rollback::float8 AS "rollbacks",

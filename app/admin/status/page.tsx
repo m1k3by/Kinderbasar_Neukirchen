@@ -34,6 +34,8 @@ interface StatusResponse {
     longestQueryLevel: Level;
     deadlockLevel: Level;
     latencyLevel: Level;
+    dbSizeUsage: number;
+    dbSizeLevel: Level;
   };
   limits: {
     basars: {
@@ -389,13 +391,21 @@ export default function StatusPage() {
                   detail={db.cacheHitRatio === null ? 'noch keine Lesezugriffe' : `${num(db.blocksHit)} Treffer / ${num(db.blocksRead)} Platte`}
                   ticks={[0.95, 0.99]}
                 />
+                <Gauge
+                  title="Datenbankgröße"
+                  hint="Supabase Free: 500 MB. Darüber droht Supabase mit Einschränkungen (Fair Use)."
+                  value={db.dbSizeUsage}
+                  level={db.dbSizeLevel}
+                  text={`${num(db.dbSizeUsage * 100)} %`}
+                  detail={`${num(db.dbBytes / MB, 1)} / 500 MB`}
+                  ticks={[0.7, 0.9]}
+                />
                 <Stat title="Davon aktiv" value={num(db.active)} />
                 <Stat title="Hängende Transaktionen" level={db.idleInTransactionLevel} value={num(db.idleInTransaction)} />
                 <Stat title="Wartet auf Sperre" level={db.waitingOnLockLevel} value={num(db.waitingOnLock)} />
                 <Stat title="Längste Abfrage" level={db.longestQueryLevel} value={`${num(db.longestQuerySeconds, 1)} s`} />
                 <Stat title="Antwortzeit DB" level={db.latencyLevel} value={`${num(db.latencyMs)} ms`} />
                 <Stat title="Deadlocks" level={db.deadlockLevel} value={num(db.deadlocks)} />
-                <Stat title="Datenbankgröße" value={`${num(db.dbBytes / MB, 1)} MB`} />
                 <Stat title="Auslagerung auf Platte" value={`${num(db.tempBytes / MB, 1)} MB`} />
                 <Stat title="Commits" value={compact(db.commits)} sub={num(db.commits)} />
                 <Stat title="Rollbacks" value={compact(db.rollbacks)} sub={num(db.rollbacks)} />

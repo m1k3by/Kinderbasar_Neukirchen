@@ -1,7 +1,7 @@
 /**
  * Bewertung der Kennzahlen für /admin/status. Reine Funktionen, keine Prisma-Imports.
  *
- * Alle Schwellwerte sind Faustregeln für Postgres, keine Grenzen eines Supabase-Plans.
+ * Die Schwellwerte sind Faustregeln für Postgres; einzige Plan-Grenze ist DB_SIZE_LIMIT_BYTES.
  */
 
 export type Level = 'ok' | 'warn' | 'bad';
@@ -47,8 +47,14 @@ export function assessDb(row: DbStatsRow, latencyMs: number) {
     longestQueryLevel: levelAbove(row.longestQuerySeconds, 5, 30),
     deadlockLevel: levelAbove(row.deadlocks, 1, Infinity),
     latencyLevel: levelAbove(latencyMs, 200, 1000),
+    dbSizeUsage: row.dbBytes / DB_SIZE_LIMIT_BYTES,
+    dbSizeLevel: levelAbove(row.dbBytes / DB_SIZE_LIMIT_BYTES, 0.7, 0.9),
   };
 }
+
+// Supabase Free: 500 MB Datenbankgröße, gemessen als Summe aller Datenbanken im Cluster
+// (supabase.com/docs/guides/platform/database-size). Einheit dort „MB“ wie pg_size_pretty, also MiB.
+export const DB_SIZE_LIMIT_BYTES = 500 * 1024 * 1024;
 
 export function assessServer({ rssBytes, limitMb }: { rssBytes: number; limitMb: number | null }) {
   const memoryUsage = limitMb ? rssBytes / (limitMb * 1024 * 1024) : null;
