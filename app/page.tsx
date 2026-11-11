@@ -122,42 +122,6 @@ export default async function Home() {
           </div>
         )}
 
-        {posts.length > 0 && (
-          <div className="mt-6 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6">
-            <div className="flex items-baseline justify-between">
-              <h2 className="text-xl font-semibold text-gray-800">Neuigkeiten</h2>
-              <a href="/feed.xml" className="text-xs text-blue-700 hover:underline">RSS-Feed</a>
-            </div>
-            <div className="mt-3 space-y-5">
-              {posts.map(post => (
-                <article key={post.id} id={`post-${post.id}`}>
-                  {post.publishedAt && (
-                    <p className="text-xs text-gray-500">
-                      {post.publishedAt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Berlin' })}
-                    </p>
-                  )}
-                  <h3 className="font-semibold text-gray-800">{post.title}</h3>
-                  <p className="mt-1 text-sm text-gray-700 whitespace-pre-line">{post.body}</p>
-                  {post.fileName && isImageType(fileTypeOrPdf(post.fileType)) && (
-                    // eslint-disable-next-line @next/next/no-img-element -- eigene API-Route, Größe unbekannt: next/image bringt hier nichts
-                    <img src={`/api/posts/${post.id}/datei`} alt={post.title} loading="lazy" className="mt-3 max-h-96 rounded-md" />
-                  )}
-                  {post.fileName && (
-                    <a
-                      href={`/api/posts/${post.id}/datei`}
-                      target="_blank"
-                      rel="noopener"
-                      className="mt-1 inline-block text-sm text-blue-700 hover:underline"
-                    >
-                      {post.fileName} ({fileTypeLabel(fileTypeOrPdf(post.fileType))})
-                    </a>
-                  )}
-                </article>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Registration */}
         <div className="mt-6 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6">
           <h2 className="text-xl font-semibold text-gray-800">Neu hier?</h2>
@@ -202,6 +166,42 @@ export default async function Home() {
             </div>
           </div>
         </div>
+
+        {posts.length > 0 && (
+          <div className="mt-6 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6">
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-xl font-semibold text-gray-800">Neuigkeiten</h2>
+              <a href="/feed.xml" className="text-xs text-blue-700 hover:underline">RSS-Feed</a>
+            </div>
+            <div className="mt-3 space-y-5">
+              {posts.map(post => (
+                <article key={post.id} id={`post-${post.id}`}>
+                  {post.publishedAt && (
+                    <p className="text-xs text-gray-500">
+                      {post.publishedAt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Berlin' })}
+                    </p>
+                  )}
+                  <h3 className="font-semibold text-gray-800">{post.title}</h3>
+                  <p className="mt-1 text-sm text-gray-700 whitespace-pre-line">{post.body}</p>
+                  {post.fileName && isImageType(fileTypeOrPdf(post.fileType)) && (
+                    // eslint-disable-next-line @next/next/no-img-element -- eigene API-Route, Größe unbekannt: next/image bringt hier nichts
+                    <img src={`/api/posts/${post.id}/datei`} alt={post.title} loading="lazy" className="mt-3 max-h-96 rounded-md" />
+                  )}
+                  {post.fileName && (
+                    <a
+                      href={`/api/posts/${post.id}/datei`}
+                      target="_blank"
+                      rel="noopener"
+                      className="mt-1 inline-block text-sm text-blue-700 hover:underline"
+                    >
+                      {post.fileName} ({fileTypeLabel(fileTypeOrPdf(post.fileType))})
+                    </a>
+                  )}
+                </article>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
       </div>
     </div>
