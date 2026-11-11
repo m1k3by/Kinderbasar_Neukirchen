@@ -1,13 +1,38 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../../lib/prisma';
 import { requireAdmin } from '../../../lib/apiAuth';
-import { assessDb, assessLimits, assessServer, supabaseProjectRef, type DbStatsRow } from '../../../lib/systemStatus';
+import { assessDb, assessDisk, assessLimits, assessServer, supabaseProjectRef, type DbStatsRow } from '../../../lib/systemStatus';
+
+/**
+ * Plattenfüllstand per Supabase Management API. Braucht SUPABASE_ACCESS_TOKEN (Personal Access
+ * Token mit Recht infra_disk_config_read). Scheitert der Abruf, zeigt die Seite den Rest trotzdem.
+ */
+async function fetchDisk(ref: string | null) {
+  const token = process.env.SUPABASE_ACCESS_TOKEN;
+  if (!token || !ref) return { state: 'no-token' as const };
+  try {
+    const res = await fetch(`https://api.supabase.com/v1/projects/${ref}/config/disk/util`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(5000),
+      cache: 'no-store',
+    });
+    if (!res.ok) throw new Error(`Supabase API ${res.status}`);
+    const body = await res.json();
+    return { state: 'ok' as const, measuredAt: body.timestamp ?? null, ...assessDisk(body.metrics) };
+  } catch (error) {
+    console.error('GET /api/admin/status disk error:', error);
+    return { state: 'error' as const };
+  }
+}
 
 /** GET /api/admin/status – eine Momentaufnahme (eine Abfrage), gelesen von app/admin/status. */
 export async function GET() {
   try {
     const authResult = await requireAdmin();
     if (authResult.response) return authResult.response;
+
+    const ref = supabaseProjectRef(process.env.POSTGRES_PRISMA_URL);
+    const diskPromise = fetchDisk(ref); // läuft parallel zu den Datenbankabfragen
 
     const t0 = performance.now();
     // Alle Casts sind nötig: ohne sie liefert Prisma BigInt, das JSON.stringify nicht kann.
@@ -67,9 +92,10 @@ export async function GET() {
 
     const rssBytes = process.memoryUsage().rss;
     const limitMb = Number(process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE) || null;
-    const ref = supabaseProjectRef(process.env.POSTGRES_PRISMA_URL);
+    const disk = await diskPromise;
 
     return NextResponse.json({
+      disk,
       checkedAt: new Date().toISOString(),
       db: {
         ...row,

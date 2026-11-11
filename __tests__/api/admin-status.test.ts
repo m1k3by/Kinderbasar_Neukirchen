@@ -125,3 +125,49 @@ describe('GET /api/admin/status', () => {
     expect((await GET()).status).toBe(500);
   });
 });
+
+describe('GET /api/admin/status – Plattenfüllstand', () => {
+  const fetchMock = vi.fn();
+  beforeEach(() => {
+    vi.stubGlobal('fetch', fetchMock);
+    fetchMock.mockReset();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it('ohne Token: no-token, kein Abruf', async () => {
+    vi.stubEnv('SUPABASE_ACCESS_TOKEN', '');
+    const body = await (await GET()).json();
+    expect(body.disk).toEqual({ state: 'no-token' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('mit Token: fragt die Projekt-Ref ab und bewertet gegen 95 %-Schwelle', async () => {
+    vi.stubEnv('SUPABASE_ACCESS_TOKEN', 'sbp_test');
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({
+      timestamp: '2026-11-11T10:00:00Z',
+      metrics: { fs_size_bytes: 2_000_000_000, fs_used_bytes: 1_800_000_000, fs_avail_bytes: 200_000_000 },
+    })));
+    const body = await (await GET()).json();
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.supabase.com/v1/projects/abcdef/config/disk/util',
+      expect.objectContaining({ headers: { Authorization: 'Bearer sbp_test' } }),
+    );
+    expect(body.disk).toMatchObject({ state: 'ok', usedBytes: 1_800_000_000, sizeBytes: 2_000_000_000, level: 'bad' });
+    expect(body.disk.usage).toBeCloseTo(0.9);
+    expect(JSON.stringify(body)).not.toContain('sbp_test');
+  });
+
+  it('API-Fehler: error, Rest der Seite trotzdem 200', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.stubEnv('SUPABASE_ACCESS_TOKEN', 'sbp_test');
+    fetchMock.mockResolvedValue(new Response('nope', { status: 403 }));
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.disk).toEqual({ state: 'error' });
+    expect(body.db.connectionUsage).toBeCloseTo(0.5);
+  });
+});

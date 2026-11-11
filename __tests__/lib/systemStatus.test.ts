@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  levelAbove, assessDb, assessServer, assessLimits, supabaseProjectRef,
+  levelAbove, assessDb, assessDisk, assessServer, assessLimits, supabaseProjectRef,
   SCAN_CACHE_BYTES_PER_ARTICLE, VERCEL_RESPONSE_LIMIT_BYTES, type DbStatsRow,
 } from '@/app/lib/systemStatus';
 
@@ -56,6 +56,15 @@ describe('assessDb', () => {
     expect(r.dbSizeUsage).toBeCloseTo(0.7);
     expect(r.dbSizeLevel).toBe('warn');
     expect(assessDb({ ...base, dbBytes: 450 * MiB }, 0).dbSizeLevel).toBe('bad');
+  });
+});
+
+describe('assessDisk', () => {
+  it('79 % ok, 80 % warn, 90 % bad, Größe 0 ohne NaN', () => {
+    expect(assessDisk({ fs_size_bytes: 100, fs_used_bytes: 79 }).level).toBe('ok');
+    expect(assessDisk({ fs_size_bytes: 100, fs_used_bytes: 80 }).level).toBe('warn');
+    expect(assessDisk({ fs_size_bytes: 100, fs_used_bytes: 90 })).toEqual({ usedBytes: 90, sizeBytes: 100, usage: 0.9, level: 'bad' });
+    expect(assessDisk({ fs_size_bytes: 0, fs_used_bytes: 5 }).usage).toBe(0);
   });
 });
 

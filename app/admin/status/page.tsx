@@ -75,6 +75,9 @@ interface StatusResponse {
     memoryLevel: Level;
   };
   links: { supabase: string | null; vercel: string };
+  disk:
+    | { state: 'ok'; usedBytes: number; sizeBytes: number; usage: number; level: Level; measuredAt: string | null }
+    | { state: 'no-token' | 'error' };
 }
 
 const MB = 1024 * 1024;
@@ -399,6 +402,21 @@ export default function StatusPage() {
                   text={`${num(db.dbSizeUsage * 100)} %`}
                   detail={`${num(db.dbBytes / MB, 1)} / 500 MB`}
                   ticks={[0.7, 0.9]}
+                />
+                <Gauge
+                  title="Plattenfüllstand"
+                  hint="Daten, WAL und Systemdateien auf der festen 2-GB-Platte. Ab 95 % schaltet Supabase die Datenbank schreibgeschützt."
+                  value={data.disk.state === 'ok' ? data.disk.usage : null}
+                  level={data.disk.state === 'ok' ? data.disk.level : 'ok'}
+                  text={data.disk.state === 'ok' ? `${num(data.disk.usage * 100)} %` : '–'}
+                  detail={
+                    data.disk.state === 'ok'
+                      ? `${num(data.disk.usedBytes / MB)} / ${num(data.disk.sizeBytes / MB)} MB`
+                      : data.disk.state === 'no-token'
+                        ? 'SUPABASE_ACCESS_TOKEN fehlt'
+                        : 'Supabase-API nicht erreichbar'
+                  }
+                  ticks={[0.8, 0.9]}
                 />
                 <Stat title="Davon aktiv" value={num(db.active)} />
                 <Stat title="Hängende Transaktionen" level={db.idleInTransactionLevel} value={num(db.idleInTransaction)} />

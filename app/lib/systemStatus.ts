@@ -125,6 +125,21 @@ export function assessLimits({ basars, mail, sellerNumbersUsed, now }: LimitsInp
   };
 }
 
+/**
+ * Plattenfüllstand aus der Supabase Management API (GET /v1/projects/{ref}/config/disk/util).
+ * Bei 95 % schaltet Supabase die Datenbank schreibgeschützt (docs/guides/platform/database-size),
+ * daher rot schon ab 90 %.
+ */
+export function assessDisk(metrics: { fs_size_bytes: number; fs_used_bytes: number }) {
+  const usage = metrics.fs_size_bytes > 0 ? metrics.fs_used_bytes / metrics.fs_size_bytes : 0;
+  return {
+    usedBytes: metrics.fs_used_bytes,
+    sizeBytes: metrics.fs_size_bytes,
+    usage,
+    level: levelAbove(usage, 0.8, 0.9),
+  };
+}
+
 /** Der Pooler-Benutzername hat die Form `postgres.<ref>`. */
 export function supabaseProjectRef(url: string | undefined): string | null {
   if (!url) return null;
