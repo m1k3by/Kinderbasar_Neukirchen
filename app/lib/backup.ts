@@ -31,7 +31,20 @@ export const BACKUP_TABLES = [
   { name: 'MailQueue', model: 'mailQueue', orderBy: 'id' },
   { name: 'ChatLog', model: 'chatLog', orderBy: 'id' },
   { name: 'ErrorLog', model: 'errorLog', orderBy: 'id' },
+  { name: 'Post', model: 'post', orderBy: 'id' },
 ] as const;
+
+/**
+ * `Bytes`-Spalten (Post.fileData) als `{"$base64": "…"}`. Ohne das schreibt JSON.stringify
+ * ein Uint8Array als `{"0":37,"1":80,…}` bzw. einen Buffer als `{"type":"Buffer","data":[…]}`
+ * – rund das Vierfache an Text, und keines von beiden nimmt Prisma beim Zurückspielen an.
+ * Gegenstück: der Reviver in scripts/restore-backup.mjs.
+ * `this[key]` statt `value`, weil Buffer.toJSON() vor dem Replacer läuft.
+ */
+export function bytesReplacer(this: Record<string, unknown>, key: string, value: unknown) {
+  const raw = this[key];
+  return raw instanceof Uint8Array ? { $base64: Buffer.from(raw).toString('base64') } : value;
+}
 
 type BackupTable = (typeof BACKUP_TABLES)[number];
 const keysOf = (t: BackupTable): readonly string[] => (Array.isArray(t.orderBy) ? t.orderBy : [t.orderBy as string]);
@@ -83,7 +96,7 @@ export async function* backupChunks(db: typeof prisma = prisma): AsyncGenerator<
       });
 
       if (rows.length === 0) break;
-      for (const row of rows) yield `${written++ ? ',' : ''}${JSON.stringify(row)}`;
+      for (const row of rows) yield `${written++ ? ',' : ''}${JSON.stringify(row, bytesReplacer)}`;
       if (rows.length < BATCH) break;
 
       cursor = cursorFor(table, rows[rows.length - 1]);

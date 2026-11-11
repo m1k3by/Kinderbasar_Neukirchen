@@ -46,7 +46,12 @@ if (!isLocal && process.env.RESTORE_ALLOW_REMOTE !== '1') {
 // Komplett einlesen und parsen, bevor irgendetwas geleert wird. Eine abgebrochene
 // Sicherung endet ohne das schließende `}}` – dann scheitert JSON.parse hier, und die
 // Zieldatenbank ist noch unberührt. Erst prüfen, dann löschen.
-const backup = JSON.parse(readFileSync(file, 'utf8'));
+// `{"$base64": …}` ist eine Bytes-Spalte (Post.fileData), siehe bytesReplacer in app/lib/backup.ts.
+const backup = JSON.parse(readFileSync(file, 'utf8'), (_key, value) =>
+  value && typeof value === 'object' && typeof value.$base64 === 'string'
+    ? Buffer.from(value.$base64, 'base64')
+    : value,
+);
 if (backup.format !== 1 || !backup.tables) {
   console.error('Abbruch: Datei sieht nicht wie eine Sicherung dieses Systems aus.');
   process.exit(1);

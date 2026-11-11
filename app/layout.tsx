@@ -17,6 +17,9 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: 'Kinderbasar Neukirchen',
   description: 'Kasse, Artikel und Abrechnung für den Kinderbasar',
+  alternates: {
+    types: { 'application/rss+xml': [{ url: '/feed.xml', title: 'Kinderbasar Neukirchen – Neuigkeiten' }] },
+  },
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,

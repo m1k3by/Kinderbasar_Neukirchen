@@ -37,7 +37,7 @@ export interface NavLink {
   action?: 'logout';
 }
 
-export type AdminNavKey = 'basarliste' | 'basare' | 'archiv' | 'helferliste' | 'aufgaben' | 'etikettencheck' | 'hilfe' | 'status' | 'logs';
+export type AdminNavKey = 'basarliste' | 'basare' | 'archiv' | 'helferliste' | 'aufgaben' | 'etikettencheck' | 'hilfe' | 'status' | 'logs' | 'neuigkeiten';
 export type SellerNavKey = 'verkaeufer' | 'mitarbeiter' | 'kasse';
 export type NavKey = AdminNavKey | SellerNavKey;
 
@@ -58,6 +58,7 @@ const ADMIN_LINKS: NavLinkDef[] = [
   { key: 'etikettencheck', href: '/admin/etiketten-check', label: 'Etiketten-Check' },
   { key: 'hilfe', href: '/admin/hilfe', label: 'Hilfe-Statistik' },
   { key: 'status', href: '/admin/status', label: 'Status' },
+  { key: 'neuigkeiten', href: '/admin/neuigkeiten', label: 'Neuigkeiten' },
   { key: 'logs', href: '/admin/logs', label: 'Logs', badge: 'errors' },
 ];
 

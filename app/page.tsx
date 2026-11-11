@@ -28,6 +28,14 @@ export default async function Home() {
     },
   });
 
+  // select ohne fileData: bis zu 4 MB je Zeile; ob eine Datei existiert, zeigt fileName.
+  const posts = await prisma.post.findMany({
+    where: { isPublished: true },
+    orderBy: { publishedAt: 'desc' },
+    take: 5,
+    select: { id: true, title: true, body: true, fileName: true, publishedAt: true },
+  });
+
   const cards = basars.map(basar => ({
     basar,
     days: [
@@ -110,6 +118,38 @@ export default async function Home() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {posts.length > 0 && (
+          <div className="mt-6 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6">
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-xl font-semibold text-gray-800">Neuigkeiten</h2>
+              <a href="/feed.xml" className="text-xs text-blue-700 hover:underline">RSS-Feed</a>
+            </div>
+            <div className="mt-3 space-y-5">
+              {posts.map(post => (
+                <article key={post.id} id={`post-${post.id}`}>
+                  {post.publishedAt && (
+                    <p className="text-xs text-gray-500">
+                      {post.publishedAt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Berlin' })}
+                    </p>
+                  )}
+                  <h3 className="font-semibold text-gray-800">{post.title}</h3>
+                  <p className="mt-1 text-sm text-gray-700 whitespace-pre-line">{post.body}</p>
+                  {post.fileName && (
+                    <a
+                      href={`/api/posts/${post.id}/datei`}
+                      target="_blank"
+                      rel="noopener"
+                      className="mt-1 inline-block text-sm text-blue-700 hover:underline"
+                    >
+                      {post.fileName} (PDF)
+                    </a>
+                  )}
+                </article>
+              ))}
+            </div>
           </div>
         )}
 

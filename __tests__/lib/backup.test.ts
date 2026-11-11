@@ -91,6 +91,26 @@ describe('backupChunks', () => {
     expect(json.tables.Sale[0].isCancelled).toBe(false);
   });
 
+  it('schreibt Bytes (Post.fileData) als Base64, das der Restore-Reviver wieder zu Bytes macht', async () => {
+    const pdf = Buffer.from('%PDF-1.4 Spenden');
+    const text = await collect(fakeDb({
+      Post: [
+        { id: 'p1', fileData: new Uint8Array(pdf) }, // so liefert Prisma 6 Bytes
+        { id: 'p2', fileData: pdf },                 // Buffer: toJSON() läuft vor dem Replacer
+        { id: 'p3', fileData: null },
+      ],
+    }));
+    const json = JSON.parse(text);
+    expect(json.tables.Post[0].fileData).toEqual({ $base64: pdf.toString('base64') });
+    expect(json.tables.Post[1].fileData).toEqual({ $base64: pdf.toString('base64') });
+    expect(json.tables.Post[2].fileData).toBeNull();
+
+    // Derselbe Reviver wie in scripts/restore-backup.mjs.
+    const restored = JSON.parse(text, (_k, v) =>
+      v && typeof v === 'object' && typeof v.$base64 === 'string' ? Buffer.from(v.$base64, 'base64') : v);
+    expect(Buffer.compare(restored.tables.Post[0].fileData, pdf)).toBe(0);
+  });
+
   it('holt Tabellen über den Cursor seitenweise und schreibt jede Zeile genau einmal', async () => {
     // Mehr als eine Seite (BATCH = 500), damit die Schleife tatsächlich blättert.
     const articles = Array.from({ length: 1201 }, (_, i) => ({ id: `a${i}`, title: `Artikel ${i}` }));
