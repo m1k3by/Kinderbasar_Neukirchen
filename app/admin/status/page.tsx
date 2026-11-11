@@ -46,12 +46,9 @@ interface StatusResponse {
       maxSellers: number;
       activeSellers: number;
       scanArticles: number;
-      sales: number;
       scanCacheBytes: number;
       scanCacheUsage: number;
       scanCacheLevel: Level;
-      salesUsage: number;
-      salesLevel: Level;
       sellerUsage: number;
       sellerLevel: Level;
     }[];
@@ -340,15 +337,6 @@ export default function StatusPage() {
                         text={`${num(b.scanCacheUsage * 100)} %`}
                         detail={`~${num(b.scanCacheBytes / MB, 1)} / 4,5 MB · ${num(b.scanArticles)} Artikel`}
                         ticks={[0.7, 0.9]}
-                      />
-                      <Gauge
-                        title="Verkäufe in Admin-Liste"
-                        hint="Ab 5.000 Verkäufen zeigen ‚Alle Verkäufe‘ und die Kassenvorgänge nicht mehr alles."
-                        value={b.salesUsage}
-                        level={b.salesLevel}
-                        text={`${num(b.salesUsage * 100)} %`}
-                        detail={`${num(b.sales)} / 5.000`}
-                        ticks={[0.8, 1]}
                       />
                       <Stat
                         title="Plätze"

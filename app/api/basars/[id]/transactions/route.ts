@@ -3,16 +3,13 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../../../lib/prisma';
 import { requireCashier } from '../../../../lib/apiAuth';
 import { requireBasarAccess } from '../../../../lib/basarAccess';
-import { RAW_FETCH_CAP } from '../../../../lib/systemStatus';
 
-// Sicherheitsdeckel für die Rohabfrage – siehe Kommentar bei RAW_FETCH_CAP unten.
-// ponytail: In-Memory-Gruppierung statt SQL-groupBy über clientTxId, weil Zeilen mit
-// clientTxId=null als je eigener Vorgang zählen (kein GROUP BY-Schlüssel dafür) und der
-// Cursor über vollständige Vorgänge laufen muss, nicht über einzelne Sale-Zeilen. Bei
-// realistischer Basar-Größe (ein paar tausend Sales) ist das unproblematisch; sollte ein
-// Basar RAW_FETCH_CAP an gefilterten Sales überschreiten, fehlen ältere Vorgänge auf
-// späteren Seiten – dann bräuchte es echte Cursor-Pagination auf DB-Ebene.
-// Konstante liegt in app/lib/systemStatus.ts, weil /admin/status sie überwacht.
+// Gruppieren, Sortieren und Seitenschnitt laufen in Postgres: früher wurden die 5.000 neuesten
+// Sale-Zeilen geladen und im Speicher gruppiert – ab 5.000 Verkäufen fehlten die ältesten
+// Vorgänge stillschweigend (11.11.2026: ein Basar mit ~6.150). Jetzt lädt eine Seite nur
+// ihre eigenen Positionen, egal wie groß der Basar ist.
+// Ein Vorgang ist alles mit derselben clientTxId; Zeilen ohne clientTxId (Altbestand/
+// Einzelverkauf) sind je ein eigener Vorgang mit Schlüssel `__single__<saleId>`.
 
 // Höchstens sechs Wörter je Feld – schützt davor, dass ein eingefügter Absatz zu einer
 // Abfrage mit hunderten UND-verknüpften LIKE-Bedingungen wird.
@@ -24,27 +21,24 @@ function asNumber(token: string): number | undefined {
   return /^\d+$/.test(token) ? parseInt(token, 10) : undefined;
 }
 
+// Teilwort-Suche ohne Groß-/Kleinschreibung; % und _ im Suchwort gelten wörtlich.
+function like(token: string): string {
+  return `%${token.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+}
+
 // Felder, die zum Artikel gehören – einschließlich des Verkäufers, dem er gehört.
-function articleClauses(token: string): Prisma.SaleWhereInput[] {
+function articleClause(token: string): Prisma.Sql {
+  const p = like(token);
   const n = asNumber(token);
-  return [
-    { article: { title: { contains: token, mode: 'insensitive' } } },
-    { article: { qrCode: { contains: token, mode: 'insensitive' } } },
-    { article: { sizeLabel: { contains: token, mode: 'insensitive' } } },
-    { article: { basarSeller: { seller: { firstName: { contains: token, mode: 'insensitive' } } } } },
-    { article: { basarSeller: { seller: { lastName: { contains: token, mode: 'insensitive' } } } } },
-    ...(n !== undefined ? [{ article: { basarSeller: { sellerId: { equals: n } } } }] : []),
-  ];
+  return Prisma.sql`(a."title" ILIKE ${p} OR a."qrCode" ILIKE ${p} OR a."sizeLabel" ILIKE ${p}
+    OR vs."firstName" ILIKE ${p} OR vs."lastName" ILIKE ${p}${n !== undefined ? Prisma.sql` OR bs."sellerId" = ${n}` : Prisma.empty})`;
 }
 
 // Felder des Kassierers, der den Vorgang gescannt hat.
-function cashierClauses(token: string): Prisma.SaleWhereInput[] {
+function cashierClause(token: string): Prisma.Sql {
+  const p = like(token);
   const n = asNumber(token);
-  return [
-    { cashier: { firstName: { contains: token, mode: 'insensitive' } } },
-    { cashier: { lastName: { contains: token, mode: 'insensitive' } } },
-    ...(n !== undefined ? [{ cashierId: { equals: n } }] : []),
-  ];
+  return Prisma.sql`(c."firstName" ILIKE ${p} OR c."lastName" ILIKE ${p}${n !== undefined ? Prisma.sql` OR s."cashierId" = ${n}` : Prisma.empty})`;
 }
 
 // GET /api/basars/:id/transactions – Kassenvorgänge (gruppiert nach clientTxId) für die
@@ -78,38 +72,75 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const limitParam = parseInt(url.searchParams.get('limit') || '50', 10);
     const limit = Math.min(Math.max(Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 50, 1), 200);
 
-    const where: Prisma.SaleWhereInput = { basarId };
+    const conditions: Prisma.Sql[] = [Prisma.sql`s."basarId" = ${basarId}`];
 
-    if (txId) where.clientTxId = txId;
+    if (txId) conditions.push(Prisma.sql`s."clientTxId" = ${txId}`);
 
     if (!isAdmin) {
-      where.cashierId = auth.sellerId;
+      conditions.push(Prisma.sql`s."cashierId" = ${auth.sellerId}`);
     } else if (cashierIdParam !== null) {
       if (cashierIdParam === 'null') {
-        where.cashierId = null;
+        conditions.push(Prisma.sql`s."cashierId" IS NULL`);
       } else {
         const parsedCashierId = parseInt(cashierIdParam, 10);
         if (Number.isNaN(parsedCashierId)) {
           return NextResponse.json({ error: 'Ungültige cashierId' }, { status: 400 });
         }
-        where.cashierId = parsedCashierId;
+        conditions.push(Prisma.sql`s."cashierId" = ${parsedCashierId}`);
       }
     }
 
     // Wortweise UND-Verknüpfung innerhalb eines Feldes: „jeans blau“ findet „Jeans blau“
     // wie auch „Blaue Jeanshose“. Die Bedingungen beider Felder landen in derselben
     // UND-Liste, damit Artikel- und Kassiererfilter gleichzeitig gelten.
-    // ponytail: kein Postgres-tsvector/GIN – `contains` je Token reicht bei ein paar tausend
-    // Sales pro Basar und braucht weder Preview-Feature noch Migration. Wird die Suche
-    // spürbar langsam, ist der Umstieg auf Full-Text-Index der nächste Schritt.
-    const filters: Prisma.SaleWhereInput[] = [
-      ...tokenize(qArticle).map((token) => ({ OR: articleClauses(token) })),
-      ...tokenize(qCashier).map((token) => ({ OR: cashierClauses(token) })),
-    ];
-    if (filters.length > 0) where.AND = filters;
+    // ponytail: kein Postgres-tsvector/GIN – ILIKE je Token reicht bei ein paar tausend
+    // Sales pro Basar und braucht keine Migration. Wird die Suche spürbar langsam, ist der
+    // Umstieg auf Full-Text-Index der nächste Schritt.
+    conditions.push(...tokenize(qArticle).map(articleClause), ...tokenize(qCashier).map(cashierClause));
+
+    // f = alle gefilterten Positionen mit Vorgangsschlüssel, g = ein Eintrag je Vorgang.
+    const filtered = Prisma.sql`
+      f AS (
+        SELECT s."id", COALESCE(s."clientTxId", '__single__' || s."id") AS "key",
+               s."soldAt", s."salePrice", s."isCancelled"
+        FROM "Sale" s
+        JOIN "Article" a ON a."id" = s."articleId"
+        JOIN "BasarSeller" bs ON bs."id" = a."basarSellerId"
+        JOIN "Seller" vs ON vs."sellerId" = bs."sellerId"
+        LEFT JOIN "Seller" c ON c."sellerId" = s."cashierId"
+        WHERE ${Prisma.join(conditions, ' AND ')}
+      ),
+      g AS (SELECT "key", min("soldAt") AS "t" FROM f GROUP BY "key")`;
+
+    // Cursor = Schlüssel des letzten Vorgangs der vorigen Seite. Unbekannter Cursor (z. B.
+    // Filter seither geändert) fängt vorne an, wie bisher.
+    const [pageRows, summaryRows] = await Promise.all([
+      prisma.$queryRaw<{ key: string; ids: string[] }[]>`
+        WITH ${filtered},
+        cur AS (SELECT "t", "key" FROM g WHERE "key" = ${cursor}),
+        p AS (
+          SELECT "key", "t" FROM g
+          WHERE NOT EXISTS (SELECT 1 FROM cur) OR ("t", "key") < (SELECT "t", "key" FROM cur)
+          ORDER BY "t" DESC, "key" DESC
+          LIMIT ${limit + 1}
+        )
+        SELECT p."key", array_agg(f."id") AS "ids"
+        FROM p JOIN f ON f."key" = p."key"
+        GROUP BY p."key", p."t"
+        ORDER BY p."t" DESC, p."key" DESC`,
+      prisma.$queryRaw<{ bons: number; articles: number; total: number }[]>`
+        WITH ${filtered}
+        SELECT (SELECT count(*) FROM g)::int AS "bons",
+               (count(*) FILTER (WHERE NOT "isCancelled"))::int AS "articles",
+               COALESCE(sum("salePrice") FILTER (WHERE NOT "isCancelled"), 0)::float8 AS "total"
+        FROM f`,
+    ]);
+
+    const pageGroups = pageRows.slice(0, limit);
+    const nextCursor = pageRows.length > limit ? pageGroups[pageGroups.length - 1].key : null;
 
     const sales = await prisma.sale.findMany({
-      where,
+      where: { id: { in: pageGroups.flatMap((g) => g.ids) } },
       select: {
         id: true,
         clientTxId: true,
@@ -128,7 +159,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         },
       },
       orderBy: { soldAt: 'desc' },
-      take: RAW_FETCH_CAP,
     });
 
     type TxGroup = {
@@ -179,19 +209,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       });
     }
 
-    const sortedGroups = [...groups.values()].sort((a, b) => b.soldAtMin - a.soldAtMin);
-
-    const startIndex = cursor ? Math.max(0, sortedGroups.findIndex((g) => g.key === cursor) + 1) : 0;
-    const page = sortedGroups.slice(startIndex, startIndex + limit);
-    const nextCursor = startIndex + limit < sortedGroups.length ? page[page.length - 1]?.key ?? null : null;
+    // Reihenfolge der Seite kommt aus der Datenbank (ORDER BY t, key).
+    const page = pageGroups.map((p) => groups.get(p.key)).filter((g): g is TxGroup => g !== undefined);
 
     const round2 = (x: number) => Math.round(x * 100) / 100;
-    const activeItems = sortedGroups.flatMap((g) => g.items.filter((i) => !i.isCancelled));
-    const summary = {
-      bons: sortedGroups.length,
-      articles: activeItems.length,
-      total: round2(activeItems.reduce((sum, i) => sum + i.salePrice, 0)),
-    };
+    const totals = summaryRows[0];
+    const summary = { bons: totals?.bons ?? 0, articles: totals?.articles ?? 0, total: round2(totals?.total ?? 0) };
 
     const transactions = page.map((g) => ({
       txId: g.txId,

@@ -82,21 +82,13 @@ describe('assessServer', () => {
 
 describe('assessLimits', () => {
   const now = new Date('2026-11-10T12:00:00Z');
-  const basar = { id: 'b1', title: 'Herbst', status: 'ACTIVE', isTest: false, maxSellers: 100, activeSellers: 0, scanArticles: 0, sales: 0 };
+  const basar = { id: 'b1', title: 'Herbst', status: 'ACTIVE', isTest: false, maxSellers: 100, activeSellers: 0, scanArticles: 0 };
   const noMail = { pending: 0, failed: 0, oldestPendingAt: null };
   const one = (over: Partial<typeof basar>) =>
     assessLimits({ basars: [{ ...basar, ...over }], mail: noMail, sellerNumbersUsed: 0, now }).basars[0];
   const minutesAgo = (m: number) => new Date(now.getTime() - m * 60000);
   const mailWith = (pending: number, at: Date | string | null, failed = 0) =>
     assessLimits({ basars: [], mail: { pending, failed, oldestPendingAt: at }, sellerNumbersUsed: 0, now }).mail;
-
-  it('Verkäufe: 3999 ok, 4000 warn, 4999 warn, 5000 bad', () => {
-    expect(one({ sales: 3999 }).salesLevel).toBe('ok');
-    expect(one({ sales: 4000 }).salesLevel).toBe('warn');
-    expect(one({ sales: 4999 }).salesLevel).toBe('warn');
-    expect(one({ sales: 5000 }).salesLevel).toBe('bad');
-    expect(one({ sales: 6000 }).salesUsage).toBeCloseTo(1.2);
-  });
 
   it('Kassen-Katalog: Bytes aus Artikelzahl, Grenzen 70 % / 90 %', () => {
     const r = one({ scanArticles: 1000 });

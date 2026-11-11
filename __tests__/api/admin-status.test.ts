@@ -90,7 +90,6 @@ describe('GET /api/admin/status', () => {
     expect(prismaMock.article.count).toHaveBeenCalledWith({
       where: { basarSeller: { basarId: 'b1' }, status: { in: ['AVAILABLE', 'SOLD'] } },
     });
-    expect(prismaMock.sale.count).toHaveBeenCalledWith({ where: { basarId: 'b1' } });
     expect(prismaMock.mailQueue.count).toHaveBeenCalledWith({ where: { status: 'PENDING' } });
     expect(prismaMock.mailQueue.count).toHaveBeenCalledWith({ where: { status: 'FAILED' } });
     expect(prismaMock.mailQueue.findFirst).toHaveBeenCalledWith({
@@ -103,10 +102,9 @@ describe('GET /api/admin/status', () => {
     const { limits } = await (await GET()).json();
     expect(limits.basars).toHaveLength(1);
     expect(limits.basars[0]).toMatchObject({
-      id: 'b1', isTest: true, activeSellers: 95, scanArticles: 22956, sales: 5000,
-      scanCacheLevel: 'bad', salesLevel: 'bad', sellerLevel: 'warn',
+      id: 'b1', isTest: true, activeSellers: 95, scanArticles: 22956,
+      scanCacheLevel: 'bad', sellerLevel: 'warn',
     });
-    expect(limits.basars[0].salesUsage).toBe(1);
     expect(limits.mail).toMatchObject({ pending: 3, failed: 2, oldestPendingMinutes: 90, pendingLevel: 'warn', failedLevel: 'warn' });
     expect(limits.sellerNumbersUsed).toBe(7200);
     expect(limits.sellerNumberLevel).toBe('warn');

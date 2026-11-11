@@ -75,12 +75,11 @@ export async function GET() {
     ]);
     const basarCounts = await Promise.all(
       basars.map(async (b) => {
-        const [activeSellers, scanArticles, sales] = await Promise.all([
+        const [activeSellers, scanArticles] = await Promise.all([
           prisma.basarSeller.count({ where: { basarId: b.id, isActive: true } }),
           prisma.article.count({ where: { basarSeller: { basarId: b.id }, status: { in: ['AVAILABLE', 'SOLD'] } } }),
-          prisma.sale.count({ where: { basarId: b.id } }),
         ]);
-        return { ...b, activeSellers, scanArticles, sales };
+        return { ...b, activeSellers, scanArticles };
       }),
     );
     const limits = assessLimits({

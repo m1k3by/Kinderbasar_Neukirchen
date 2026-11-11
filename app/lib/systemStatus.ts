@@ -65,7 +65,6 @@ export function assessServer({ rssBytes, limitMb }: { rssBytes: number; limitMb:
 }
 
 /** Grenzen, die /admin/status überwacht. */
-export const RAW_FETCH_CAP = 5000; // Sales je Abruf in GET /api/basars/[id]/transactions
 export const VERCEL_RESPONSE_LIMIT_BYTES = 4.5 * 1024 * 1024; // max. Antwortgröße einer Vercel Function
 // ponytail: Schätzung aus einer Messung (24.10.2026: 2,8 MB bei 15.845 Artikeln ≈ 185 B/Artikel),
 // keine echte Größenmessung. Ändert sich die Projektion in scan-cache/route.ts, neu messen.
@@ -81,7 +80,6 @@ export interface LimitsInput {
     maxSellers: number;
     activeSellers: number;
     scanArticles: number;
-    sales: number;
   }[];
   mail: { pending: number; failed: number; oldestPendingAt: Date | string | null };
   sellerNumbersUsed: number;
@@ -98,15 +96,12 @@ export function assessLimits({ basars, mail, sellerNumbersUsed, now }: LimitsInp
     basars: basars.map((b) => {
       const scanCacheBytes = b.scanArticles * SCAN_CACHE_BYTES_PER_ARTICLE;
       const scanCacheUsage = scanCacheBytes / VERCEL_RESPONSE_LIMIT_BYTES;
-      const salesUsage = b.sales / RAW_FETCH_CAP;
       const sellerUsage = b.maxSellers > 0 ? b.activeSellers / b.maxSellers : 0;
       return {
         ...b,
         scanCacheBytes,
         scanCacheUsage,
         scanCacheLevel: levelAbove(scanCacheUsage, 0.7, 0.9),
-        salesUsage,
-        salesLevel: levelAbove(salesUsage, 0.8, 1.0),
         sellerUsage,
         sellerLevel: levelAbove(sellerUsage, 0.9, Infinity),
       };
