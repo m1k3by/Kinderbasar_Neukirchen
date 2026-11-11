@@ -48,6 +48,8 @@ interface OpenBasar {
 type StatusFilter = 'all' | 'available' | 'inBasar';
 const EMPTY_FORM = { title: '', sizeLabel: '', gender: '', price: '', tags: [] as string[] };
 const fmt = (n: number) => n.toFixed(2).replace('.', ',');
+const EDIT_HINT =
+  'Beschreibung, Größe und Geschlecht lassen sich jederzeit anpassen – der QR-Code bleibt dabei gleich.\nDer Preis lässt sich nicht ändern: dafür den Artikel löschen und neu anlegen.';
 
 export default function SellerArticlesPage() {
   const router = useRouter();
@@ -713,7 +715,18 @@ export default function SellerArticlesPage() {
                       {a.tags.map(t => <span key={t} className="text-xs font-medium text-gray-400">#{t}</span>)}
                     </div>
                     <div className="flex shrink-0 -mr-1.5 -mb-1.5">
-                      <button type="button" onClick={() => startEdit(a)} className="p-2 rounded-full text-gray-400 hover:text-gray-900 hover:bg-gray-100" title={'Bearbeiten\nBeschreibung, Größe und Geschlecht lassen sich jederzeit anpassen – der QR-Code bleibt dabei gleich.\nDer Preis lässt sich nicht ändern: dafür den Artikel löschen und neu anlegen.'} aria-label="Bearbeiten">
+                      {/* Der title-Tooltip am Stift erscheint nur bei Mausbedienung; auf dem Handy
+                          trägt dieses ⓘ denselben Text. <details> öffnet und schließt per Tippen
+                          ohne eigenen State. */}
+                      <details className="relative md:hidden">
+                        <summary className="list-none [&::-webkit-details-marker]:hidden p-2 rounded-full text-gray-400 hover:text-gray-900 hover:bg-gray-100 cursor-pointer leading-none" aria-label="Hinweis zum Bearbeiten">
+                          ⓘ
+                        </summary>
+                        <p className="absolute right-0 bottom-full mb-1 z-10 w-64 rounded-xl bg-gray-900 px-3 py-2 text-xs text-white shadow-lg whitespace-pre-line">
+                          {EDIT_HINT}
+                        </p>
+                      </details>
+                      <button type="button" onClick={() => startEdit(a)} className="p-2 rounded-full text-gray-400 hover:text-gray-900 hover:bg-gray-100" title={`Bearbeiten\n${EDIT_HINT}`} aria-label="Bearbeiten">
                         <IconPencil />
                       </button>
                       <button type="button" onClick={() => handleDelete(a)} className="p-2 rounded-full text-gray-400 hover:text-red-600 hover:bg-red-50" title="Löschen" aria-label="Löschen">
