@@ -14,10 +14,11 @@ beforeEach(() => {
       id: 'a1',
       title: `T <&> "'`,
       body: 'Zeile <b>1</b> & 2',
+      fileType: 'image/png',
       fileData: Buffer.from('%PDF-xyz'),
       publishedAt: new Date('2026-11-01T10:00:00Z'),
     },
-    { id: 'b2', title: 'Ohne Datei', body: 'x', fileData: null, publishedAt: new Date('2026-10-01T10:00:00Z') },
+    { id: 'b2', title: 'Ohne Datei', body: 'x', fileType: null, fileData: null, publishedAt: new Date('2026-10-01T10:00:00Z') },
   ]);
 });
 
@@ -52,7 +53,15 @@ describe('GET /feed.xml', () => {
     const xml = await (await get()).text();
     expect(xml.match(/<enclosure /g)).toHaveLength(1);
     expect(xml).toContain(
-      '<enclosure url="https://basar.example/api/posts/a1/datei" type="application/pdf" length="8"/>',
+      '<enclosure url="https://basar.example/api/posts/a1/datei" type="image/png" length="8"/>',
     );
+  });
+
+  it('enclosure: fileType null (Altzeile) -> application/pdf', async () => {
+    prismaMock.post.findMany.mockResolvedValue([
+      { id: 'c3', title: 'Alt', body: 'x', fileType: null, fileData: Buffer.from('%PDF-'), publishedAt: new Date() },
+    ]);
+    const xml = await (await get()).text();
+    expect(xml).toContain('type="application/pdf" length="5"');
   });
 });

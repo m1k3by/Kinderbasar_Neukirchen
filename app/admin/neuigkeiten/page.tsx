@@ -3,12 +3,14 @@
 import { useState, useEffect } from 'react';
 import Header from '../../components/Header';
 import { getNavLinks } from '../../lib/navLinks';
+import { ACCEPT_ATTACHMENT, fileTypeLabel, fileTypeOrPdf, isImageType } from '../../lib/posts';
 
 interface PostRow {
   id: string;
   title: string;
   body: string;
   fileName: string | null;
+  fileType: string | null;
   hasFile: boolean;
   isPublished: boolean;
   publishedAt: string | null;
@@ -110,8 +112,8 @@ export default function NeuigkeitenPage() {
           <input className={input} placeholder="Titel" maxLength={200} required value={title} onChange={e => setTitle(e.target.value)} />
           <textarea className={input} placeholder="Text" rows={5} maxLength={5000} value={body} onChange={e => setBody(e.target.value)} />
           <div>
-            <label className="block text-sm text-gray-600 mb-1">PDF-Datei (optional, höchstens 4 MB)</label>
-            <input key={fileKey} type="file" accept="application/pdf" onChange={e => setFile(e.target.files?.[0] ?? null)} />
+            <label className="block text-sm text-gray-600 mb-1">Datei (optional: PDF, Bild, Word, Excel, PowerPoint – höchstens 4 MB)</label>
+            <input key={fileKey} type="file" accept={ACCEPT_ATTACHMENT} onChange={e => setFile(e.target.files?.[0] ?? null)} />
           </div>
           <label className="flex items-center gap-2 text-sm text-gray-700">
             <input type="checkbox" checked={publish} onChange={e => setPublish(e.target.checked)} />
@@ -166,21 +168,26 @@ export default function NeuigkeitenPage() {
                     <>
                       {p.isPublished ? (
                         <a href={`/api/posts/${p.id}/datei`} target="_blank" rel="noopener" className="text-blue-700 hover:underline">
-                          {p.fileName} (PDF)
+                          {p.fileName} ({fileTypeLabel(fileTypeOrPdf(p.fileType))})
                         </a>
                       ) : (
-                        <span>{p.fileName} (PDF)</span>
+                        <span>{p.fileName} ({fileTypeLabel(fileTypeOrPdf(p.fileType))})</span>
                       )}
-                      <button className={btn} onClick={() => patch(p.id, { removeFile: 'true' })}>PDF entfernen</button>
+                      {/* Vorschau nur bei veröffentlichten Beiträgen: Entwürfe liefert die öffentliche Route nicht. */}
+                      {p.isPublished && isImageType(fileTypeOrPdf(p.fileType)) && (
+                        // eslint-disable-next-line @next/next/no-img-element -- eigene API-Route, Größe unbekannt
+                        <img src={`/api/posts/${p.id}/datei`} alt={p.title} loading="lazy" className="max-h-16 rounded" />
+                      )}
+                      <button className={btn} onClick={() => patch(p.id, { removeFile: 'true' })}>Datei entfernen</button>
                     </>
                   ) : (
-                    <span className="text-gray-500">Kein PDF</span>
+                    <span className="text-gray-500">Keine Datei</span>
                   )}
                   <label className={`${btn} cursor-pointer`}>
-                    PDF {p.hasFile ? 'ersetzen' : 'hinzufügen'}
+                    Datei {p.hasFile ? 'ersetzen' : 'hinzufügen'}
                     <input
                       type="file"
-                      accept="application/pdf"
+                      accept={ACCEPT_ATTACHMENT}
                       className="hidden"
                       onChange={e => {
                         const f = e.target.files?.[0];

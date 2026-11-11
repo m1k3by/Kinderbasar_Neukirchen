@@ -1,4 +1,5 @@
 import { prisma } from '@/app/lib/prisma';
+import { fileTypeOrPdf } from '@/app/lib/posts';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,12 +15,12 @@ export async function GET(request: Request) {
       where: { isPublished: true },
       orderBy: { publishedAt: 'desc' },
       take: 20,
-      select: { id: true, title: true, body: true, fileData: true, publishedAt: true },
+      select: { id: true, title: true, body: true, fileType: true, fileData: true, publishedAt: true },
     });
     const items = posts
       .map(p => {
         const enclosure = p.fileData
-          ? `\n      <enclosure url="${esc(`${origin}/api/posts/${p.id}/datei`)}" type="application/pdf" length="${p.fileData.length}"/>`
+          ? `\n      <enclosure url="${esc(`${origin}/api/posts/${p.id}/datei`)}" type="${esc(fileTypeOrPdf(p.fileType))}" length="${p.fileData.length}"/>`
           : '';
         return `    <item>
       <title>${esc(p.title)}</title>

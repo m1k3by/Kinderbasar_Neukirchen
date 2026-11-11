@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/app/lib/apiAuth';
 import { prisma } from '@/app/lib/prisma';
-import { readPdf, validateBody, validateTitle } from '@/app/lib/posts';
+import { readAttachment, validateBody, validateTitle } from '@/app/lib/posts';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -36,13 +36,15 @@ export async function PATCH(request: Request, { params }: Ctx) {
     }
     const upload = form.get('file');
     if (upload instanceof File && upload.size > 0) {
-      const pdf = await readPdf(upload);
-      if (!pdf.ok) return NextResponse.json({ error: pdf.error }, { status: 400 });
-      data.fileName = pdf.fileName;
-      data.fileData = pdf.data;
+      const att = await readAttachment(upload);
+      if (!att.ok) return NextResponse.json({ error: att.error }, { status: 400 });
+      data.fileName = att.fileName;
+      data.fileData = att.data;
+      data.fileType = att.fileType;
     } else if (form.get('removeFile') === 'true') {
       data.fileName = null;
       data.fileData = null;
+      data.fileType = null;
     }
 
     await prisma.post.update({ where: { id }, data, select: { id: true } });

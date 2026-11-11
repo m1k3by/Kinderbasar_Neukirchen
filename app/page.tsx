@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { prisma } from './lib/prisma';
 import { visibleBasarWhere } from './lib/basarAccess';
+import { fileTypeLabel, fileTypeOrPdf, isImageType } from './lib/posts';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -33,7 +34,7 @@ export default async function Home() {
     where: { isPublished: true },
     orderBy: { publishedAt: 'desc' },
     take: 5,
-    select: { id: true, title: true, body: true, fileName: true, publishedAt: true },
+    select: { id: true, title: true, body: true, fileName: true, fileType: true, publishedAt: true },
   });
 
   const cards = basars.map(basar => ({
@@ -137,6 +138,10 @@ export default async function Home() {
                   )}
                   <h3 className="font-semibold text-gray-800">{post.title}</h3>
                   <p className="mt-1 text-sm text-gray-700 whitespace-pre-line">{post.body}</p>
+                  {post.fileName && isImageType(fileTypeOrPdf(post.fileType)) && (
+                    // eslint-disable-next-line @next/next/no-img-element -- eigene API-Route, Größe unbekannt: next/image bringt hier nichts
+                    <img src={`/api/posts/${post.id}/datei`} alt={post.title} loading="lazy" className="mt-3 max-h-96 rounded-md" />
+                  )}
                   {post.fileName && (
                     <a
                       href={`/api/posts/${post.id}/datei`}
@@ -144,7 +149,7 @@ export default async function Home() {
                       rel="noopener"
                       className="mt-1 inline-block text-sm text-blue-700 hover:underline"
                     >
-                      {post.fileName} (PDF)
+                      {post.fileName} ({fileTypeLabel(fileTypeOrPdf(post.fileType))})
                     </a>
                   )}
                 </article>

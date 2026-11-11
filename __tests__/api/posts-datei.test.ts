@@ -26,13 +26,37 @@ describe('GET /api/posts/[id]/datei', () => {
   });
 
   it('veröffentlicht -> 200 mit PDF-Bytes und sicherem Dateinamen', async () => {
-    prismaMock.post.findUnique.mockResolvedValue({ isPublished: true, fileName: 'Spenden Übersicht"x.pdf', fileData: bytes });
+    prismaMock.post.findUnique.mockResolvedValue({ isPublished: true, fileName: 'Spenden Übersicht"x.pdf', fileType: 'application/pdf', fileData: bytes });
     const res = await call();
     expect(res.status).toBe(200);
     expect(res.headers.get('Content-Type')).toBe('application/pdf');
     expect(res.headers.get('Content-Disposition')).toBe('inline; filename="Spenden__bersicht_x.pdf"');
     expect(res.headers.get('Cache-Control')).toBe('no-cache');
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
     expect(Buffer.from(await res.arrayBuffer())).toEqual(bytes);
     expect(prismaMock.post.findUnique.mock.calls[0][0].where).toEqual({ id: 'p1' });
+  });
+
+  it('fileType null (Altzeile) -> application/pdf, inline', async () => {
+    prismaMock.post.findUnique.mockResolvedValue({ isPublished: true, fileName: 'alt.pdf', fileType: null, fileData: bytes });
+    const res = await call();
+    expect(res.headers.get('Content-Type')).toBe('application/pdf');
+    expect(res.headers.get('Content-Disposition')).toBe('inline; filename="alt.pdf"');
+  });
+
+  it('Bild -> gespeicherter Typ, inline, nosniff', async () => {
+    prismaMock.post.findUnique.mockResolvedValue({ isPublished: true, fileName: 'a.png', fileType: 'image/png', fileData: bytes });
+    const res = await call();
+    expect(res.headers.get('Content-Type')).toBe('image/png');
+    expect(res.headers.get('Content-Disposition')).toBe('inline; filename="a.png"');
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+  });
+
+  it('docx -> gespeicherter Typ, attachment', async () => {
+    const t = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    prismaMock.post.findUnique.mockResolvedValue({ isPublished: true, fileName: 'a.docx', fileType: t, fileData: bytes });
+    const res = await call();
+    expect(res.headers.get('Content-Type')).toBe(t);
+    expect(res.headers.get('Content-Disposition')).toBe('attachment; filename="a.docx"');
   });
 });
