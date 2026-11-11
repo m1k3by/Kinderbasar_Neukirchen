@@ -74,6 +74,10 @@ export async function GET(request: Request) {
       // Weniger als ein voller Stapel heißt: nichts mehr da. Ohne diese Bedingung liefe der
       // Lauf MAX_BATCHES mal gegen eine leere Warteschlange.
       if (result.processed < MAIL_QUEUE_BATCH_SIZE) break;
+      // Ein voller Stapel ohne einen einzigen Erfolg heißt: SMTP ist gestört. Weitermachen
+      // griffe dieselben Mails erneut und verbrauchte in Sekunden alle fünf Versuche – sie
+      // stünden nach einem Lauf auf FAILED. Der nächste Lauf (täglich) ist das Backoff.
+      if (result.sent === 0) break;
       if (Date.now() - started > DEADLINE_MS) break;
     }
 

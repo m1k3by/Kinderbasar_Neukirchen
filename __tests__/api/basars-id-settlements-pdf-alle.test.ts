@@ -221,6 +221,14 @@ describe('GET /api/basars/[id]/settlements/abrechnungen.pdf – Inhalt', () => {
     expect(content).toContain('3,60 \x80'); // Netto-Auszahlung
     expect(content).toContain('Provision \\(20%\\):');
   });
+
+  it('druckt den persönlichen Provisionssatz, wenn einer gesetzt ist', async () => {
+    mockSellers([{ ...fakeSeller(9001, 7), commissionOverride: dec(10) }, fakeSeller(9002, 7)]);
+    const res = await GET(makeRequest(), makeContext());
+    const content = allContent(await pdfBuffer(res));
+    expect(content).toContain('Provision \\(10%\\):'); // 9001 mit eigenem Satz
+    expect(content).toContain('Provision \\(20%\\):'); // 9002 mit dem Satz des Basars
+  });
 });
 
 describe('GET /api/basars/[id]/settlements/abrechnungen.pdf – Parameter set', () => {

@@ -58,6 +58,8 @@ describe('installLogForwarder', () => {
     expect(init.method).toBe('POST');
     expect(init.headers.Authorization).toBe('Bearer xaat-test');
     expect(init.headers['Content-Type']).toBe('application/json');
+    // Frist: after() hält die Invocation sonst an einem hängenden Axiom fest.
+    expect(init.signal).toBeInstanceOf(AbortSignal);
     expect(body().level).toBe('info');
     expect(body().message).toContain('hallo');
     expect(body()._time).toEqual(expect.any(String));

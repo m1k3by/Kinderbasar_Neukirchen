@@ -115,7 +115,8 @@ describe('drainMailQueue', () => {
           { status: 'FAILED', attempts: { lt: 5 } },
         ],
       },
-      orderBy: { createdAt: 'asc' },
+      // Wenigste Versuche zuerst: sonst greift jeder Stapel dieselben gescheiterten ältesten.
+      orderBy: [{ attempts: 'asc' }, { createdAt: 'asc' }],
       take: 20,
     });
   });

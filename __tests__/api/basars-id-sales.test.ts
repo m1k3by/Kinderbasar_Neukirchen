@@ -8,6 +8,8 @@ vi.mock('next/headers', () => ({
 }));
 
 const prismaMock = vi.hoisted(() => ({
+  // requireCashier() liest isCashier aus der Datenbank, nicht aus dem Token (app/lib/apiAuth.ts).
+  seller: { findUnique: vi.fn().mockResolvedValue({ isCashier: true }) },
   basar: { findUnique: vi.fn() },
   article: { findMany: vi.fn(), updateManyAndReturn: vi.fn() },
   sale: { findMany: vi.fn(), createManyAndReturn: vi.fn() },
@@ -76,9 +78,20 @@ describe('POST /api/basars/[id]/sales', () => {
   });
 
   it('returns 403 for regular seller', async () => {
+    prismaMock.seller.findUnique.mockResolvedValueOnce({ isCashier: false });
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     const res = await POST(makePostRequest({ items: [] }), makeContext());
     expect(res.status).toBe(403);
+  });
+
+  it('entzogenes Kassiererrecht gilt sofort: Token sagt Kassierer, Datenbank nicht → 403, nichts gebucht', async () => {
+    prismaMock.seller.findUnique.mockResolvedValueOnce({ isCashier: false });
+    cookiesGetMock.mockReturnValue({ value: cashierToken(42) });
+    const res = await POST(makePostRequest({ items: [{ qrCode: 'QR1' }] }), makeContext());
+    expect(res.status).toBe(403);
+    expect(prismaMock.seller.findUnique.mock.calls[0][0]).toEqual({ where: { sellerId: 42 }, select: { isCashier: true } });
+    expect(prismaMock.basar.findUnique).not.toHaveBeenCalled();
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });
 
   it('returns 404 when basar not found', async () => {
@@ -323,6 +336,7 @@ describe('GET /api/basars/[id]/sales', () => {
   });
 
   it('returns 403 for regular seller', async () => {
+    prismaMock.seller.findUnique.mockResolvedValueOnce({ isCashier: false });
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     const res = await GET(makeGetRequest(), makeContext());
     expect(res.status).toBe(403);

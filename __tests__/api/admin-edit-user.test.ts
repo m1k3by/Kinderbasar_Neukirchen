@@ -95,6 +95,31 @@ describe('PUT /api/admin/edit-user', () => {
     expect(json.seller.sellerId).toBe(1234);
   });
 
+  it('Zurückstufen zum Verkäufer nimmt das Orga-Kennzeichen mit', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.seller.findUnique.mockResolvedValue({ sellerId: 1234, isEmployee: true, isOrga: true });
+    prismaMock.seller.findFirst.mockResolvedValue(null);
+    prismaMock.seller.update.mockResolvedValue({ sellerId: 1234, isEmployee: false });
+
+    await PUT(makeRequest({ ...validBody, isEmployee: false }));
+    expect(prismaMock.seller.update.mock.calls[0][0]).toEqual({
+      where: { sellerId: 1234 },
+      data: { email: 'max@test.de', firstName: 'Max', lastName: 'Muster', isEmployee: false, isOrga: false },
+    });
+  });
+
+  it('Mitarbeiter bleiben: isOrga wird nicht angefasst', async () => {
+    cookiesGetMock.mockReturnValue({ value: adminToken() });
+    prismaMock.seller.findUnique.mockResolvedValue({ sellerId: 1234, isEmployee: true, isOrga: true });
+    prismaMock.seller.findFirst.mockResolvedValue(null);
+    prismaMock.seller.update.mockResolvedValue({ sellerId: 1234, isEmployee: true });
+
+    await PUT(makeRequest({ ...validBody, isEmployee: true }));
+    expect(prismaMock.seller.update.mock.calls[0][0].data).toEqual(
+      { email: 'max@test.de', firstName: 'Max', lastName: 'Muster', isEmployee: true },
+    );
+  });
+
   it('returns 400 on Prisma P2002 (duplicate email)', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.seller.findUnique.mockResolvedValue({ sellerId: 1234 });

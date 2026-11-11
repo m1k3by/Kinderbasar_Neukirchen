@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '../../../lib/prisma';
 import { requireAdmin } from '../../../lib/apiAuth';
 import { normalizeEmail } from '../../../lib/auth';
+import { employeeStatusData } from '../../../lib/employeeRole';
 
 export async function PUT(request: NextRequest) {
   const authResult = await requireAdmin();
@@ -100,7 +101,8 @@ export async function PUT(request: NextRequest) {
         email,
         firstName,
         lastName,
-        isEmployee: !!isEmployee
+        // Zurückstufen nimmt das Orga-Kennzeichen mit – siehe app/lib/employeeRole.ts.
+        ...employeeStatusData(!!isEmployee),
       }
     });
 

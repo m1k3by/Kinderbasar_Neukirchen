@@ -8,7 +8,7 @@ vi.mock('next/headers', () => ({
 
 const prismaMock = vi.hoisted(() => ({
   basar: { findUnique: vi.fn() },
-  article: { findUnique: vi.fn(), delete: vi.fn(), count: vi.fn(), updateMany: vi.fn() },
+  article: { findFirst: vi.fn(), delete: vi.fn(), count: vi.fn(), updateMany: vi.fn() },
   sellerArticle: { delete: vi.fn() },
   $transaction: vi.fn(),
 }));
@@ -71,7 +71,7 @@ describe('DELETE /api/basars/[id]/articles/[artId]', () => {
   it('returns 404 when article not found', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);
-    prismaMock.article.findUnique.mockResolvedValue(null);
+    prismaMock.article.findFirst.mockResolvedValue(null);
     const res = await DELETE(makeRequest(), makeContext());
     expect(res.status).toBe(404);
   });
@@ -79,7 +79,7 @@ describe('DELETE /api/basars/[id]/articles/[artId]', () => {
   it('returns 403 when seller does not own article', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(9999) });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);
-    prismaMock.article.findUnique.mockResolvedValue(fakeArticle); // owned by 1234
+    prismaMock.article.findFirst.mockResolvedValue(fakeArticle); // owned by 1234
     const res = await DELETE(makeRequest(), makeContext());
     expect(res.status).toBe(403);
   });
@@ -87,17 +87,33 @@ describe('DELETE /api/basars/[id]/articles/[artId]', () => {
   it('deletes article successfully for owner', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);
-    prismaMock.article.findUnique.mockResolvedValue(fakeArticle);
+    prismaMock.article.findFirst.mockResolvedValue(fakeArticle);
     prismaMock.article.delete.mockResolvedValue({ id: 'art-1' });
     const res = await DELETE(makeRequest(), makeContext());
     expect(res.status).toBe(200);
     expect((await res.json()).success).toBe(true);
   });
 
+  it('sucht den Artikel nur im Basar aus der URL – ein Artikel aus einem anderen Basar ist 404', async () => {
+    // Die Statusprüfung gilt dem Basar aus der URL. Ohne den Filter ließ sich mit der ID eines
+    // offenen Basars ein Artikel aus einem laufenden oder beendeten löschen. Ein gemocktes
+    // Prisma ignoriert `where` – geprüft werden deshalb die Argumente.
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basar.findUnique.mockResolvedValue(openBasar);
+    prismaMock.article.findFirst.mockResolvedValue(null);
+    const res = await DELETE(makeRequest(), makeContext());
+    expect(res.status).toBe(404);
+    expect(prismaMock.article.findFirst.mock.calls[0][0].where).toEqual({
+      id: 'art-1',
+      basarSeller: { basarId: 'basar-1' },
+    });
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
   it('admin can delete any article', async () => {
     cookiesGetMock.mockReturnValue({ value: adminToken() });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);
-    prismaMock.article.findUnique.mockResolvedValue(fakeArticle);
+    prismaMock.article.findFirst.mockResolvedValue(fakeArticle);
     prismaMock.article.delete.mockResolvedValue({ id: 'art-1' });
     const res = await DELETE(makeRequest(), makeContext());
     expect(res.status).toBe(200);
@@ -126,7 +142,7 @@ describe('DELETE /api/basars/[id]/articles/[artId] – Archiveintrag', () => {
     mockTransaction();
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.basar.findUnique.mockResolvedValue(openBasar);
-    prismaMock.article.findUnique.mockResolvedValue(fakeArticle);
+    prismaMock.article.findFirst.mockResolvedValue(fakeArticle);
     prismaMock.article.delete.mockResolvedValue({ id: 'art-1' });
     prismaMock.sellerArticle.delete.mockResolvedValue({ id: 'sa-1' });
     prismaMock.article.updateMany.mockResolvedValue({ count: 0 });
@@ -179,7 +195,7 @@ describe('DELETE /api/basars/[id]/articles/[artId] – Archiveintrag', () => {
   it('kommt ohne Archiveintrag zurecht', async () => {
     // sellerArticleId ist null, sobald jemand den Eintrag über
     // DELETE /api/seller-articles entfernt hat – die Route hängt die Artikel dort ab.
-    prismaMock.article.findUnique.mockResolvedValue({ ...fakeArticle, sellerArticleId: null });
+    prismaMock.article.findFirst.mockResolvedValue({ ...fakeArticle, sellerArticleId: null });
 
     const res = await DELETE(makeRequest(), makeContext());
 

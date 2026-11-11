@@ -24,6 +24,8 @@ interface PendingTransaction {
   needsReview?: boolean;
 }
 
+type SoundKind = 'scan' | 'kasse';
+
 export default function KassePage({ params }: { params: Promise<{ id: string }> }) {
   const { id: basarId } = use(params);
   const [cart, setCart] = useState<ScannedArticle[]>([]);
@@ -74,6 +76,8 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
   // Gespeichert wird erst nach der Wiederherstellung – sonst überschriebe der leere Startzustand
   // den gespeicherten Warenkorb, bevor er gelesen ist.
   const cartReadyRef = useRef(false);
+  const [sounds, setSounds] = useState({ scan: true, kasse: true });
+  useEffect(() => { setSounds({ scan: soundOn('scan'), kasse: soundOn('kasse') }); }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -141,7 +145,21 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
     if (!audioCtxRef.current) {
       audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
     }
+    // iOS startet den Kontext außerhalb einer Nutzergeste „suspended“ – stumm.
+    if (audioCtxRef.current.state === 'suspended') void audioCtxRef.current.resume();
     return audioCtxRef.current;
+  }
+
+  // Töne pro Gerät abschaltbar (localStorage, Standard: an). Gelesen wird beim Abspielen,
+  // nicht aus dem State – der Scanner-Callback hält sonst den Stand vom Scanstart fest.
+  function soundOn(kind: SoundKind): boolean {
+    try { return localStorage.getItem(`kasse-sound-${kind}`) !== 'off'; } catch { return true; }
+  }
+  function toggleSound(kind: SoundKind) {
+    const next = !sounds[kind];
+    try { localStorage.setItem(`kasse-sound-${kind}`, next ? 'on' : 'off'); } catch { /* privater Modus */ }
+    setSounds(s => ({ ...s, [kind]: next }));
+    if (next) getAudioCtx(); // Geste nutzen, um den Kontext freizuschalten
   }
 
   function playBeep(frequency: number, duration: number, type: OscillatorType = 'sine', volume = 0.4) {
@@ -161,15 +179,18 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
   }
 
   function playScanSuccess() {
+    if (!soundOn('scan')) return;
     playBeep(1200, 0.12, 'sine', 0.35);
   }
 
   function playScanError() {
+    if (!soundOn('scan')) return;
     playBeep(300, 0.15, 'square', 0.3);
     setTimeout(() => playBeep(250, 0.2, 'square', 0.3), 170);
   }
 
   function playKassierenSound() {
+    if (!soundOn('kasse')) return;
     // Cash register "ding": two ascending tones
     playBeep(880, 0.15, 'sine', 0.45);
     setTimeout(() => playBeep(1320, 0.25, 'sine', 0.45), 160);
@@ -748,6 +769,16 @@ export default function KassePage({ params }: { params: Promise<{ id: string }> 
                 {scanning ? '■ Stop' : '▶ Scannen'}
               </button>
             </div>
+          </div>
+          <div className="flex gap-4 mb-2 text-xs text-gray-600">
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" checked={sounds.scan} onChange={() => toggleSound('scan')} />
+              🔊 Scan-Piep
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" checked={sounds.kasse} onChange={() => toggleSound('kasse')} />
+              🔔 Kassen-Ding
+            </label>
           </div>
 
           {scannerError && <p className="text-red-600 text-sm mb-2">{scannerError}</p>}

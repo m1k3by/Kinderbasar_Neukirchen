@@ -15,8 +15,14 @@ import { prisma } from './prisma';
  * können.
  */
 export function setEmployeeStatus(sellerId: number, isEmployee: boolean) {
-  return prisma.seller.update({
-    where: { sellerId },
-    data: { isEmployee, ...(isEmployee ? {} : { isOrga: false }) },
-  });
+  return prisma.seller.update({ where: { sellerId }, data: employeeStatusData(isEmployee) });
+}
+
+/**
+ * Die Regel als `data`-Fragment – für Aufrufer, die in *demselben* Update noch andere Felder
+ * schreiben (app/api/admin/edit-user: Name, E-Mail und Rolle in einem Formular). Bis
+ * 11.11.2026 schrieb edit-user `isEmployee` direkt und ließ das Orga-Kennzeichen stehen.
+ */
+export function employeeStatusData(isEmployee: boolean) {
+  return { isEmployee, ...(isEmployee ? {} : { isOrga: false }) };
 }

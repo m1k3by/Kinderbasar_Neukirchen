@@ -108,7 +108,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
         drawSettlementPage(doc, {
           basarTitle: basar.title,
-          commissionPercent,
+          // Persönlicher Satz, falls gesetzt – mit ihm rechnet POST /settlements.
+          commissionPercent: Number(bs.commissionOverride ?? commissionPercent),
           sellerNr: bs.seller.sellerId,
           sellerName: `${bs.seller.firstName} ${bs.seller.lastName}`,
           generatedAt: bs.settlement.generatedAt.toISOString(),

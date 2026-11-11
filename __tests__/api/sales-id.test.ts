@@ -12,6 +12,8 @@ const articleUpdateMock = vi.hoisted(() => vi.fn());
 const saleUpdateMock = vi.hoisted(() => vi.fn());
 const settlementFindUniqueMock = vi.hoisted(() => vi.fn());
 const prismaMock = vi.hoisted(() => ({
+  // requireCashier() liest isCashier aus der Datenbank, nicht aus dem Token (app/lib/apiAuth.ts).
+  seller: { findUnique: vi.fn().mockResolvedValue({ isCashier: true }) },
   sale: {
     findUnique: vi.fn(),
     updateMany: saleUpdateMock,
@@ -69,6 +71,7 @@ describe('DELETE /api/sales/[id]', () => {
   });
 
   it('returns 403 for regular seller', async () => {
+    prismaMock.seller.findUnique.mockResolvedValueOnce({ isCashier: false });
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     const res = await DELETE(makeRequest(), makeContext());
     expect(res.status).toBe(403);

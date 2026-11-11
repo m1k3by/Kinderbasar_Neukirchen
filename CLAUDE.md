@@ -15,6 +15,12 @@ npm run test:coverage  # Coverage (Schwellwert 90 %)
 npm run db:push        # Prisma-Schema anwenden – nur lokal!
 ```
 
+> **`npm run lint` lintet auch die Kopien unter `.claude/worktrees/`** – `eslint.config.mjs`
+> ignoriert nur `.next`, `out`, `build`. Am 10.11.2026 meldete der Lauf 372 Probleme, die
+> meisten aus alten Worktree-Ständen. Für die Frage „habe ich etwas kaputt gemacht" deshalb
+> die geänderten Dateien direkt prüfen (`npx eslint <dateien> > datei.txt`) und gegen den Stand
+> davor halten (`git show HEAD:<datei>` → `npx eslint --stdin --stdin-filename <datei>`).
+
 > **Migrationen laufen im Build.** `npm run build` ruft `prisma migrate deploy` auf, bevor
 > `next build` startet. Grund: am 19.08.2026 ging die Seite auf 500, weil vier Migrationen
 > vom 17.08. als Code deployt, aber nie gegen die Datenbank ausgeführt wurden
@@ -214,6 +220,79 @@ Nach jeder Änderung an einer PDF-Ausgabe: Datei erzeugen und die Geometrie mess
 
 ---
 
+## Zugriff & Nebenläufigkeit
+
+Aus dem Review vom 10./11.11.2026 (Ablauf: Skill `pr-review`). Jede Regel hier stand vorher
+nirgends und war genau einmal gebrochen.
+
+- **Eine Route ist erst geschützt, wenn sie selbst `requireAuth()` / `requireAdmin()` /
+  `requireCashier()` aufruft.** Der `matcher` in `middleware.ts` ist eine zweite Schranke,
+  keine erste, und deckt nicht alles ab: `/api/change-password` stand nicht darin und rief
+  auch nichts auf – bis 11.11.2026 konnte jeder ohne Anmeldung das Passwort jeder
+  Verkäufernummer setzen. Bewusst offen sind nur `login`, `logout`, `register`,
+  `password-reset/*`, `errors`, `posts/[id]/datei` (nur veröffentlichte Beiträge) und
+  `cron/mail-queue` (eigenes `CRON_SECRET`). Wer eine Route
+  anlegt, die nicht unter einem Präfix des `matcher` liegt, prüft das ausdrücklich. Der alte
+  Test rief die Route ohne Cookie auf und erwartete 200 – grün, und genau der Fehler.
+- **„Für mich selbst" heißt: Identität aus dem Token, nie aus dem Body.** Ein mitgeschicktes
+  `sellerId` wird bei Selbstbedienungs-Routen ignoriert (`change-password`, `me/role`,
+  `seller-articles`). Wo ein Admin für andere handeln darf (`participation`, `cakes`,
+  `task-signups`), wird der Body-Wert gegen `auth.sellerId` geprüft.
+- **Rechte, die der Admin entziehen kann, kommen aus der Datenbank, nicht aus dem Token.**
+  Das Token gilt drei Tage (`app/lib/auth.ts`) und behält seinen Stand. `requireCashier()`
+  liest `isCashier` deshalb je Anfrage nach, die Artikelrouten `isEmployee`/`isOrga`. Kostet
+  einen Lesezugriff; dafür wirkt „Kasse entzogen" sofort statt am Montag. Tests von Routen
+  hinter `requireCashier()` brauchen `seller.findUnique` im Prisma-Mock.
+- **Prüfen und Schreiben gehören hinter dieselbe Sperre.** Zählung, „gibt es schon?" und
+  Limit vor der Transaktion sind bei Doppeltipp oder zwei Tabs wertlos: beide Requests
+  bestehen. Muster: `SELECT 1 FROM "BasarSeller" WHERE id = … FOR UPDATE` als erstes Statement
+  einer interaktiven Transaktion, danach zählen, prüfen, schreiben
+  (`POST /api/basars/[id]/articles`, `…/articles/import`; für Helferschichten die Sperre auf
+  `Task` in `task-signups`; für Teilnehmerplätze die Sperre auf
+  `Basar` in `participation`). In einer interaktiven Transaktion **ein** Statement für viele
+  Zeilen (`createManyAndReturn`), keine Schleife – sie läuft auf einer Verbindung, jeder
+  Roundtrip verlängert die gehaltene Sperre. Und der auslösende Knopf wird während der
+  Anfrage gesperrt. Ein gemocktes `$transaction` beweist die Sperre nicht; getestet wird die
+  Reihenfolge (`invocationCallOrder`: Sperre vor Zählung vor Schreiben).
+- **Fremde Eingabe wird maskiert, bevor sie in Mail-HTML landet.** React maskiert selbst,
+  Template-Strings nicht. `POST /api/errors` steht ohne Anmeldung offen, und seine Meldung
+  ging unmaskiert in die Alarmmail an den Admin – vom eigenen Absender, also ein fertiger
+  Phishing-Weg. `escapeHtml()` liegt in `app/lib/errorLog.ts`; wer eine zweite Stelle
+  braucht, zieht die Funktion nach `app/lib/` um, statt sie zu kopieren.
+- **`isEmployee` schreibt nur `app/lib/employeeRole.ts`** – `setEmployeeStatus()` oder, wenn
+  im selben Update weitere Felder stehen, `employeeStatusData()`. `admin/edit-user` schrieb
+  das Feld direkt und ließ beim Zurückstufen das Orga-Kennzeichen stehen. Gilt allgemein:
+  steht irgendwo „der einzige Ort, an dem das passiert", nach allen Schreibern des *Feldes*
+  greppen, nicht nach den Aufrufern des Helfers.
+- **Der lokale Dev-Server hängt an der Produktivdatenbank.** Sicherheitslücken werden deshalb
+  am Code und per Test belegt, nicht durch Ausprobieren gegen den laufenden Server.
+
+### Offene Befunde (Stand 11.11.2026)
+
+Belegt, aber bewusst nicht behoben. Wer einen erledigt, streicht ihn hier. Die übrigen Punkte
+des Reviews (Link ohne Basar-ID, Löschsperre über fremde Basar-ID, verbrannte Mail-Versuche,
+überbuchbare Helferschicht, Provisionssatz auf den Abrechnungen, Axiom ohne Frist, veraltete
+Spec) sind am 11.11.2026 behoben worden, jeweils mit Test.
+
+- **CSP mit `unsafe-eval` auch in Produktion** (`next.config.ts`, begründet mit dem
+  Dev-Modus). Nicht angefasst, weil es sich lokal nicht prüfen lässt: der Dev-Modus braucht
+  `unsafe-eval` selbst, und ein Produktions-Build ruft `prisma migrate deploy` gegen die
+  Produktivdatenbank auf. Betroffen wäre vor allem der QR-Scanner der Kasse – eine Änderung
+  hier gehört auf ein Preview-Deployment und wird dort einmal geklickt.
+- **Passwort ändern fragt das alte Passwort nicht ab – das bleibt so** (Entscheidung Nutzer,
+  11.11.2026). Kein offener Befund mehr; steht hier, damit es nicht erneut als Lücke
+  gemeldet oder „behoben" wird.
+- **`BasarSeller.commissionOverride` hat keinen Schreiber.** Keine Route und keine
+  Oberfläche setzt das Feld; es wirkt nur, wenn es jemand direkt in der Datenbank setzt.
+  Abrechnung, beide PDFs und die Verkäuferseite rechnen und drucken dann einheitlich damit.
+- **Log-Weiterleitung nach Axiom:** die weitergeleiteten Zeilen enthalten neben
+  Verkäufernummern auch IP-Adressen, User-Agents und gekürzte E-Mail-Adressen und Namen und
+  gehen in die Region US-East (laut Kommentar in `app/lib/logForward.ts` eine Entscheidung
+  vom 10.11.2026).
+  Kein Fehler, aber wer neue `console.log`-Zeilen schreibt, schreibt sie auch dorthin.
+
+---
+
 ## Wächter (`.claude/guard.js`)
 
 Ein `PreToolUse`-Hook (`.claude/settings.json`) verweigert drei Befehlsklassen, die
@@ -269,9 +348,13 @@ Regel erfunden, Test dazu geschrieben, beide einig, beide falsch.
   Etiketten dürfen auf Normalpapier gedruckt und ausgeschnitten werden; dort darf
   „An Seite anpassen“ gewählt werden, falls der Drucker oben/unten abschneidet. Auf
   Etikettenbögen bleibt es bei „Tatsächliche Größe“ / 100 %.
-- **Helferschichten: Überschneidungen.** Eine Prüfung auf zeitliche Überschneidung
-  gibt es nicht. Ob das gewollt ist oder eine Lücke, ist offen – bis dahin wird in
-  Anleitungen nicht behauptet, Überschneidungen seien ausgeschlossen.
+- **Helferschichten: Überschneidungen.** *Im Code nachlesbar (Stand 11.11.2026, hier stand
+  bis dahin fälschlich „gibt es nicht"):* `POST /api/task-signups` lehnt eine Anmeldung ab,
+  wenn sie sich am selben Tag um mehr als `SHIFT_OVERLAP_TOLERANCE_MIN` (3 Minuten) mit einer
+  eigenen Schicht desselben Basars überschneidet (`shiftsOverlap()` in `app/lib/time.ts`).
+  Schichten ohne lesbare Zeitangabe werden nicht geprüft. Anleitungen dürfen genau das sagen
+  – nicht „Überschneidungen sind ausgeschlossen". Ob die Kulanz von 3 Minuten eine
+  Orga-Entscheidung ist, steht nirgends.
 
 Was hier nicht steht und im Code nicht nachlesbar ist, wird in Nutzertexten als
 Vermutung gekennzeichnet oder weggelassen.

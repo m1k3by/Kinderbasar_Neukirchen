@@ -107,7 +107,11 @@ export async function POST(req: NextRequest) {
     // alle gleichzeitig klicken). Der Count wird in der Transaktion neu ausgeführt statt den
     // oben geladenen targetTask.signups zu verwenden, der zwischen Laden und Schreiben schon
     // veraltet sein könnte.
+    // Die Transaktion allein genügt dafür nicht: zwei gleichzeitige Requests zählen beide,
+    // bevor einer geschrieben hat. Erst die Zeilensperre auf der Aufgabe lässt den zweiten
+    // warten, bis der erste committet ist (Muster wie POST /api/basars/[id]/articles).
     const signup = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "Task" WHERE id = ${taskId} FOR UPDATE`;
       const currentCount = await tx.taskSignup.count({ where: { taskId, basarId } });
       if (currentCount >= targetTask.capacity) {
         return null; // signals "full" to the caller

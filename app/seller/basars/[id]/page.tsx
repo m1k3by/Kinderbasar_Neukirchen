@@ -365,7 +365,7 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
             </div>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-gray-600">Verkaufserlös</span><span className="font-medium">{fmt(Number(settlement.grossRevenue))} €</span></div>
-              <div className="flex justify-between"><span className="text-gray-600">Provision ({basar.commissionPercent}%)</span><span className="font-medium text-orange-600">– {fmt(Number(settlement.commissionAmount))} €</span></div>
+              <div className="flex justify-between"><span className="text-gray-600">Provision ({commissionPercent}%)</span><span className="font-medium text-orange-600">– {fmt(Number(settlement.commissionAmount))} €</span></div>
               {Number(settlement.entryFeeAmount) > 0 && (
                 <div className="flex justify-between"><span className="text-gray-600">Teilnahmegebühr</span><span className="font-medium text-orange-600">– {fmt(Number(settlement.entryFeeAmount))} €</span></div>
               )}
@@ -390,7 +390,8 @@ export default function SellerBasarDetailPage({ params }: { params: Promise<{ id
             Formular und eine eigene Archiv-Übernahme – zwei Oberflächen für dasselbe. */}
         {canAddArticles && (
           <Link
-            href="/seller/articles"
+            // Mit Basar-ID: sind zwei Basare offen, wählt „Meine Artikel" sonst den ersten vor.
+            href={`/seller/articles?basar=${basar.id}`}
             className="flex items-center justify-between gap-4 bg-yellow-50 border border-yellow-200 rounded-xl p-5 mb-5 hover:bg-yellow-100 transition-colors"
           >
             <div>

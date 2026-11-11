@@ -8,6 +8,8 @@ vi.mock('next/headers', () => ({
 }));
 
 const prismaMock = vi.hoisted(() => ({
+  // requireCashier() liest isCashier aus der Datenbank, nicht aus dem Token (app/lib/apiAuth.ts).
+  seller: { findUnique: vi.fn().mockResolvedValue({ isCashier: true }) },
   // Testbasar-Prüfung (app/lib/basarAccess.ts). undefined heißt hier „kein Testbasar": so
   // behandelt die Prüfung jeden echten Basar, und die Route läuft wie bisher. Die Fälle mit
   // Testbasar stehen in __tests__/lib/basarAccess.test.ts.
@@ -47,6 +49,7 @@ describe('GET /api/basars/[id]/scan-cache', () => {
   });
 
   it('returns 403 for a seller who is not a cashier', async () => {
+    prismaMock.seller.findUnique.mockResolvedValueOnce({ isCashier: false });
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     const res = await GET(makeRequest(), makeContext());
     expect(res.status).toBe(403);

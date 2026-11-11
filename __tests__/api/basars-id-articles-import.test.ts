@@ -12,7 +12,8 @@ const prismaMock = vi.hoisted(() => ({
   basar: { findUnique: vi.fn() },
   basarSeller: { findUnique: vi.fn(), count: vi.fn(), create: vi.fn(), upsert: vi.fn() },
   sellerArticle: { findMany: vi.fn() },
-  article: { count: vi.fn(), create: vi.fn() },
+  article: { count: vi.fn(), createManyAndReturn: vi.fn() },
+  $queryRaw: vi.fn(),
   $transaction: vi.fn(),
 }));
 vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
@@ -37,7 +38,11 @@ const archiveItems = [
 ];
 
 describe('POST /api/basars/[id]/articles/import', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Interaktive Transaktion: der tx-Client ist derselbe Mock (wie basars-id-articles.test.ts).
+    prismaMock.$transaction.mockImplementation(async (fn: any) => fn(prismaMock));
+  });
 
   it('returns 401 when no token', async () => {
     cookiesGetMock.mockReturnValue(undefined);
@@ -59,14 +64,14 @@ describe('POST /api/basars/[id]/articles/import', () => {
     prismaMock.basarSeller.upsert.mockResolvedValue({ ...fakeBasarSeller, isActive: false });
     prismaMock.article.count.mockResolvedValue(0);
     prismaMock.sellerArticle.findMany.mockResolvedValue(archiveItems);
-    prismaMock.$transaction.mockResolvedValue([{ id: 'art-1', title: 'Shirt' }]);
+    prismaMock.article.createManyAndReturn.mockResolvedValue([{ id: 'art-1', title: 'Shirt' }]);
 
     const res = await POST(makePostRequest({ sellerArticleIds: ['sa-1'] }), makeContext());
 
     expect(res.status).toBe(201);
-    expect(prismaMock.article.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ basarSellerId: 'bs-1' }) })
-    );
+    expect(prismaMock.article.createManyAndReturn.mock.calls[0][0].data).toEqual([
+      expect.objectContaining({ basarSellerId: 'bs-1' }),
+    ]);
   });
 
   it('returns 404 when basar not found', async () => {
@@ -115,7 +120,7 @@ describe('POST /api/basars/[id]/articles/import', () => {
     prismaMock.basarSeller.upsert.mockResolvedValue({ ...fakeBasarSeller, isActive: false });
     prismaMock.article.count.mockResolvedValue(0);
     prismaMock.sellerArticle.findMany.mockResolvedValue(archiveItems);
-    prismaMock.$transaction.mockResolvedValue([{ id: 'art-1', title: 'Shirt' }]);
+    prismaMock.article.createManyAndReturn.mockResolvedValue([{ id: 'art-1', title: 'Shirt' }]);
 
     const res = await POST(makePostRequest({ sellerArticleIds: ['sa-1'] }), makeContext());
 
@@ -128,7 +133,7 @@ describe('POST /api/basars/[id]/articles/import', () => {
     prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
     prismaMock.article.count.mockResolvedValue(5);
     prismaMock.sellerArticle.findMany.mockResolvedValue(archiveItems);
-    prismaMock.$transaction.mockResolvedValue([{ id: 'art-1', title: 'Shirt' }]);
+    prismaMock.article.createManyAndReturn.mockResolvedValue([{ id: 'art-1', title: 'Shirt' }]);
     const res = await POST(makePostRequest({ sellerArticleIds: ['sa-1'] }), makeContext());
     expect(res.status).toBe(201);
     const data = await res.json();
@@ -146,17 +151,17 @@ describe('POST /api/basars/[id]/articles/import', () => {
     prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
     prismaMock.article.count.mockResolvedValue(5);
     prismaMock.sellerArticle.findMany.mockResolvedValue(archiveItems);
-    prismaMock.$transaction.mockResolvedValue([{ id: 'art-1' }]);
+    prismaMock.article.createManyAndReturn.mockResolvedValue([{ id: 'art-1' }]);
 
     await POST(makePostRequest({ sellerArticleIds: ['sa-1'] }), makeContext());
 
-    expect(prismaMock.article.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+    expect(prismaMock.article.createManyAndReturn).toHaveBeenCalledWith({
+      data: [expect.objectContaining({
         qrCode: 'uuid-1',           // exakt der Code aus dem Archiveintrag
         sellerArticleId: 'sa-1',    // Verknüpfung zurück ins Archiv
         title: 'Shirt',
         price: archiveItems[0].price,
-      }),
+      })],
     });
   });
 
@@ -168,13 +173,55 @@ describe('POST /api/basars/[id]/articles/import', () => {
     prismaMock.sellerArticle.findMany.mockResolvedValue([
       { ...archiveItems[0], qrCode: null }, // Altbestand von vor der QR-Wiederverwendung
     ]);
-    prismaMock.$transaction.mockResolvedValue([{ id: 'art-1' }]);
+    prismaMock.article.createManyAndReturn.mockResolvedValue([{ id: 'art-1' }]);
 
     await POST(makePostRequest({ sellerArticleIds: ['sa-1'] }), makeContext());
 
-    const [[createArgs]] = prismaMock.article.create.mock.calls;
-    expect(createArgs.data.qrCode).toEqual(expect.any(String));
-    expect(createArgs.data.qrCode).not.toBe('');
+    const [[createArgs]] = prismaMock.article.createManyAndReturn.mock.calls;
+    expect(createArgs.data[0].qrCode).toEqual(expect.any(String));
+    expect(createArgs.data[0].qrCode).not.toBe('');
+  });
+
+  // Doppeltipp auf „Übernehmen" / zwei Tabs: ohne Sperre bestanden beide Requests die Prüfung
+  // „schon im Basar?" und legten jeden Artikel doppelt an. Ein gemocktes $transaction führt
+  // nichts aus – geprüft wird deshalb, dass gesperrt wird, bevor gezählt und gelesen wird, und
+  // dass beides über die Transaktion läuft.
+  it('sperrt die BasarSeller-Zeile, bevor gezählt, geprüft und geschrieben wird', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basar.findUnique.mockResolvedValue(openBasar);
+    prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
+    prismaMock.article.count.mockResolvedValue(0);
+    prismaMock.sellerArticle.findMany.mockResolvedValue(archiveItems);
+    prismaMock.article.createManyAndReturn.mockResolvedValue([{ id: 'art-1' }]);
+
+    const res = await POST(makePostRequest({ sellerArticleIds: ['sa-1'] }), makeContext());
+
+    expect(res.status).toBe(201);
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+    const [strings, ...values] = prismaMock.$queryRaw.mock.calls[0];
+    expect(strings.join('?')).toMatch(/SELECT 1 FROM "BasarSeller" WHERE id = \? FOR UPDATE/);
+    expect(values).toEqual(['bs-1']);
+
+    const order = (m: { mock: { invocationCallOrder: number[] } }) => m.mock.invocationCallOrder[0];
+    expect(order(prismaMock.$transaction)).toBeLessThan(order(prismaMock.$queryRaw));
+    expect(order(prismaMock.$queryRaw)).toBeLessThan(order(prismaMock.article.count));
+    expect(order(prismaMock.$queryRaw)).toBeLessThan(order(prismaMock.sellerArticle.findMany));
+    expect(order(prismaMock.sellerArticle.findMany)).toBeLessThan(order(prismaMock.article.createManyAndReturn));
+  });
+
+  it('über dem Artikellimit: 400, gesperrt und gezählt, aber nichts geschrieben', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    prismaMock.basar.findUnique.mockResolvedValue({ ...openBasar, maxArticlesPerSeller: 3 });
+    prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
+    prismaMock.article.count.mockResolvedValue(3);
+    prismaMock.sellerArticle.findMany.mockResolvedValue(archiveItems);
+
+    const res = await POST(makePostRequest({ sellerArticleIds: ['sa-1'] }), makeContext());
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/Zu viele Artikel/);
+    expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(prismaMock.article.createManyAndReturn).not.toHaveBeenCalled();
   });
 
   it('creates a new basarSeller via upsert (not create) and leaves it INACTIVE', async () => {
@@ -183,7 +230,7 @@ describe('POST /api/basars/[id]/articles/import', () => {
     prismaMock.basarSeller.upsert.mockResolvedValue({ ...fakeBasarSeller, isActive: false });
     prismaMock.article.count.mockResolvedValue(0);
     prismaMock.sellerArticle.findMany.mockResolvedValue(archiveItems);
-    prismaMock.$transaction.mockResolvedValue([{ id: 'art-1', title: 'Shirt' }]);
+    prismaMock.article.createManyAndReturn.mockResolvedValue([{ id: 'art-1', title: 'Shirt' }]);
 
     const res = await POST(makePostRequest({ sellerArticleIds: ['sa-1'] }), makeContext());
 
@@ -203,7 +250,7 @@ describe('POST /api/basars/[id]/articles/import', () => {
     prismaMock.basarSeller.upsert.mockResolvedValue(fakeBasarSeller);
     prismaMock.article.count.mockResolvedValue(0);
     prismaMock.sellerArticle.findMany.mockResolvedValue(archiveItems);
-    prismaMock.$transaction.mockResolvedValue([{ id: 'art-1', title: 'Shirt' }]);
+    prismaMock.article.createManyAndReturn.mockResolvedValue([{ id: 'art-1', title: 'Shirt' }]);
 
     const res1 = await POST(makePostRequest({ sellerArticleIds: ['sa-1'] }), makeContext());
     const res2 = await POST(makePostRequest({ sellerArticleIds: ['sa-1'] }), makeContext());

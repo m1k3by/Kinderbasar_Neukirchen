@@ -96,6 +96,15 @@ describe('GET /api/cron/mail-queue', () => {
     expect(await res.json()).toMatchObject({ processed: 36, sent: 35, failed: 1 });
   });
 
+  it('bricht ab, wenn ein voller Stapel keinen einzigen Erfolg hatte (SMTP gestört)', async () => {
+    // Weitermachen griffe dieselben Mails erneut: fünf Durchgänge in Sekunden = fünf
+    // Versuche = FAILED nach einem einzigen Lauf.
+    drainMock.mockResolvedValue({ processed: 20, sent: 0, failed: 20 });
+    const res = await GET(makeRequest(SECRET));
+    expect(drainMock).toHaveBeenCalledTimes(1);
+    expect(await res.json()).toMatchObject({ processed: 20, sent: 0, failed: 20 });
+  });
+
   it('läuft nicht endlos, wenn immer volle Stapel zurückkommen', async () => {
     drainMock.mockResolvedValue(vollerStapel);
     const res = await GET(makeRequest(SECRET));

@@ -64,6 +64,9 @@ export function installLogForwarder(): void {
           await fetch(url, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            // after() hält die Invocation offen, bis der Versand fertig ist – ohne Frist hinge
+            // jede loggende Anfrage an einem langsamen Axiom bis zum Function-Timeout.
+            signal: AbortSignal.timeout(3000),
             body: JSON.stringify([
               {
                 _time: new Date().toISOString(),

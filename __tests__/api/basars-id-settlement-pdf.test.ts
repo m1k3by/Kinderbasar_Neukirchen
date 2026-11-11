@@ -178,4 +178,14 @@ describe('GET /api/basars/[id]/settlements/[sellerIdParam]/abrechnung.pdf – In
     // jsPDF escaped runde Klammern im PDF-Textstring als \( \)
     expect(content).toContain('Provision \\(20%\\):');
   });
+
+  it('druckt den persönlichen Provisionssatz, wenn einer gesetzt ist', async () => {
+    // POST /settlements rechnet mit commissionOverride; stünde hier der Satz des Basars,
+    // passten Prozentangabe und Betrag auf dem Blatt nicht zusammen.
+    happyPath({ commissionOverride: dec(10) });
+    const res = await GET(makeRequest(), makeContext());
+    const content = allContent(await pdfBuffer(res));
+    expect(content).toContain('Provision \\(10%\\):');
+    expect(content).not.toContain('Provision \\(20%\\):');
+  });
 });

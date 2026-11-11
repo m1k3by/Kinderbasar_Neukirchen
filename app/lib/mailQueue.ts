@@ -106,7 +106,9 @@ export async function drainMailQueue(): Promise<{ processed: number; sent: numbe
         { status: 'FAILED', attempts: { lt: MAIL_QUEUE_MAX_ATTEMPTS } },
       ],
     },
-    orderBy: { createdAt: 'asc' },
+    // Erst die mit den wenigsten Versuchen, dann die ältesten. Nur nach Alter sortiert, griff
+    // jeder Stapel wieder dieselben fehlgeschlagenen ältesten 20 – neuere Mails kamen nie dran.
+    orderBy: [{ attempts: 'asc' }, { createdAt: 'asc' }],
     take: MAIL_QUEUE_BATCH_SIZE,
   });
 

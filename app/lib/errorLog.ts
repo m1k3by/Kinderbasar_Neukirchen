@@ -48,6 +48,15 @@ function clip(value: string | null | undefined, max: number): string | null {
  * ponytail: Drosselung über die Tabelle statt über eine Sperre – zwei Instanzen gleichzeitig
  * können 2 Mails pro Stunde erzeugen. Reicht; ein Redis-Lock erst, wenn das je stört.
  */
+/**
+ * Meldung und Stelle kommen bei CLIENT-Fehlern von außen: POST /api/errors steht bewusst ohne
+ * Anmeldung offen. Unmaskiert ließe sich damit beliebiges HTML – etwa ein Link – in eine Mail
+ * setzen, die vom eigenen Absender an den Admin geht.
+ */
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+}
+
 async function maybeAlert(id: string, input: RecordErrorInput): Promise<void> {
   // Bewusst direkt aus process.env und nicht über app/lib/env.ts: dieses Modul wird aus
   // instrumentation.ts beim Start geladen, und env.ts wirft beim Import, wenn JWT_SECRET
@@ -70,8 +79,8 @@ async function maybeAlert(id: string, input: RecordErrorInput): Promise<void> {
       subject: 'Kinderbasar: Fehler aufgetreten',
       html: [
         `<p>Es ist ein Fehler ${where} aufgetreten.</p>`,
-        input.route ? `<p><strong>Stelle:</strong> ${input.route}</p>` : '',
-        `<p><strong>Meldung:</strong> ${input.message}</p>`,
+        input.route ? `<p><strong>Stelle:</strong> ${escapeHtml(input.route)}</p>` : '',
+        `<p><strong>Meldung:</strong> ${escapeHtml(input.message)}</p>`,
         input.sellerId ? `<p><strong>Verkäufer-Nr.:</strong> ${input.sellerId}</p>` : '',
         `<p><a href="${baseUrl}/admin/logs">Alle Fehler ansehen</a></p>`,
         '<p style="color:#666;font-size:12px">Weitere Fehler in der nächsten Stunde lösen keine zusätzliche Mail aus.</p>',

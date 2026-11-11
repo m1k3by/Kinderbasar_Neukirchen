@@ -59,51 +59,58 @@ export async function POST(
       create: { basarId, sellerId, isActive: false, activatedAt: null },
     });
 
-    // Check article limit
+    // Zählen, „schon im Basar?", Limit und Schreiben laufen in EINER Transaktion hinter einer
+    // Zeilensperre – wie in POST /api/basars/[id]/articles. Bis 11.11.2026 standen die
+    // Prüfungen davor und ohne Sperre: ein Doppeltipp auf „Übernehmen" (oder zwei Tabs)
+    // bestand sie zweimal und legte jeden Artikel doppelt an – zwei Zeilen mit demselben
+    // QR-Code, von denen eine nach dem Verkauf für immer „nicht verkauft" blieb, und das
+    // Artikellimit ließ sich so überschreiten. Der zweite Request wartet jetzt bis zum Commit
+    // des ersten und sieht dessen Artikel.
     const maxArticles = maxArticlesFor(basar, seller ?? { isEmployee: false, isOrga: false }, basarSeller.maxArticlesOverride);
-    const currentCount = await prisma.article.count({ where: { basarSellerId: basarSeller.id } });
+    const outcome = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "BasarSeller" WHERE id = ${basarSeller.id} FOR UPDATE`;
 
-    // Filter: only articles owned by this seller and not already in this basar
-    const archiveItems = await prisma.sellerArticle.findMany({
-      where: { id: { in: sellerArticleIds }, sellerId },
-      include: {
-        articles: {
-          where: { basarSeller: { basarId } },
-          select: { id: true },
+      const currentCount = await tx.article.count({ where: { basarSellerId: basarSeller.id } });
+
+      // Filter: only articles owned by this seller and not already in this basar
+      const archiveItems = await tx.sellerArticle.findMany({
+        where: { id: { in: sellerArticleIds }, sellerId },
+        include: {
+          articles: {
+            where: { basarSeller: { basarId } },
+            select: { id: true },
+          },
         },
-      },
+      });
+      const toImport = archiveItems.filter((sa) => sa.articles.length === 0);
+
+      if (toImport.length === 0) return { error: 'Alle gewählten Artikel sind bereits in diesem Basar' } as const;
+      if (currentCount + toImport.length > maxArticles) {
+        return {
+          error: `Zu viele Artikel. Noch ${maxArticles - currentCount} Plätze frei, du versuchst ${toImport.length} zu importieren.`,
+        } as const;
+      }
+
+      // Ein Statement statt eines je Artikel: eine interaktive Transaktion läuft auf einer
+      // Verbindung, 50 einzelne Inserts wären 50 Roundtrips unter gehaltener Sperre.
+      const articles = await tx.article.createManyAndReturn({
+        data: toImport.map((sa) => ({
+          basarSellerId: basarSeller.id,
+          sellerArticleId: sa.id,
+          title: sa.title,
+          sizeLabel: sa.sizeLabel,
+          gender: sa.gender ?? null,
+          price: sa.price,
+          // Reuse the archive QR code so already-printed labels still work.
+          // Fall back to a new UUID only for legacy articles that predate this feature.
+          qrCode: sa.qrCode ?? crypto.randomUUID(),
+        })),
+      });
+      return { articles };
     });
 
-    const toImport = archiveItems.filter((sa: any) => sa.articles.length === 0);
-
-    if (toImport.length === 0) {
-      return NextResponse.json({ error: 'Alle gewählten Artikel sind bereits in diesem Basar' }, { status: 400 });
-    }
-
-    if (currentCount + toImport.length > maxArticles) {
-      return NextResponse.json({
-        error: `Zu viele Artikel. Noch ${maxArticles - currentCount} Plätze frei, du versuchst ${toImport.length} zu importieren.`,
-      }, { status: 400 });
-    }
-
-    // Create Article rows reusing the stable QR code from the archive entry
-    const created = await prisma.$transaction(
-      toImport.map((sa: any) =>
-        prisma.article.create({
-          data: {
-            basarSellerId: basarSeller!.id,
-            sellerArticleId: sa.id,
-            title: sa.title,
-            sizeLabel: sa.sizeLabel,
-            gender: sa.gender ?? null,
-            price: sa.price,
-            // Reuse the archive QR code so already-printed labels still work.
-            // Fall back to a new UUID only for legacy articles that predate this feature.
-            qrCode: sa.qrCode ?? crypto.randomUUID(),
-          },
-        })
-      )
-    );
+    if ('error' in outcome) return NextResponse.json({ error: outcome.error }, { status: 400 });
+    const created = outcome.articles;
 
     return NextResponse.json({ articles: created, basarSeller }, { status: 201 });
   } catch (error) {

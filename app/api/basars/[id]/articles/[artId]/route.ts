@@ -24,8 +24,11 @@ export async function DELETE(
       return NextResponse.json({ error: 'Artikel können nach Basar-Start nicht mehr gelöscht werden' }, { status: 400 });
     }
 
-    const article = await prisma.article.findUnique({
-      where: { id: artId },
+    // Nur Artikel *dieses* Basars: die Statusprüfung oben gilt dem Basar aus der URL. Ohne den
+    // Filter ließ sich mit der ID eines offenen Basars ein eigener Artikel aus einem laufenden
+    // oder beendeten Basar löschen.
+    const article = await prisma.article.findFirst({
+      where: { id: artId, basarSeller: { basarId } },
       include: { basarSeller: true },
     });
     if (!article) return NextResponse.json({ error: 'Artikel nicht gefunden' }, { status: 404 });

@@ -167,6 +167,21 @@ describe('recordError', () => {
     delete process.env.NEXT_PUBLIC_BASE_URL;
   });
 
+  it('maskiert HTML aus Meldung und Stelle – POST /api/errors steht ohne Anmeldung offen', async () => {
+    process.env.ADMIN_ALERT_EMAIL = 'admin@example.de';
+    const { mod } = await load();
+    await mod.recordError({
+      source: 'CLIENT',
+      message: '<a href="https://evil.example">Hier anmelden</a>',
+      route: '/login"><img src=x>',
+    });
+
+    const html: string = prismaMock.mailQueue.create.mock.calls[0][0].data.html;
+    expect(html).not.toContain('<a href="https://evil.example">');
+    expect(html).not.toContain('<img');
+    expect(html).toContain('&#60;a href=&#34;https://evil.example&#34;&#62;Hier anmelden&#60;/a&#62;');
+  });
+
   it('sends no second mail while one went out within the last hour', async () => {
     process.env.ADMIN_ALERT_EMAIL = 'admin@example.de';
     prismaMock.errorLog.count.mockResolvedValue(1);

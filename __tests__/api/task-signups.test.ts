@@ -24,6 +24,7 @@ const prismaMock = vi.hoisted(() => ({
   task: {
     findUnique: vi.fn(),
   },
+  $queryRaw: vi.fn(),
   $transaction: vi.fn(),
 }));
 vi.mock('@/app/lib/prisma', () => ({ prisma: prismaMock }));
@@ -137,6 +138,16 @@ describe('POST /api/task-signups', () => {
     await POST(makePostRequest({ taskId: 'task-1', sellerId: 1234, basarId: BASAR }));
     expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
     expect(prismaMock.taskSignup.count).toHaveBeenCalledWith({ where: { taskId: 'task-1', basarId: BASAR } });
+
+    // Die Transaktion allein verhindert das Überbuchen nicht – erst die Zeilensperre auf der
+    // Aufgabe, und zwar vor dem Zählen.
+    const [strings, ...values] = prismaMock.$queryRaw.mock.calls[0];
+    expect(strings.join('?')).toMatch(/SELECT 1 FROM "Task" WHERE id = \? FOR UPDATE/);
+    expect(values).toEqual(['task-1']);
+    expect(prismaMock.$queryRaw.mock.invocationCallOrder[0])
+      .toBeLessThan(prismaMock.taskSignup.count.mock.invocationCallOrder[0]);
+    expect(prismaMock.taskSignup.count.mock.invocationCallOrder[0])
+      .toBeLessThan(prismaMock.taskSignup.create.mock.invocationCallOrder[0]);
   });
 
   it('creates signup and returns success → 200 (self)', async () => {

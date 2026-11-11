@@ -69,7 +69,8 @@ export async function GET(
 
     const doc = buildSettlementPdf({
       basarTitle: basar.title,
-      commissionPercent: Number(basar.commissionPercent),
+      // Persönlicher Satz, falls gesetzt – mit ihm rechnet POST /settlements.
+      commissionPercent: Number(basarSeller.commissionOverride ?? basar.commissionPercent),
       sellerNr: basarSeller.seller.sellerId,
       sellerName: `${basarSeller.seller.firstName} ${basarSeller.seller.lastName}`,
       generatedAt: basarSeller.settlement.generatedAt.toISOString(),

@@ -10,6 +10,8 @@ vi.mock('next/headers', () => ({
 
 // ─── Prisma mock ──────────────────────────────────────────────────────────────
 const prismaMock = vi.hoisted(() => ({
+  // requireCashier() liest isCashier aus der Datenbank, nicht aus dem Token (app/lib/apiAuth.ts).
+  seller: { findUnique: vi.fn().mockResolvedValue({ isCashier: true }) },
   article: { findFirst: vi.fn() },
   // Testbasar-Prüfung (app/lib/basarAccess.ts), nur mit ?basarId= aufgerufen.
   basar: { findUnique: vi.fn() },
@@ -46,6 +48,7 @@ describe('GET /api/articles/scan/[qrCode]', () => {
   });
 
   it('returns 403 for regular seller (non-cashier)', async () => {
+    prismaMock.seller.findUnique.mockResolvedValueOnce({ isCashier: false });
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     const res = await GET(makeRequest(), makeContext());
     expect(res.status).toBe(403);
