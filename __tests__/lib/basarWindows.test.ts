@@ -6,6 +6,7 @@ import {
   dateForWeekday,
   activationNotice,
   pickDefaultBasarId,
+  formatWindow,
 } from '@/app/lib/basarWindows';
 
 describe('isWindowOpen', () => {
@@ -236,5 +237,22 @@ describe('pickDefaultBasarId', () => {
 
   it('nimmt einen Testbasar nur, wenn es keinen echten gibt', () => {
     expect(pickDefaultBasarId([b('test', 'OPEN', { isTest: true }), b('d', 'DRAFT')])).toBe('test');
+  });
+});
+
+describe('formatWindow', () => {
+  it('same day: one date, time range', () => {
+    expect(formatWindow('2026-11-19T15:00:00Z', '2026-11-19T17:00:00Z')).toBe('Do., 19.11., 16:00–18:00 Uhr');
+  });
+  it('different days: both dates', () => {
+    expect(formatWindow('2026-11-19T15:00:00Z', '2026-11-20T08:00:00Z')).toBe('Do., 19.11., 16:00 Uhr – Fr., 20.11., 09:00 Uhr');
+  });
+  it('returns null when a bound is missing or invalid', () => {
+    expect(formatWindow('2026-11-19T15:00:00Z', null)).toBeNull();
+    expect(formatWindow(undefined, '2026-11-19T15:00:00Z')).toBeNull();
+    expect(formatWindow('kaputt', '2026-11-19T15:00:00Z')).toBeNull();
+  });
+  it('renders Europe/Berlin regardless of input zone (UTC 15:00 -> 16:00)', () => {
+    expect(formatWindow('2026-11-19T15:00:00Z', '2026-11-19T15:30:00Z')).toBe('Do., 19.11., 16:00–16:30 Uhr');
   });
 });

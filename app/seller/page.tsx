@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import Header from '../components/Header';
 import { getNavLinks } from '../lib/navLinks';
 import { formatArticleLimit, maxArticlesFor } from '../lib/articleLimits';
-import { activationNotice } from '../lib/basarWindows';
+import QRCode from 'qrcode';
+import { activationNotice, formatWindow } from '../lib/basarWindows';
 
 interface Basar {
   id: string;
@@ -28,6 +29,16 @@ interface Basar {
   activationSellerEnd?: string | null;
   activationEmployeeStart?: string | null;
   activationEmployeeEnd?: string | null;
+  // Anlieferung/Abholung: GET /api/basars liefert sie wie die Anmeldefenster (include, kein
+  // select) immer mit, als ISO-String oder null.
+  deliveryStart: string | null;
+  deliveryEnd: string | null;
+  deliveryStart2: string | null;
+  deliveryEnd2: string | null;
+  pickupStart: string | null;
+  pickupEnd: string | null;
+  pickupStart2: string | null;
+  pickupEnd2: string | null;
   // viaOrga: die Teilnahme kommt aus dem Orga-Kennzeichen, nicht aus einer eigenen
   // Aktivierung – dann gibt es nichts umzuschalten (app/lib/participation.ts).
   myParticipation: { isActive: boolean; activatedAt: string | null; viaOrga?: boolean } | null;
@@ -43,6 +54,9 @@ const STATUS_COLORS: Record<string, string> = {
 const CTA_LABELS: Record<string, string> = {
   OPEN: 'Artikel anlegen', ACTIVE: 'Verkäufe ansehen', CLOSED: 'Abrechnung',
 };
+
+// ponytail: ein Link für alle Basare per env; Feld am Basar, sobald Gruppen je Basar gebraucht werden
+const WHATSAPP_GROUP_URL = process.env.NEXT_PUBLIC_WHATSAPP_GROUP_URL;
 
 const fmt = (n: number) => n.toFixed(2).replace('.', ',');
 
@@ -72,6 +86,14 @@ export default function SellerPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [roleConfirm, setRoleConfirm] = useState<null | 'promote' | 'demote'>(null);
   const [changingRole, setChangingRole] = useState(false);
+  const [whatsappQr, setWhatsappQr] = useState('');
+
+  useEffect(() => {
+    if (!WHATSAPP_GROUP_URL) return;
+    QRCode.toDataURL(WHATSAPP_GROUP_URL, { margin: 1 })
+      .then(setWhatsappQr)
+      .catch(err => console.error('SellerPage WhatsApp-QR error:', err));
+  }, []);
 
   useEffect(() => {
     // Get sellerId from cookie
@@ -244,10 +266,8 @@ export default function SellerPage() {
       const res = await fetch('/api/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sellerId: parseInt(sellerId, 10),
-          newPassword,
-        }),
+        // Keine sellerId: die Route nimmt sie aus der Anmeldung.
+        body: JSON.stringify({ newPassword }),
       });
 
       const data = await res.json();
@@ -377,6 +397,53 @@ export default function SellerPage() {
             </div>
           )}
         </div>
+
+        {basars.map(basar => {
+          const rubriken = [
+            { titel: 'Anlieferung', zeilen: [formatWindow(basar.deliveryStart, basar.deliveryEnd), formatWindow(basar.deliveryStart2, basar.deliveryEnd2)] },
+            { titel: 'Abholung', zeilen: [formatWindow(basar.pickupStart, basar.pickupEnd), formatWindow(basar.pickupStart2, basar.pickupEnd2)] },
+          ]
+            .map(r => ({ ...r, zeilen: r.zeilen.filter((z): z is string => z !== null) }))
+            .filter(r => r.zeilen.length > 0);
+          return (
+            <div key={`infos-${basar.id}`} className="bg-white rounded-lg shadow-md p-6 mb-8">
+              <h2 className="text-xl font-bold mb-4 text-gray-900">Wichtige Infos zu {basar.title}</h2>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <h3 className="font-bold text-gray-900 mb-2">Termine</h3>
+                  {rubriken.length === 0 ? (
+                    <p className="text-sm text-gray-600">Die Zeiten stehen noch nicht fest.</p>
+                  ) : rubriken.map(r => (
+                    <div key={r.titel} className="mb-2 last:mb-0">
+                      <p className="text-sm font-semibold text-gray-700">{r.titel}</p>
+                      {r.zeilen.map(z => <p key={z} className="text-sm text-gray-600">{z}</p>)}
+                    </div>
+                  ))}
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <h3 className="font-bold text-gray-900 mb-2">So lieferst du an</h3>
+                  <p className="text-sm font-semibold text-green-700">✓ Feste Kiste</p>
+                  <p className="text-sm font-semibold text-red-700">✗ Keine Kartons</p>
+                </div>
+                {WHATSAPP_GROUP_URL && (
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <h3 className="font-bold text-gray-900 mb-2">WhatsApp-Gruppe</h3>
+                    {whatsappQr && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={whatsappQr} width={96} height={96} alt="QR-Code zur WhatsApp-Gruppe" className="mb-2" />
+                    )}
+                    <a href={WHATSAPP_GROUP_URL} target="_blank" rel="noopener" className="text-sm font-semibold text-blue-700 underline">
+                      Gruppe beitreten
+                    </a>
+                  </div>
+                )}
+              </div>
+              <p className="text-sm text-gray-500 mt-4">
+                Fragen? Die Hilfe findest du über die Sprechblase unten rechts.
+              </p>
+            </div>
+          );
+        })}
 
         {/* Eigener Artikelbestand – unabhängig davon, ob gerade ein Basar offen ist. */}
         <Link

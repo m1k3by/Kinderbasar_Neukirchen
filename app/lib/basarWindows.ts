@@ -201,3 +201,22 @@ export function pickDefaultBasarId(basars: SelectableBasar[]): string {
   // als Vorgabe nur, wenn sonst keiner in Frage kommt.
   return pick(relevant.filter(b => !b.isTest)) || pick(relevant) || '';
 }
+
+const TZ = 'Europe/Berlin';
+
+/**
+ * Anzeigetext für ein Termin-Fenster (Anlieferung/Abholung), deutsche Zeit.
+ * Gleicher Tag: "Do., 19.11., 16:00–18:00 Uhr"; sonst "Do., 19.11., 16:00 Uhr – Fr., 20.11., 09:00 Uhr".
+ * null, wenn eine Grenze fehlt oder ungültig ist.
+ */
+export function formatWindow(start: WindowBound, end: WindowBound): string | null {
+  const from = toDate(start);
+  const to = toDate(end);
+  if (!from || !to) return null;
+  const day = (d: Date) =>
+    d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', timeZone: TZ });
+  const time = (d: Date) =>
+    d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', timeZone: TZ });
+  if (day(from) === day(to)) return `${day(from)}, ${time(from)}–${time(to)} Uhr`;
+  return `${day(from)}, ${time(from)} Uhr – ${day(to)}, ${time(to)} Uhr`;
+}
