@@ -30,6 +30,8 @@ interface Item {
   createdAt: string;
   alreadyInBasar: boolean;
   soldPreviously: boolean;
+  /** Jeder Verkauf dieses Eintrags – nicht leer = verkauft, gehört auf /seller/articles/sold. */
+  soldIn: { basarId: string; basarTitle: string; eventDate: string; soldAt: string | null }[];
 }
 
 interface OpenBasar {
@@ -43,7 +45,7 @@ interface OpenBasar {
   maxArticlesPerEmployee?: number | null;
 }
 
-type StatusFilter = 'all' | 'available' | 'inBasar' | 'sold';
+type StatusFilter = 'all' | 'available' | 'inBasar';
 const EMPTY_FORM = { title: '', sizeLabel: '', gender: '', price: '', tags: [] as string[] };
 const fmt = (n: number) => n.toFixed(2).replace('.', ',');
 
@@ -63,6 +65,8 @@ export default function SellerArticlesPage() {
   // Formular eingeklappt, solange es Artikel gibt – die Liste ist der Hauptinhalt der Seite.
   const [showForm, setShowForm] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
+  // Verkaufte Einträge: hier nur gezählt (Link zur eigenen Seite) und als Tag-Vorschläge genutzt.
+  const [soldItems, setSoldItems] = useState<Item[]>([]);
   const [openBasars, setOpenBasars] = useState<OpenBasar[]>([]);
   const [targetBasarId, setTargetBasarId] = useState('');
   const [loading, setLoading] = useState(true);
@@ -72,6 +76,7 @@ export default function SellerArticlesPage() {
   const [isClothing, setIsClothing] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [transferring, setTransferring] = useState(false);
   const formRef = useRef<HTMLDivElement>(null);
 
   const [q, setQ] = useState('');
@@ -120,7 +125,14 @@ export default function SellerArticlesPage() {
         fetch(`/api/seller-articles${targetBasarId ? `?basarId=${targetBasarId}` : ''}`),
         targetBasarId ? fetch(`/api/basars/${targetBasarId}/articles`) : Promise.resolve(null),
       ]);
-      if (res.ok) setItems((await res.json()).sellerArticles ?? []);
+      if (res.ok) {
+        // Verkaufte Artikel blenden wir hier immer aus (Wunsch Nutzer, 11.11.2026): sie lassen
+        // sich weder übernehmen noch sinnvoll bearbeiten und verwirrten in der Liste nur.
+        // Sie stehen auf der eigenen Seite /seller/articles/sold, mit Basar und Datum.
+        const all: Item[] = (await res.json()).sellerArticles ?? [];
+        setItems(all.filter(a => (a.soldIn ?? []).length === 0));
+        setSoldItems(all.filter(a => (a.soldIn ?? []).length > 0));
+      }
       else showMsg('Artikel konnten nicht geladen werden', false);
       if (basarRes?.ok) {
         const data = await basarRes.json();
@@ -137,6 +149,8 @@ export default function SellerArticlesPage() {
     setTimeout(() => setMessage(null), 5000);
   }
 
+  // Formular: Tags aus dem ganzen Bestand vorschlagen; Filter-Chips nur, was hier sichtbar sein kann.
+  const tagSuggestions = useMemo(() => allTags([...items, ...soldItems]), [items, soldItems]);
   const tagOptions = useMemo(() => allTags(items), [items]);
   const targetBasar = openBasars.find(b => b.id === targetBasarId);
   const sizes = parseSizes(targetBasar?.allowedSizes);
@@ -151,9 +165,8 @@ export default function SellerArticlesPage() {
       // Mehrere gewählte Tags = Schnittmenge („Sommer" und „Mädchen 4 J.").
       for (const t of tagFilter) if (!a.tags.some(x => x.toLowerCase() === t.toLowerCase())) return false;
       if (genderFilter && a.gender !== genderFilter) return false;
-      if (statusFilter === 'available' && (a.soldPreviously || a.alreadyInBasar)) return false;
+      if (statusFilter === 'available' && a.alreadyInBasar) return false;
       if (statusFilter === 'inBasar' && !a.alreadyInBasar) return false;
-      if (statusFilter === 'sold' && !a.soldPreviously) return false;
       return true;
     });
   }, [items, q, tagFilter, untaggedOnly, genderFilter, statusFilter]);
@@ -255,19 +268,27 @@ export default function SellerArticlesPage() {
 
   async function handleTransfer() {
     const ids = [...selected].filter(id => items.some(a => a.id === id && transferable(a)));
-    if (ids.length === 0) return;
-    const res = await fetch(`/api/basars/${targetBasarId}/articles/import`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sellerArticleIds: ids }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (res.ok) {
-      setSelected(new Set());
-      showMsg(`✓ ${data.articles.length} Artikel in den Basar übernommen`, true);
-      await loadItems();
-    } else {
-      showMsg(data.error || 'Fehler beim Übernehmen', false);
+    // Doppeltipp: der zweite Request käme nach der Sperre der Route mit „bereits im Basar" zurück.
+    if (ids.length === 0 || transferring) return;
+    setTransferring(true);
+    try {
+      const res = await fetch(`/api/basars/${targetBasarId}/articles/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sellerArticleIds: ids }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setSelected(new Set());
+        showMsg(`✓ ${data.articles.length} Artikel in den Basar übernommen`, true);
+        await loadItems();
+      } else {
+        showMsg(data.error || 'Fehler beim Übernehmen', false);
+      }
+    } catch {
+      showMsg('Netzwerkfehler', false);
+    } finally {
+      setTransferring(false);
     }
   }
 
@@ -277,15 +298,14 @@ export default function SellerArticlesPage() {
     return n;
   };
   const filtersActive = q || tagFilter.size > 0 || untaggedOnly || genderFilter || statusFilter !== 'all';
-  const soldTotal = items.filter(a => a.soldPreviously).length;
+  const soldTotal = soldItems.length;
   const inBasarTotal = items.filter(a => a.alreadyInBasar).length;
   // Ohne Artikel ist das Formular der einzige sinnvolle Inhalt – dann immer offen.
   const formOpen = showForm || !!editingId || (!loading && items.length === 0);
   const statusTabs: { key: StatusFilter; label: string; count: number }[] = [
     { key: 'all', label: 'Alle', count: items.length },
-    { key: 'available', label: targetBasar ? 'Nicht im Basar' : 'Verfügbar', count: items.filter(a => !a.soldPreviously && !a.alreadyInBasar).length },
+    { key: 'available', label: 'Nicht im Basar', count: items.filter(a => !a.alreadyInBasar).length },
     ...(targetBasar ? [{ key: 'inBasar' as const, label: 'Im Basar', count: inBasarTotal }] : []),
-    { key: 'sold', label: 'Verkauft', count: soldTotal },
   ];
   const inputCls =
     'w-full rounded-xl border-0 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-900 ring-1 ring-inset ring-gray-200 placeholder:text-gray-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-yellow-500 disabled:bg-gray-100 disabled:text-gray-500';
@@ -315,9 +335,23 @@ export default function SellerArticlesPage() {
               Jederzeit anlegen und ordnen. Verkauft werden kann ein Artikel erst, wenn er in einem Basar ist.
             </p>
             <div className="flex flex-wrap gap-2 mt-3">
-              <Stat value={items.length} label="Artikel" />
-              {targetBasar && <Stat value={inBasarTotal} label="im Basar" tone="amber" />}
-              <Stat value={soldTotal} label="verkauft" tone="green" />
+              {/* Kennzahlen sind zugleich Filter – dieselben wie die Status-Reiter unten.
+                  Ein zweiter Klick auf die aktive Zahl hebt den Filter wieder auf. */}
+              <Stat value={items.length} label="Artikel" active={statusFilter === 'all'} onClick={() => setStatusFilter('all')} />
+              {targetBasar && (
+                <Stat
+                  value={inBasarTotal} label="im Basar" tone="amber" active={statusFilter === 'inBasar'}
+                  onClick={() => setStatusFilter(f => (f === 'inBasar' ? 'all' : 'inBasar'))}
+                />
+              )}
+              {soldTotal > 0 && (
+                <Link
+                  href="/seller/articles/sold"
+                  className="inline-flex items-center gap-1 rounded-full bg-green-100 px-3 py-1 text-sm text-green-800 shadow-sm ring-1 ring-gray-900/5 hover:ring-green-700/30 transition"
+                >
+                  <strong className="tabular-nums">{soldTotal}</strong> verkauft <IconChevronRight />
+                </Link>
+              )}
             </div>
           </div>
           {!formOpen && (
@@ -462,7 +496,7 @@ export default function SellerArticlesPage() {
               </div>
               <div className="md:col-span-2">
                 <span className={labelCls}>Tags <span className="font-normal text-gray-400">· optional, mehrere möglich</span></span>
-                <TagPicker value={form.tags} onChange={tags => setForm(f => ({ ...f, tags }))} suggestions={tagOptions} />
+                <TagPicker value={form.tags} onChange={tags => setForm(f => ({ ...f, tags }))} suggestions={tagSuggestions} />
               </div>
               {!editingId && targetBasar && (
                 <label className="md:col-span-2 flex items-start gap-3 rounded-2xl bg-amber-50 ring-1 ring-inset ring-amber-200/70 p-3.5 text-sm text-gray-700 cursor-pointer select-none">
@@ -562,13 +596,15 @@ export default function SellerArticlesPage() {
               className="w-full rounded-2xl border-0 bg-white py-3 pl-11 pr-4 text-sm shadow-sm ring-1 ring-gray-900/5 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-500"
             />
           </div>
-          {/* Am Handy 2×2 statt einer Zeile: vier Reiter mit Zahl passen nicht auf 375 px. */}
-          <div className="grid grid-cols-2 sm:flex gap-1 rounded-2xl bg-white p-1 shadow-sm ring-1 ring-gray-900/5">
+          {/* Reiter nur mit offenem Basar – ohne ihn gibt es nichts zu unterscheiden.
+              Am Handy steht die Zahl unter der Beschriftung, sonst passen drei Reiter nicht auf 375 px. */}
+          {targetBasar && (
+          <div className="grid grid-cols-3 gap-1 rounded-2xl bg-white p-1 shadow-sm ring-1 ring-gray-900/5">
             {statusTabs.map(t => (
               <button
                 key={t.key} type="button" aria-pressed={statusFilter === t.key}
                 onClick={() => setStatusFilter(t.key)}
-                className={`flex-1 min-w-fit inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold whitespace-nowrap transition ${
+                className={`flex flex-col sm:flex-row items-center justify-center gap-x-1.5 rounded-xl px-2 py-2 text-sm font-semibold leading-tight text-center transition ${
                   statusFilter === t.key ? 'bg-gray-900 text-white! shadow' : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
@@ -577,6 +613,7 @@ export default function SellerArticlesPage() {
               </button>
             ))}
           </div>
+          )}
           {/* Am Handy eine waagerecht wischbare Zeile statt drei umbrechender Reihen. */}
           <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap [scrollbar-width:none]">
             {(['Mädchen', 'Junge', 'Unisex'] as const).map(g => (
@@ -648,7 +685,7 @@ export default function SellerArticlesPage() {
                   key={a.id}
                   className={`relative flex flex-col rounded-2xl bg-white p-4 shadow-sm ring-1 transition ${
                     editingId === a.id ? 'ring-2 ring-yellow-500' : isSel ? 'ring-2 ring-amber-500 bg-amber-50/40' : 'ring-gray-900/5 hover:shadow-md'
-                  } ${a.soldPreviously ? 'opacity-70' : ''}`}
+                  }`}
                 >
                   <div className="flex items-start gap-3">
                     {targetBasar && (
@@ -672,12 +709,11 @@ export default function SellerArticlesPage() {
                   </div>
                   <div className="flex items-end justify-between gap-2 mt-3">
                     <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                      {a.soldPreviously && <Badge tone="green">✓ Verkauft</Badge>}
                       {a.alreadyInBasar && <Badge tone="amber">Im Basar</Badge>}
                       {a.tags.map(t => <span key={t} className="text-xs font-medium text-gray-400">#{t}</span>)}
                     </div>
                     <div className="flex shrink-0 -mr-1.5 -mb-1.5">
-                      <button type="button" onClick={() => startEdit(a)} className="p-2 rounded-full text-gray-400 hover:text-gray-900 hover:bg-gray-100" title="Bearbeiten" aria-label="Bearbeiten">
+                      <button type="button" onClick={() => startEdit(a)} className="p-2 rounded-full text-gray-400 hover:text-gray-900 hover:bg-gray-100" title={'Bearbeiten\nBeschreibung, Größe und Geschlecht lassen sich jederzeit anpassen – der QR-Code bleibt dabei gleich.\nDer Preis lässt sich nicht ändern: dafür den Artikel löschen und neu anlegen.'} aria-label="Bearbeiten">
                         <IconPencil />
                       </button>
                       <button type="button" onClick={() => handleDelete(a)} className="p-2 rounded-full text-gray-400 hover:text-red-600 hover:bg-red-50" title="Löschen" aria-label="Löschen">
@@ -704,10 +740,10 @@ export default function SellerArticlesPage() {
               <IconX />
             </button>
             <button
-              type="button" onClick={handleTransfer}
-              className="flex-1 rounded-xl bg-yellow-500 px-4 py-2 text-sm font-bold text-gray-900 hover:bg-yellow-400 whitespace-nowrap tabular-nums"
+              type="button" onClick={handleTransfer} disabled={transferring}
+              className="flex-1 rounded-xl bg-yellow-500 px-4 py-2 text-sm font-bold text-gray-900 hover:bg-yellow-400 whitespace-nowrap tabular-nums disabled:opacity-50"
             >
-              {selected.size} übernehmen
+              {transferring ? '…' : `${selected.size} übernehmen`}
             </button>
           </div>
         </div>
@@ -734,12 +770,19 @@ const GENDER_STYLE: Record<string, string> = {
   Unisex: 'bg-violet-50 text-violet-700',
 };
 
-function Stat({ value, label, tone = 'gray' }: { value: number; label: string; tone?: 'gray' | 'amber' | 'green' }) {
+function Stat({ value, label, tone = 'gray', active, onClick }: {
+  value: number; label: string; tone?: 'gray' | 'amber' | 'green'; active: boolean; onClick: () => void;
+}) {
   const cls = { gray: 'bg-white text-gray-700', amber: 'bg-amber-100 text-amber-800', green: 'bg-green-100 text-green-800' }[tone];
   return (
-    <span className={`inline-flex items-baseline gap-1 rounded-full px-3 py-1 text-sm shadow-sm ring-1 ring-gray-900/5 ${cls}`}>
+    <button
+      type="button" aria-pressed={active} onClick={onClick}
+      className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm shadow-sm transition hover:shadow ${cls} ${
+        active ? 'ring-2 ring-gray-900' : 'ring-1 ring-gray-900/5 hover:ring-gray-900/20'
+      }`}
+    >
       <strong className="tabular-nums">{value}</strong> {label}
-    </span>
+    </button>
   );
 }
 

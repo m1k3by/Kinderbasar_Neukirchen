@@ -166,6 +166,29 @@ describe('GET /api/seller-articles', () => {
     expect(data.sellerArticles[0].alreadyInBasar).toBe(false);
   });
 
+  it('soldIn: nur SOLD-Artikel, mit Basar und Datum; Projektion fragt Basar und soldAt ab', async () => {
+    cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
+    const eventDate = new Date('2026-10-10T00:00:00Z');
+    const soldAt = new Date('2026-10-10T10:15:00Z');
+    prismaMock.sellerArticle.findMany.mockResolvedValue([{
+      ...fakeItems[0],
+      articles: [
+        { id: 'a1', status: 'SOLD', soldAt, sales: [{ salePrice: dec(2) }], basarSeller: { basarId: 'b-herbst', basar: { title: 'Herbstbasar', eventDate } } },
+        { id: 'a2', status: 'RETURNED', soldAt: null, basarSeller: { basarId: 'b-sommer', basar: { title: 'Sommerbasar', eventDate } } },
+      ],
+    }]);
+    const data = await (await GET(makeGetRequest())).json();
+    expect(data.sellerArticles[0].soldIn).toEqual([
+      // salePrice aus dem gültigen Verkauf (2,00), nicht der Etikettenpreis (2,50).
+      { basarId: 'b-herbst', basarTitle: 'Herbstbasar', eventDate: eventDate.toISOString(), soldAt: soldAt.toISOString(), salePrice: 2 },
+    ]);
+    // Ein gemocktes Prisma ignoriert select – deshalb die Argumente prüfen (CLAUDE.md).
+    const select = prismaMock.sellerArticle.findMany.mock.calls[0][0].include.articles.select;
+    expect(select.soldAt).toBe(true);
+    expect(select.basarSeller.select.basar.select).toEqual({ title: true, eventDate: true });
+    expect(select.sales.where).toEqual({ isCancelled: false });
+  });
+
   it('returns 500 on DB error', async () => {
     cookiesGetMock.mockReturnValue({ value: sellerToken(1234) });
     prismaMock.sellerArticle.findMany.mockRejectedValue(new Error('DB'));

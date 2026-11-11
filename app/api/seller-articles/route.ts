@@ -3,9 +3,19 @@ import { prisma } from '../../lib/prisma';
 import { requireAuth } from '../../lib/apiAuth';
 import { parseArticleInput } from '../../lib/articleInput';
 
+// Form der `articles`-Projektion unten, soweit soldIn sie liest.
+type SoldArticleRow = {
+  status: string;
+  soldAt: Date | null;
+  basarSeller: { basarId: string; basar: { title: string; eventDate: Date } };
+  sales: { salePrice: unknown }[];
+};
+
 // GET /api/seller-articles?basarId=xxx
 // Returns the caller's personal article archive.
 // If basarId is provided, each entry also includes `alreadyInBasar` boolean.
+// `soldIn` listet jeden Verkauf mit Basar und Datum – für die Seite „Verkaufte Artikel"
+// (/seller/articles/sold); „Meine Artikel" blendet Einträge mit Verkauf aus.
 export async function GET(request: Request) {
   try {
     const authResult = await requireAuth();
@@ -25,7 +35,16 @@ export async function GET(request: Request) {
           select: {
             id: true,
             status: true,
-            basarSeller: { select: { basarId: true } },
+            soldAt: true,
+            basarSeller: { select: { basarId: true, basar: { select: { title: true, eventDate: true } } } },
+            // Der gültige Verkauf – sein Preis kann vom Etikettenpreis abweichen (Kasse darf ihn
+            // im Warenkorb ändern). Gleiches Muster wie /api/admin/article-check.
+            sales: {
+              where: { isCancelled: false },
+              orderBy: { soldAt: 'desc' },
+              take: 1,
+              select: { salePrice: true },
+            },
           },
         },
       },
@@ -48,6 +67,15 @@ export async function GET(request: Request) {
         createdAt: sa.createdAt,
         alreadyInBasar: articlesInCurrentBasar.length > 0,
         soldPreviously,
+        soldIn: (sa.articles as SoldArticleRow[])
+          .filter(a => a.status === 'SOLD')
+          .map(a => ({
+            basarId: a.basarSeller.basarId,
+            basarTitle: a.basarSeller.basar.title,
+            eventDate: a.basarSeller.basar.eventDate,
+            soldAt: a.soldAt,
+            salePrice: a.sales?.[0] ? Number(a.sales[0].salePrice) : null,
+          })),
       };
     });
 
